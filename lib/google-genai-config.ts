@@ -115,7 +115,52 @@ function createGenAIClient(): GoogleGenAI {
   }
 }
 
-export const genAI = createGenAIClient()
+function createLazyClient<T extends object>(factory: () => T): T {
+  let instance: T | null = null
+
+  const instantiate = (): T => {
+    if (instance === null) {
+      instance = factory()
+    }
+    return instance
+  }
+
+  const handler: ProxyHandler<object> = {
+    get(_target, prop, receiver) {
+      const realInstance = instantiate()
+      const value = Reflect.get(realInstance, prop, receiver)
+      return typeof value === 'function' ? value.bind(realInstance) : value
+    },
+    set(_target, prop, value) {
+      const realInstance = instantiate()
+      return Reflect.set(realInstance, prop, value)
+    },
+    has(_target, prop) {
+      const realInstance = instantiate()
+      return Reflect.has(realInstance, prop)
+    },
+    ownKeys(_target) {
+      const realInstance = instantiate()
+      return Reflect.ownKeys(realInstance)
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      const realInstance = instantiate()
+      return Reflect.getOwnPropertyDescriptor(realInstance, prop)
+    },
+    apply(_target, thisArg, args) {
+      const realInstance = instantiate()
+      return Reflect.apply(realInstance as any, thisArg, args)
+    },
+    construct(_target, args, newTarget) {
+      const realInstance = instantiate()
+      return Reflect.construct(realInstance as any, args, newTarget)
+    }
+  }
+
+  return new Proxy({}, handler) as T
+}
+
+export const genAI = createLazyClient(createGenAIClient)
 
 // Export the ai instance for the new SDK API
 export const ai = genAI
@@ -140,7 +185,7 @@ function createFilesClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
-export const aiFiles = createFilesClient()
+export const aiFiles = createLazyClient(createFilesClient)
 
 // Clinical safety settings for healthcare applications
 export const clinicalSafetySettings = [

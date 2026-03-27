@@ -725,7 +725,7 @@ export class IntelligentIntentRouter {
         const combinedFunctions = [...this.intentFunctions, ...entityFunctions];
         
         const result = await this.ai.models.generateContent({
-          model: 'gemini-2.5-flash-lite',
+          model: 'gemini-3.1-flash-lite-preview',
           contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
           config: {
             tools: [{
@@ -818,7 +818,7 @@ export class IntelligentIntentRouter {
       const contextPrompt = this.buildContextualPrompt(userInput, sessionContext, enrichedSessionContext);
       
       const result = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           tools: [{
