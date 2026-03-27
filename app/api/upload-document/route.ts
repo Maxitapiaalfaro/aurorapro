@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { HopeAISystemSingleton } from '@/lib/hopeai-system'
 import { ClinicalFileManager } from '@/lib/clinical-file-manager'
 
 export async function POST(request: NextRequest) {
@@ -49,6 +48,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    
+    // Lazy import to avoid build-time issues
+    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
     
     // Use direct HopeAI System upload instead of orchestration
     const uploadedFile = await HopeAISystemSingleton.uploadDocument(

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { HopeAISystemSingleton } from '@/lib/hopeai-system'
 
 // GET /api/documents - Retrieve documents for a session
 export async function GET(request: NextRequest) {
@@ -15,6 +14,9 @@ export async function GET(request: NextRequest) {
     }
     
     console.log('🔍 API: Retrieving documents for session:', sessionId)
+    
+    // Lazy import to avoid build-time issues
+    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
     
     // Get documents from session
     const documents = await HopeAISystemSingleton.getPendingFilesForSession(sessionId)

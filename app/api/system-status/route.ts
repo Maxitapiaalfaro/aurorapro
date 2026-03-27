@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSingletonStatus, getSingletonReport } from '@/lib/singleton-monitor'
-import { HopeAISystemSingleton } from '@/lib/hopeai-system'
 import { verifyAdminRequest } from '@/lib/security/admin-auth'
 import { createSanitizedErrorResponse } from '@/lib/security/error-sanitizer'
 
@@ -37,6 +36,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const detailed = searchParams.get('detailed') === 'true'
     const format = searchParams.get('format') || 'json'
+
+    // Lazy import to avoid build-time issues
+    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
 
     // Obtener estado del singleton
     const singletonStatus = HopeAISystemSingleton.getStatus()
