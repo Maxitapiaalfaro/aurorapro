@@ -58,7 +58,7 @@ export function getPrewarmStatus() {
     isPrewarming,
     isPrewarmed,
     hasError: prewarmError !== null,
-    error: prewarmError?.message,
+    error: prewarmError?.message ?? null,
     duration: prewarmEndTime > 0 ? prewarmEndTime - prewarmStartTime : null
   }
 }
