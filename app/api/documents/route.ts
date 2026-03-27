@@ -56,6 +56,9 @@ export async function DELETE(request: NextRequest) {
     
     console.log('🗑️ API: Removing document:', { sessionId, fileId })
     
+    // Lazy import to avoid build-time issues
+    const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
+
     // Remove document from session
     await HopeAISystemSingleton.removeDocumentFromSession(sessionId, fileId)
     
