@@ -3,6 +3,9 @@ const { withSentryConfig } = require('@sentry/nextjs');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Your existing Next.js configuration
+  env: {
+    NEXT_PUBLIC_GOOGLE_AI_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY || ''
+  },
   eslint: {
     // Disable ESLint during builds
     ignoreDuringBuilds: true,

@@ -61,9 +61,14 @@ function createGenAIClient(): GoogleGenAI {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined') {
     // Browser environment - use NEXT_PUBLIC_GOOGLE_AI_API_KEY
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY ||
+      ((window as any).__NEXT_DATA__?.env?.NEXT_PUBLIC_GOOGLE_AI_API_KEY || '');
+
     if (!apiKey) {
-      throw new Error('NEXT_PUBLIC_GOOGLE_AI_API_KEY no está configurada en el entorno del navegador');
+      throw new Error(
+        'NEXT_PUBLIC_GOOGLE_AI_API_KEY no está configurada en el entorno del navegador. ' +
+        'Asegúrate de definirla como variable de entorno pública en Vercel y de que esté disponible durante el build.'
+      );
     }
     // Browser must use Gemini API via apiKey
     return new GoogleGenAI({ apiKey });
