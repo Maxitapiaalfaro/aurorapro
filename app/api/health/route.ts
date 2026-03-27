@@ -30,7 +30,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener estado de pre-warming (import dinámico para evitar efectos de build)
-    let prewarmStatus = {
+    let prewarmStatus: {
+      isPrewarming: boolean
+      isPrewarmed: boolean
+      hasError: boolean
+      error: string | null
+      duration: number | null
+    } = {
       isPrewarming: false,
       isPrewarmed: false,
       hasError: false,
