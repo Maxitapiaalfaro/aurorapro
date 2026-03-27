@@ -1,0 +1,850 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Ocultar scrollbar en todos los navegadores */
+  .scrollbar-hide {
+    /* Firefox */
+    scrollbar-width: none;
+    /* IE and Edge */
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    /* Chrome, Safari and Opera */
+    display: none;
+  }
+
+  /* Animación de cursor tipo teclado - natural, lenta y pausada */
+  @keyframes cursor-blink {
+    0%, 45% {
+      opacity: 1;
+    }
+    50%, 95% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  .animate-cursor-blink {
+    animation: cursor-blink 1.2s ease-in-out infinite;
+  }
+}
+
+@layer base {
+  :root {
+    /* Aurora Palette - Light Mode */
+    --background: 210 17% 98%; /* Cloud White #F8F9FA */
+    --foreground: 210 11% 25%; /* Deep Charcoal #343A40 */
+    --card: 210 17% 98%;
+    --card-foreground: 210 11% 25%;
+    --popover: 210 17% 98%;
+    --popover-foreground: 210 11% 25%;
+    --primary: 211 100% 50%; /* Clarity Blue #0D6EFD */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 17% 93%; /* Ash #E9ECEF */
+    --secondary-foreground: 210 11% 25%;
+    --muted: 210 17% 93%;
+    --muted-foreground: 210 11% 49%; /* Mineral Gray #6C757D */
+    --accent: 211 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 17% 93%; /* Ash */
+    --input: 210 17% 93%;
+    --ring: 211 100% 50%;
+    --chart-1: 211 100% 50%; /* Clarity Blue */
+    --chart-2: 162 76% 47%; /* Serene Teal */
+    --chart-3: 262 48% 51%; /* Academic Plum */
+    --chart-4: 210 11% 49%; /* Mineral Gray */
+    --chart-5: 210 11% 25%; /* Deep Charcoal */
+    --radius: 0.5rem;
+    --sidebar-background: 210 17% 98%;
+    --sidebar-foreground: 210 11% 25%;
+    --sidebar-primary: 211 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 17% 93%;
+    --sidebar-accent-foreground: 210 11% 25%;
+    --sidebar-border: 210 17% 93%;
+    --sidebar-ring: 211 100% 50%;
+    /* User message bubble colors */
+    --user-bubble-bg: 211 100% 50%; /* Clarity Blue */
+    --user-bubble-text: 0 0% 100%; /* White */
+  }
+  .dark {
+    /* Aurora Palette - Dark Mode */
+    --background: 210 11% 12%; /* Darker background for better contrast */
+    --foreground: 210 17% 95%; /* Light text */
+    --card: 210 11% 16%; /* Slightly lighter than background */
+    --card-foreground: 210 17% 95%;
+    --popover: 210 11% 16%;
+    --popover-foreground: 210 17% 95%;
+    --primary: 211 100% 65%; /* Lighter Clarity Blue for dark mode */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 11% 18%; /* Darker secondary */
+    --secondary-foreground: 210 17% 95%;
+    --muted: 210 11% 18%; /* Darker muted */
+    --muted-foreground: 210 11% 60%; /* Medium gray for secondary text */
+    --accent: 211 100% 65%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 210 17% 98%;
+    --border: 210 11% 22%; /* Lighter border for visibility */
+    --input: 210 11% 18%; /* Input background */
+    --ring: 211 100% 65%;
+    --chart-1: 211 100% 65%; /* Clarity Blue */
+    --chart-2: 162 76% 55%; /* Serene Teal */
+    --chart-3: 262 48% 65%; /* Academic Plum */
+    --chart-4: 210 11% 65%; /* Mineral Gray */
+    --chart-5: 210 17% 85%; /* Light Gray */
+    --sidebar-background: 210 11% 14%; /* Slightly lighter than main background */
+    --sidebar-foreground: 210 17% 95%;
+    --sidebar-primary: 211 100% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 11% 18%;
+    --sidebar-accent-foreground: 210 17% 95%;
+    --sidebar-border: 210 11% 22%;
+    --sidebar-ring: 211 100% 65%;
+    /* User message bubble colors - Dark Mode */
+    --user-bubble-bg: 211 100% 50%; /* Clarity Blue for dark mode - slightly darker for better contrast */
+    --user-bubble-text: 0 0% 100%; /* White */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  body:not(.dark) {
+    background-image: url('/paper-texture.png');
+    background-repeat: repeat;
+  }
+  .dark body {
+    background-color: hsl(var(--background));
+  }
+}
+
+/* Estilos específicos para contenido markdown en mensajes clínicos */
+@layer components {
+  .markdown-content {
+    @apply text-base leading-relaxed;
+    /* Optimización para mejor renderizado */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* 🔥 CRÍTICO: Evitar que CUALQUIER contenido expanda el contenedor */
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+  
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4,
+  .markdown-content h5,
+  .markdown-content h6 {
+    @apply font-semibold text-foreground mt-3 mb-2 first:mt-0;
+    line-height: 1.3;
+  }
+  
+  .markdown-content h1 {
+    @apply text-lg border-b border-border pb-1 mb-3;
+  }
+  
+  .markdown-content h2 {
+    @apply text-base mb-2;
+  }
+  
+  .markdown-content h3 {
+    @apply text-sm mb-1;
+  }
+  
+  .markdown-content p {
+    @apply mb-3 last:mb-0;
+    line-height: 1.6;
+    font-size: inherit;
+  }
+  
+  .markdown-content ul,
+  .markdown-content ol {
+    @apply my-2 ml-4 space-y-1;
+    padding-left: 1rem;
+  }
+  
+  .markdown-content ul {
+    @apply list-disc;
+  }
+  
+  .markdown-content ol {
+    @apply list-decimal;
+  }
+  
+  .markdown-content li {
+    @apply text-base;
+    line-height: 1.5;
+    margin-bottom: 0.25rem;
+  }
+  
+  .markdown-content li:last-child {
+    margin-bottom: 0;
+  }
+  
+  .markdown-content code {
+    @apply bg-muted text-foreground px-1 py-0.5 rounded text-xs font-mono;
+    word-break: break-word;
+  }
+  
+  .markdown-content pre {
+    @apply bg-muted border border-border rounded-lg p-3 my-3 overflow-x-auto;
+    line-height: 1.4;
+  }
+  
+  .markdown-content pre code {
+    @apply bg-transparent p-0 text-xs;
+    word-break: normal;
+  }
+  
+  .markdown-content blockquote {
+    @apply border-l-4 border-border bg-secondary pl-4 py-2 my-3 italic;
+    border-radius: 0 0.375rem 0.375rem 0;
+  }
+  
+  .markdown-content a {
+    @apply text-primary hover:underline underline;
+    transition: color 0.15s ease-in-out;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  
+  .markdown-content a:hover {
+    text-decoration-thickness: 2px;
+  }
+  
+  /* 🔥 TABLAS CLÍNICAS PROFESIONALES - MOBILE FIRST */
+  .markdown-content table {
+    @apply w-full border border-gray-200 rounded-lg my-3;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .markdown-content thead {
+    @apply bg-muted;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply px-3 py-2 text-left border-b border-gray-100;
+  }
+
+  .markdown-content th {
+    @apply font-medium text-foreground text-xs;
+    background-color: transparent;
+  }
+
+  .markdown-content td {
+    @apply text-sm text-foreground;
+    line-height: 1.5;
+  }
+
+  /* 🔥 CRÍTICO: Estilos específicos para tablas clínicas generadas por agentes */
+  /* Aumentar especificidad para sobrescribir prose */
+  .markdown-content .clinical-table-wrapper,
+  .prose .clinical-table-wrapper {
+    /* Base: scroll horizontal suave */
+    position: relative !important;
+    display: block !important;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  @media (min-width: 640px) {
+    .markdown-content .clinical-table-wrapper,
+    .prose .clinical-table-wrapper {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: auto !important;
+      overflow-y: visible !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+  }
+
+  .markdown-content .clinical-table-wrapper::before,
+  .markdown-content .clinical-table-wrapper::after,
+  .prose .clinical-table-wrapper::before,
+  .prose .clinical-table-wrapper::after {
+    /* Indicadores de scroll en mobile */
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .markdown-content .clinical-table-wrapper::before,
+  .prose .clinical-table-wrapper::before {
+    left: 0;
+    background: linear-gradient(to right, hsl(var(--background)), transparent);
+  }
+
+  .markdown-content .clinical-table-wrapper::after,
+  .prose .clinical-table-wrapper::after {
+    right: 0;
+    background: linear-gradient(to left, hsl(var(--background)), transparent);
+  }
+
+  .markdown-content .clinical-table-wrapper:hover::before,
+  .markdown-content .clinical-table-wrapper:hover::after,
+  .prose .clinical-table-wrapper:hover::before,
+  .prose .clinical-table-wrapper:hover::after {
+    opacity: 1;
+  }
+
+  .markdown-content .clinical-table,
+  .prose .clinical-table {
+    /* Base: diseño profesional y limpio */
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    background: hsl(var(--card));
+    font-variant-numeric: tabular-nums;
+    /* Mobile: texto más pequeño pero legible */
+    font-size: 0.75rem !important;
+    /* CRÍTICO: La tabla debe tener su ancho natural, NO 100% */
+    width: auto !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    table-layout: auto !important;
+    display: table !important;
+  }
+
+  @media (min-width: 640px) {
+    .markdown-content .clinical-table,
+    .prose .clinical-table {
+      font-size: 0.875rem !important;
+    }
+  }
+
+  .markdown-content .clinical-table-header,
+  .prose .clinical-table-header {
+    /* Header sticky en scroll vertical */
+    position: sticky !important;
+    top: 0;
+    background: hsl(var(--secondary) / 0.95) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    z-index: 10 !important;
+  }
+
+  .markdown-content .clinical-table-th,
+  .prose .clinical-table-th {
+    /* Headers: profesional y destacado */
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: hsl(var(--foreground) / 0.9) !important;
+    /* Mobile: padding reducido */
+    padding: 0.5rem !important;
+    white-space: nowrap !important;
+    border-bottom: 2px solid hsl(var(--border) / 0.8) !important;
+  }
+
+  @media (min-width: 640px) {
+    .markdown-content .clinical-table-th,
+    .prose .clinical-table-th {
+      padding: 0.75rem 1rem !important;
+    }
+  }
+
+  .markdown-content .clinical-table-td,
+  .prose .clinical-table-td {
+    /* Celdas: legible y espaciado */
+    color: hsl(var(--foreground) / 0.85) !important;
+    line-height: 1.5 !important;
+    vertical-align: top !important;
+    /* Mobile: padding reducido */
+    padding: 0.5rem !important;
+    /* Permitir wrap en mobile para contenido largo */
+    word-break: break-word !important;
+    hyphens: auto;
+    border-bottom: 1px solid hsl(var(--border) / 0.5) !important;
+  }
+
+  @media (min-width: 640px) {
+    .markdown-content .clinical-table-td,
+    .prose .clinical-table-td {
+      padding: 0.75rem 1rem !important;
+      /* Desktop: mantener nowrap para datos tabulares */
+      white-space: normal;
+    }
+  }
+
+  .markdown-content .clinical-table-row,
+  .prose .clinical-table-row {
+    /* Hover effect profesional */
+    transition: background-color 0.15s ease !important;
+  }
+
+  .markdown-content .clinical-table-row:hover,
+  .prose .clinical-table-row:hover {
+    background: hsl(var(--secondary) / 0.3) !important;
+  }
+
+  .markdown-content .clinical-table-row:last-child .clinical-table-td,
+  .prose .clinical-table-row:last-child .clinical-table-td {
+    border-bottom: none !important;
+  }
+
+  /* Zebra striping para mejor legibilidad en tablas largas */
+  .markdown-content .clinical-table tbody .clinical-table-row:nth-child(even),
+  .prose .clinical-table tbody .clinical-table-row:nth-child(even) {
+    background: hsl(var(--secondary) / 0.1) !important;
+  }
+
+  .markdown-content .clinical-table tbody .clinical-table-row:nth-child(even):hover,
+  .prose .clinical-table tbody .clinical-table-row:nth-child(even):hover {
+    background: hsl(var(--secondary) / 0.35) !important;
+  }
+
+  /* Estilos para primera columna (típicamente labels) */
+  .markdown-content .clinical-table-td:first-child,
+  .prose .clinical-table-td:first-child {
+    font-weight: 500 !important;
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* 🔥 CONTAINER QUERIES: Establecer contexto de contención en burbujas de mensaje */
+  .chat-message-bubble,
+  .markdown-content,
+  .prose {
+    container-type: inline-size;
+    container-name: message-bubble;
+  }
+
+  /* Responsive: scroll horizontal en mobile con indicador visual */
+  /* Usando Container Queries en lugar de media queries para mejor encapsulación */
+  @container message-bubble (max-width: 639px) {
+    .markdown-content .clinical-table-wrapper,
+    .prose .clinical-table-wrapper {
+      /* CRÍTICO: Forzar scroll horizontal en mobile */
+      display: block !important;
+      width: 100vw !important; /* Ancho completo de la ventana */
+      max-width: 100vw !important;
+      overflow-x: auto !important;
+      overflow-y: visible !important;
+      /* Compensar el padding del contenedor padre (0.75rem = 12px) */
+      /* Necesitamos salir del padding del mensaje (12px) + padding del contenedor (12px) */
+      margin-left: calc(-0.75rem - 0.75rem) !important; /* -24px total */
+      margin-right: calc(-0.75rem - 0.75rem) !important; /* -24px total */
+      padding-left: calc(0.75rem + 0.75rem) !important; /* 24px total */
+      padding-right: calc(0.75rem + 0.75rem) !important; /* 24px total */
+    }
+
+    .markdown-content .clinical-table,
+    .prose .clinical-table {
+      /* Asegurar que la tabla tenga su ancho natural */
+      min-width: 500px !important;
+      width: auto !important;
+    }
+
+    /* Indicador visual de scroll en mobile */
+    .markdown-content .clinical-table-wrapper::after,
+    .prose .clinical-table-wrapper::after {
+      content: '→' !important;
+      position: sticky !important;
+      right: 1rem !important;
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+      font-size: 1.5rem !important;
+      color: hsl(var(--muted-foreground)) !important;
+      opacity: 0.5 !important;
+      animation: scroll-hint 2s ease-in-out infinite !important;
+      pointer-events: none !important;
+      z-index: 10 !important;
+      float: right !important;
+    }
+  }
+
+  @keyframes scroll-hint {
+    0%, 100% {
+      opacity: 0.3;
+      transform: translateY(-50%) translateX(0);
+    }
+    50% {
+      opacity: 0.7;
+      transform: translateY(-50%) translateX(5px);
+    }
+  }
+
+  /* Ocultar indicador cuando se ha scrolleado */
+  .markdown-content .clinical-table-wrapper.scrolled::after,
+  .prose .clinical-table-wrapper.scrolled::after {
+    display: none !important;
+  }
+
+  /* 🔥 OPTIMIZACIÓN: Sombras de gradiente para indicar scroll disponible */
+  .clinical-table-wrapper {
+    position: relative;
+  }
+
+  /* Sombra derecha (indica que hay más contenido a la derecha) */
+  @container message-bubble (max-width: 639px) {
+    .clinical-table-wrapper::before {
+      content: '';
+      position: sticky;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 20px;
+      background: linear-gradient(to right, hsl(var(--card)), transparent);
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .clinical-table-wrapper.scrolled::before {
+      opacity: 1;
+    }
+  }
+
+  /* Mejorar el wrapper de tablas para mejor UX */
+  .clinical-table-wrapper {
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    /* Snap to columns on mobile (opcional) */
+    /* scroll-snap-type: x proximity; */
+    /* Ocultar scrollbar pero mantener funcionalidad */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .clinical-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .markdown-content strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .markdown-content em {
+    @apply italic text-muted-foreground;
+  }
+  
+  .markdown-content hr {
+    @apply border-gray-200 my-4;
+    border-width: 1px 0 0 0;
+  }
+  
+  /* Optimizaciones para mejor rendimiento */
+  .markdown-content * {
+    box-sizing: border-box;
+  }
+  
+  .markdown-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.375rem;
+  }
+}
+
+/* Animaciones suaves para indicadores de estado */
+@keyframes gentle-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes gentle-fade {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gentle-bounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+/* Animaciones para mensajes de precarga */
+@keyframes slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gentle-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  }
+}
+
+/* Clases de utilidad para animaciones */
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out;
+}
+
+.animate-gentle-glow {
+  animation: gentle-glow 2s ease-in-out infinite;
+}
+
+/* Transiciones suaves para cambios de personalización */
+[class*="message-text-"],
+[class*="message-text-"] *,
+[class*="message-width-"],
+[class*="chat-container-"] {
+  transition: font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              line-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Clases para personalización de tamaño de texto en mensajes */
+.message-text-sm,
+.message-text-sm .markdown-content,
+.message-text-sm .markdown-content p,
+.message-text-sm .markdown-content li,
+.message-text-sm .markdown-content span,
+.message-text-sm .markdown-content div,
+.message-text-sm p,
+.message-text-sm div,
+.message-text-sm span:not([class*="h-"]):not([class*="w-"]) {
+  font-size: 0.875rem !important;
+  line-height: 1.5rem !important;
+}
+
+.message-text-base,
+.message-text-base .markdown-content,
+.message-text-base .markdown-content p,
+.message-text-base .markdown-content li,
+.message-text-base .markdown-content span,
+.message-text-base .markdown-content div,
+.message-text-base p,
+.message-text-base div,
+.message-text-base span:not([class*="h-"]):not([class*="w-"]) {
+  font-size: 1rem !important;
+  line-height: 1.6rem !important;
+}
+
+.message-text-lg,
+.message-text-lg .markdown-content,
+.message-text-lg .markdown-content p,
+.message-text-lg .markdown-content li,
+.message-text-lg .markdown-content span,
+.message-text-lg .markdown-content div,
+.message-text-lg p,
+.message-text-lg div,
+.message-text-lg span:not([class*="h-"]):not([class*="w-"]) {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem !important;
+}
+
+.message-text-xl,
+.message-text-xl .markdown-content,
+.message-text-xl .markdown-content p,
+.message-text-xl .markdown-content li,
+.message-text-xl .markdown-content span,
+.message-text-xl .markdown-content div,
+.message-text-xl p,
+.message-text-xl div,
+.message-text-xl span:not([class*="h-"]):not([class*="w-"]) {
+  font-size: 1.25rem !important;
+  line-height: 1.875rem !important;
+}
+
+/* Clases para personalización de ancho de mensajes - Mobile First */
+/* En mobile, el ancho se controla mediante el contenedor, no el mensaje individual */
+.message-width-narrow,
+.message-width-comfortable,
+.message-width-wide,
+.message-width-full {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* A partir de tablet (640px+) se aplican max-width a los mensajes */
+@media (min-width: 640px) {
+  .message-width-narrow {
+    max-width: 36rem !important; /* 576px - Ideal para lectura concentrada */
+  }
+  
+  .message-width-comfortable {
+    max-width: 48rem !important; /* 768px - Balance óptimo */
+  }
+  
+  .message-width-wide {
+    max-width: 64rem !important; /* 1024px - Aprovecha pantallas grandes */
+  }
+  
+  .message-width-full {
+    max-width: 95% !important; /* Mantiene márgenes en desktop */
+  }
+}
+
+/* Optimizaciones para pantallas grandes */
+@media (min-width: 1024px) {
+  .message-width-wide {
+    max-width: 72rem !important; /* 1152px - Máximo aprovechamiento */
+  }
+}
+
+@media (min-width: 1280px) {
+  .message-width-full {
+    max-width: 98% !important; /* Casi full en pantallas muy grandes */
+  }
+}
+
+/* Clases para contenedor de chat que respetan las preferencias */
+/* En mobile, ajustamos padding lateral para crear sensación de ancho */
+.chat-container-narrow {
+  max-width: 100% !important;
+  padding-left: 2rem !important; /* Más padding = mensajes más estrechos */
+  padding-right: 2rem !important;
+}
+
+.chat-container-comfortable {
+  max-width: 100% !important;
+  padding-left: 0.75rem !important; /* Padding moderado - Default - REDUCIDO para tablas */
+  padding-right: 0.75rem !important;
+}
+
+.chat-container-wide {
+  max-width: 100% !important;
+  padding-left: 0.5rem !important; /* Poco padding = mensajes más anchos */
+  padding-right: 0.5rem !important;
+}
+
+.chat-container-full {
+  max-width: 100% !important;
+  padding-left: 0.25rem !important; /* Mínimo padding - Máximo aprovechamiento */
+  padding-right: 0.25rem !important;
+}
+
+/* En mobile, ajustar padding con diferencias visibles entre wide y full */
+@media (max-width: 640px) {
+  .chat-container-wide {
+    padding-left: 0.625rem !important; /* 10px - Permite diferencia visual con full */
+    padding-right: 0.625rem !important;
+  }
+  
+  .chat-container-full {
+    padding-left: 0.375rem !important; /* 6px - Máximo aprovechamiento manteniendo iconos visibles */
+    padding-right: 0.375rem !important;
+  }
+  
+  /* Ajustar offset de iconos de esquina en anchos wide y full para evitar cortes */
+  /* Los iconos pasan de -10px a -6px de offset */
+  .chat-container-wide .mobile-icon-corner,
+  .chat-container-full .mobile-icon-corner {
+    top: -0.375rem !important; /* -6px */
+  }
+  
+  .chat-container-wide .mobile-icon-left,
+  .chat-container-full .mobile-icon-left {
+    left: -0.375rem !important; /* -6px */
+  }
+  
+  .chat-container-wide .mobile-icon-right,
+  .chat-container-full .mobile-icon-right {
+    right: -0.375rem !important; /* -6px */
+  }
+}
+
+/* A partir de tablet (640px+) usamos max-width en vez de padding */
+@media (min-width: 640px) {
+  .chat-container-narrow {
+    max-width: 40rem !important; /* 640px - Contenedor más amplio que mensajes */
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  
+  .chat-container-comfortable {
+    max-width: 52rem !important; /* 832px */
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  
+  .chat-container-wide {
+    max-width: 68rem !important; /* 1088px */
+    padding-left: 1.5rem !important; /* Separación del sidebar */
+    padding-right: 1.5rem !important; /* Balance simétrico */
+  }
+  
+  .chat-container-full {
+    max-width: 100% !important;
+    padding-left: 2rem !important; /* Mayor separación en modo full */
+    padding-right: 2rem !important; /* Balance simétrico */
+  }
+}
+
+@media (min-width: 1024px) {
+  .chat-container-wide {
+    max-width: 76rem !important; /* 1216px */
+    padding-left: 2rem !important; /* Más espacio en pantallas grandes */
+    padding-right: 2rem !important; /* Balance simétrico */
+  }
+  
+  .chat-container-full {
+    padding-left: 2.5rem !important; /* Separación óptima en pantallas grandes */
+    padding-right: 2.5rem !important; /* Balance simétrico */
+  }
+}

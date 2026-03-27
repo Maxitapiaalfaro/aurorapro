@@ -1,0 +1,549 @@
+{
+  "timestamp": "2025-10-16T11:57:33.516Z",
+  "testResults": {
+    "passed": 61,
+    "failed": 1,
+    "warnings": 1,
+    "details": [
+      {
+        "test": "Archivo lib/enhanced-metrics-types.ts",
+        "status": "PASS",
+        "details": "Tamaño: 9.01 KB",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.502Z"
+      },
+      {
+        "test": "Archivo lib/enhanced-sentry-metrics-tracker.ts",
+        "status": "PASS",
+        "details": "Tamaño: 23.67 KB",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.502Z"
+      },
+      {
+        "test": "Archivo hooks/use-market-validation-metrics.ts",
+        "status": "PASS",
+        "details": "Tamaño: 16.14 KB",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.503Z"
+      },
+      {
+        "test": "Archivo PLAN_MEJORAS_METRICAS.md",
+        "status": "FAIL",
+        "details": "Archivo no encontrado",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.504Z"
+      },
+      {
+        "test": "Interface UserIdentity",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.505Z"
+      },
+      {
+        "test": "Interface ActivationMetrics",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.505Z"
+      },
+      {
+        "test": "Interface EngagementMetrics",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.505Z"
+      },
+      {
+        "test": "Interface ValueMetrics",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.505Z"
+      },
+      {
+        "test": "Interface RetentionMetrics",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.505Z"
+      },
+      {
+        "test": "Interface ConversionEvent",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Interface AnalysisResult",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Enum/Constante UserType",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Enum/Constante UserSource",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Enum/Constante AgentType",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Enum/Constante EVENT_TYPES",
+        "status": "PASS",
+        "details": "Definición encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.506Z"
+      },
+      {
+        "test": "Identificación de usuario",
+        "status": "PASS",
+        "details": "Usuario: test-user-1760615853481",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.507Z"
+      },
+      {
+        "test": "Generación de fingerprint",
+        "status": "PASS",
+        "details": "Fingerprint: test-agent-127.0.0.1...",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.507Z"
+      },
+      {
+        "test": "Score de activación",
+        "status": "PASS",
+        "details": "Score: 75% (Usuario activado)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.507Z"
+      },
+      {
+        "test": "Evento de conversión por activación",
+        "status": "PASS",
+        "details": "Conversión registrada automáticamente",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.507Z"
+      },
+      {
+        "test": "Tiempo hasta primer mensaje",
+        "status": "PASS",
+        "details": "45s (Buena velocidad de activación)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.507Z"
+      },
+      {
+        "test": "Score de engagement",
+        "status": "PASS",
+        "details": "Score: 85% (Alto engagement)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.508Z"
+      },
+      {
+        "test": "Duración de sesión",
+        "status": "PASS",
+        "details": "7 minutos (Buena retención)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.508Z"
+      },
+      {
+        "test": "Profundidad de conversación",
+        "status": "PASS",
+        "details": "8 mensajes (Buena interacción)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.508Z"
+      },
+      {
+        "test": "Score de valor",
+        "status": "PASS",
+        "details": "Score: 78% (Alto valor percibido)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.509Z"
+      },
+      {
+        "test": "Problemas resueltos",
+        "status": "PASS",
+        "details": "3 problemas (Usuario productivo)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.509Z"
+      },
+      {
+        "test": "Tiempo ahorrado",
+        "status": "PASS",
+        "details": "30 minutos (Valor tangible)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.509Z"
+      },
+      {
+        "test": "Net Promoter Score",
+        "status": "PASS",
+        "details": "NPS: 8/10 (Promotor)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.509Z"
+      },
+      {
+        "test": "Estado de retención",
+        "status": "PASS",
+        "details": "Activo (2 días desde última actividad)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.510Z"
+      },
+      {
+        "test": "Riesgo de churn",
+        "status": "PASS",
+        "details": "15% (Bajo riesgo)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.510Z"
+      },
+      {
+        "test": "Frecuencia de uso",
+        "status": "PASS",
+        "details": "3.5 sesiones/semana (Usuario habitual)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.510Z"
+      },
+      {
+        "test": "Evento: session.started",
+        "status": "PASS",
+        "details": "Valor: 1",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Evento: message.first",
+        "status": "PASS",
+        "details": "Valor: 1",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Evento: user.activation",
+        "status": "PASS",
+        "details": "Valor: 75",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Evento: document.uploaded",
+        "status": "PASS",
+        "details": "Valor: 1",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Evento: agent.switched",
+        "status": "PASS",
+        "details": "Valor: 1",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Completación de funnel",
+        "status": "PASS",
+        "details": "100% completado",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.511Z"
+      },
+      {
+        "test": "Product-Market Fit Score",
+        "status": "PASS",
+        "details": "PMF: 79% (Fuerte PMF)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Tasa de activación",
+        "status": "PASS",
+        "details": "75% (Objetivo: 60%)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Tasa de retención",
+        "status": "PASS",
+        "details": "82% (Objetivo: 70%)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Score de engagement",
+        "status": "PASS",
+        "details": "85% (Objetivo: 70%)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Score de valor",
+        "status": "PASS",
+        "details": "78% (Objetivo: 60%)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Breadcrumbs enviados",
+        "status": "PASS",
+        "details": "12 breadcrumbs registrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.512Z"
+      },
+      {
+        "test": "Categoría: user.identification",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Categoría: metrics.activation",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Categoría: metrics.engagement",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Categoría: metrics.value",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Categoría: metrics.retention",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Categoría: conversion.event",
+        "status": "PASS",
+        "details": "Breadcrumbs encontrados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Estructura de breadcrumbs",
+        "status": "PASS",
+        "details": "Estructura correcta con data y timestamp",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.513Z"
+      },
+      {
+        "test": "Función: useMarketValidationMetrics",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.514Z"
+      },
+      {
+        "test": "Función: identifyCurrentUser",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.514Z"
+      },
+      {
+        "test": "Función: trackUserActivation",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.514Z"
+      },
+      {
+        "test": "Función: trackUserEngagement",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.514Z"
+      },
+      {
+        "test": "Función: trackUserValue",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.514Z"
+      },
+      {
+        "test": "Función: analyzeUserRetention",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "Función: trackConversionEvent",
+        "status": "PASS",
+        "details": "Implementación encontrada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "React Hook: useState",
+        "status": "PASS",
+        "details": "Uso correcto",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "React Hook: useEffect",
+        "status": "PASS",
+        "details": "Uso correcto",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "React Hook: useCallback",
+        "status": "PASS",
+        "details": "Uso correcto",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "React Hook: useRef",
+        "status": "PASS",
+        "details": "Uso correcto",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "Auto-tracking",
+        "status": "PASS",
+        "details": "Funcionalidad implementada",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.515Z"
+      },
+      {
+        "test": "Performance de tracking",
+        "status": "PASS",
+        "details": "0ms para 100 operaciones (0ms por operación)",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.516Z"
+      },
+      {
+        "test": "Uso de memoria",
+        "status": "WARN",
+        "details": "~56.0 KB estimados",
+        "data": null,
+        "timestamp": "2025-10-16T11:57:33.516Z"
+      }
+    ]
+  },
+  "sentryData": {
+    "totalBreadcrumbs": 112,
+    "categories": [
+      "user.identification",
+      "metrics.activation",
+      "conversion.event",
+      "metrics.engagement",
+      "metrics.value",
+      "metrics.retention",
+      "metrics.pmf",
+      "performance.test"
+    ],
+    "sampleData": [
+      {
+        "category": "user.identification",
+        "message": "Usuario identificado para validación de mercado",
+        "data": {
+          "userId": "test-user-1760615853481",
+          "sessionId": "test-session-1760615853481",
+          "userType": "new",
+          "source": "direct",
+          "deviceType": "desktop",
+          "userAgent": "test-agent",
+          "ipAddress": "127.0.0.1",
+          "timestamp": "2025-10-16T11:57:33.507Z"
+        },
+        "timestamp": "2025-10-16T11:57:33.507Z",
+        "level": "info"
+      },
+      {
+        "category": "metrics.activation",
+        "message": "Métricas de activación actualizadas",
+        "data": {
+          "userId": "test-user-1760615853481",
+          "sessionId": "test-session-1760615853481",
+          "firstMessageSent": true,
+          "timeToFirstMessage": 45,
+          "profileCompleted": false,
+          "featuresExplored": 2,
+          "helpDocumentationViewed": true,
+          "agentSwitched": true,
+          "activationScore": 75
+        },
+        "timestamp": "2025-10-16T11:57:33.507Z",
+        "level": "info"
+      },
+      {
+        "category": "conversion.event",
+        "message": "Usuario activado - conversión registrada",
+        "data": {
+          "eventType": "user.activation",
+          "eventValue": 75,
+          "userId": "test-user-1760615853481"
+        },
+        "timestamp": "2025-10-16T11:57:33.507Z",
+        "level": "info"
+      },
+      {
+        "category": "metrics.engagement",
+        "message": "Métricas de engagement actualizadas",
+        "data": {
+          "userId": "test-user-1760615853481",
+          "sessionId": "test-session-1760615853481",
+          "messagesPerSession": 8,
+          "averageSessionDuration": 420,
+          "conversationDepth": 8,
+          "preferredAgent": "socratico",
+          "agentSwitches": 2,
+          "documentsUploaded": 1,
+          "engagementScore": 85
+        },
+        "timestamp": "2025-10-16T11:57:33.508Z",
+        "level": "info"
+      },
+      {
+        "category": "metrics.value",
+        "message": "Métricas de valor actualizadas",
+        "data": {
+          "userId": "test-user-1760615853481",
+          "problemsSolved": 3,
+          "documentsAnalyzed": 2,
+          "insightsGenerated": 5,
+          "timesSaved": 1800,
+          "satisfactionScore": 4.5,
+          "recommendationLikelihood": 8,
+          "valueScore": 78
+        },
+        "timestamp": "2025-10-16T11:57:33.509Z",
+        "level": "info"
+      }
+    ]
+  },
+  "recommendations": [
+    "Revisar y corregir las pruebas fallidas antes del despliegue",
+    "Configurar alertas en Sentry para monitorear métricas en producción",
+    "Implementar dashboards para visualizar las métricas de validación de mercado",
+    "Establecer umbrales de alerta para detectar problemas de retención temprano"
+  ]
+}

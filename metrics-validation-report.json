@@ -1,0 +1,43 @@
+{
+  "timestamp": "2025-07-28T21:24:10.819Z",
+  "stats": {
+    "totalRequests": 1,
+    "successfulRequests": 0,
+    "failedRequests": 1,
+    "averageResponseTime": 0,
+    "lastCheck": "2025-07-28T21:24:00.033Z",
+    "alerts": [
+      {
+        "type": "validation_error",
+        "message": "Health check falló: ",
+        "timestamp": "2025-07-28T21:24:00.033Z",
+        "severity": "high"
+      }
+    ]
+  },
+  "config": {
+    "baseUrl": "http://localhost:3000",
+    "monitorInterval": 30000,
+    "expectedMetrics": [
+      "messages.sent",
+      "messages.sent.socratic",
+      "messages.sent.clinical",
+      "messages.sent.academic",
+      "messages.sent.weekly",
+      "message.length",
+      "message.response_time",
+      "sessions.started",
+      "session.duration.current",
+      "session.duration.total",
+      "session.duration.weekly",
+      "session.messages.count",
+      "session.agent_switches",
+      "agent.switches"
+    ],
+    "thresholds": {
+      "maxResponseTime": 5000,
+      "minSessionDuration": 10,
+      "maxAgentSwitches": 10
+    }
+  }
+}

@@ -1,0 +1,166 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Lora:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  /* Expressionist surface: subtle noise + soft vignette */
+  .paper-noise {
+    background-image:
+      radial-gradient(1200px 600px at 50% 0%, rgba(0,0,0,0.02), rgba(0,0,0,0) 60%),
+      radial-gradient(800px 400px at 100% 100%, rgba(0,0,0,0.02), rgba(0,0,0,0) 60%),
+      linear-gradient(0deg, transparent 0%, rgba(255,255,255,0.04) 100%);
+    background-blend-mode: soft-light, soft-light, normal;
+  }
+  /* Fragmented living color: faint gradients to avoid flat color planes */
+  .color-fragment {
+    background-image:
+      radial-gradient(1200px 800px at 10% 10%, rgba(255, 170, 125, 0.06), transparent 60%),
+      radial-gradient(900px 700px at 90% 20%, rgba(120, 180, 210, 0.05), transparent 60%),
+      radial-gradient(700px 600px at 50% 90%, rgba(160, 215, 155, 0.05), transparent 60%);
+    background-blend-mode: overlay;
+  }
+  /* Brush-styled border via border-image */
+  .brush-border {
+    border-width: 1px;
+    border-style: solid;
+    -o-border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M1 8 C3 7, 5 9, 8 8 C11 7, 13 9, 15 8' fill='none' stroke='rgba(0,0,0,0.35)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E") 2 stretch;
+    border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M1 8 C3 7, 5 9, 8 8 C11 7, 13 9, 15 8' fill='none' stroke='rgba(0,0,0,0.35)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E") 2 stretch;
+  }
+  /* Gentle flicker for thinking/generating */
+  @keyframes gentle-flicker {
+    0% { opacity: 0.95; transform: translateY(0px); }
+    50% { opacity: 1; transform: translateY(-0.5px); }
+    100% { opacity: 0.97; transform: translateY(0px); }
+  }
+  .animate-gentle-flicker { animation: gentle-flicker 2.4s ease-in-out infinite; }
+  
+  /* Fade in for sidebar reveal */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+@layer base {
+  :root {
+    --background: 40 33% 96%; /* Crema/Beige claro con textura */
+    --foreground: 30 20% 25%; /* Sepia oscuro / Gris carbón */
+    
+    --card: 40 50% 98%; /* Papel Principal - Blanco Roto */
+    --card-foreground: 30 20% 25%;
+    
+    --card-subtle: 40 33% 94%; /* Un beige ligeramente más oscuro para fondos de UI */
+    --card-highlight: 40 50% 99%; /* Un blanco casi puro para resaltar */
+
+    --popover: 40 50% 98%;
+    --popover-foreground: 30 20% 25%;
+    --primary: 83 15% 56%; /* Verde Salvia */
+    --primary-foreground: 30 20% 20%;
+    --secondary: 40 33% 92%;
+    --secondary-foreground: 30 20% 25%;
+    --muted: 40 33% 92%;
+    --muted-foreground: 30 20% 45%;
+
+    --accent: 83 15% 56%; /* Verde Salvia */
+    --accent-foreground: 30 20% 20%;
+    --accent-beige: 40 30% 90%; /* Beige de acento para mensajes de usuario */
+
+    /* User message bubble tokens (neutral parchment aligned with palette) */
+    /* More prominent user bubble shade */
+    --user-bubble-bg: 40 26% 84%;
+    --user-bubble-border: 40 22% 76%;
+    --user-bubble-text: 30 22% 25%;
+
+    /* Expressionist palette extensions */
+    --ink: 24 12% 18%;
+    --sepia: 30 24% 26%;
+    --oxide: 13 20% 38%;
+    --bruise: 212 22% 28%;
+    --flush: 2 47% 46%;
+
+    /* Agent palette aligned to core cream/sage scheme */
+    --agent-socratico-bg: 90 22% 88%;
+    --agent-socratico-border: 90 25% 70%;
+    --agent-socratico-text: 90 26% 24%;
+    --agent-socratico-dot: 90 36% 40%;
+
+    --agent-clinico-bg: 75 20% 88%;
+    --agent-clinico-border: 75 24% 70%;
+    --agent-clinico-text: 75 24% 24%;
+    --agent-clinico-dot: 75 34% 42%;
+
+    --agent-academico-bg: 38 35% 88%;
+    --agent-academico-border: 38 40% 70%;
+    --agent-academico-text: 38 36% 26%;
+    --agent-academico-dot: 38 46% 40%;
+
+    --agent-orquestador-bg: 28 18% 88%;
+    --agent-orquestador-border: 28 20% 70%;
+    --agent-orquestador-text: 28 22% 28%;
+    --agent-orquestador-dot: 28 30% 40%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 20% 88%;
+    --input: 40 20% 88%;
+    --ring: 83 15% 56%;
+    --chart-1: 83 15% 56%;
+    --chart-2: 83 15% 46%;
+    --chart-3: 83 15% 36%;
+    --chart-4: 83 15% 66%;
+    --chart-5: 83 15% 76%;
+    --radius: 0.5rem;
+    --font-serif: 'Lora', serif;
+    --font-sans: 'Lato', sans-serif;
+  }
+  .dark {
+    /* Manteniendo el modo oscuro existente como placeholder, se puede refinar más tarde. */
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --font-serif: 'Lora', serif;
+    --font-sans: 'Lato', sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-serif);
+    background-image: url('/paper-texture.png'); /* Sutil textura de papel */
+    background-repeat: repeat;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+  }
+}
