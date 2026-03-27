@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminRequest } from '@/lib/security/admin-auth';
 import { getConfigSummary, isSecureMode } from '@/lib/env-validator';
-import { getPrewarmStatus } from '@/lib/server-prewarm';
 
 /**
  * 🔒 HEALTH CHECK API - Endpoint de health check con autenticación
@@ -30,8 +29,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Obtener estado de pre-warming
-    const prewarmStatus = getPrewarmStatus()
+    // Obtener estado de pre-warming (import dinámico para evitar efectos de build)
+    let prewarmStatus = {
+      isPrewarming: false,
+      isPrewarmed: false,
+      hasError: false,
+      error: null,
+      duration: null
+    }
+
+    try {
+      const serverPrewarm = await import('@/lib/server-prewarm')
+      prewarmStatus = serverPrewarm.getPrewarmStatus()
+    } catch (err) {
+      console.warn('[Health API] No se pudo leer estado de prewarm:', err)
+    }
 
     // Health check básico (público)
     const basicHealth = {

@@ -77,8 +77,11 @@ export async function waitForPrewarm(timeoutMs = 10000): Promise<boolean> {
 }
 
 // 🔥 AUTO-EJECUTAR: Iniciar pre-warming INMEDIATAMENTE cuando se importa este módulo
-// Solo en servidor (Next.js)
-if (typeof window === 'undefined') {
+// Solo en servidor (Next.js) y no durante la fase de build
+const isServer = typeof window === 'undefined'
+const isBuildPhase = typeof process.env.NEXT_PHASE === 'string' && process.env.NEXT_PHASE.includes('build')
+
+if (isServer && !isBuildPhase) {
   console.log('🚀 [Prewarm] Module loaded, starting IMMEDIATE pre-warm...')
 
   // Ejecutar INMEDIATAMENTE (no esperar al siguiente tick)
@@ -86,5 +89,7 @@ if (typeof window === 'undefined') {
   prewarmSystem().catch(error => {
     console.error('❌ [Prewarm] Unhandled error during pre-warm:', error)
   })
+} else if (isServer && isBuildPhase) {
+  console.log('⚠️ [Prewarm] Skipping pre-warm during build phase')
 }
 
