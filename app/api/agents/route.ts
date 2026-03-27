@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clinicalAgentRouter } from '@/lib/clinical-agent-router'
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🔄 API: Obteniendo agentes disponibles...')
+    
+    // Lazy import to avoid build-time issues
+    const { clinicalAgentRouter } = await import('@/lib/clinical-agent-router')
     
     const agents = clinicalAgentRouter.getAllAgents()
     const agentsList = Array.from(agents.entries()).map(([type, config]) => ({
