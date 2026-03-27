@@ -3,10 +3,6 @@ const { withSentryConfig } = require('@sentry/nextjs');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Your existing Next.js configuration
-  experimental: {
-    // 🔥 PREWARM: Habilitar instrumentación para pre-warming del sistema
-    instrumentationHook: true,
-  },
   eslint: {
     // Disable ESLint during builds
     ignoreDuringBuilds: true,

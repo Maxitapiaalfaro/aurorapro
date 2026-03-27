@@ -10,10 +10,7 @@ import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
 
 // Import academicMultiSourceSearch only on server to avoid bundling in client
-let academicMultiSourceSearch: any = null
-if (typeof window === 'undefined') {
-  academicMultiSourceSearch = require('./academic-multi-source-search').academicMultiSourceSearch
-}
+// Removed top-level require to avoid build issues, will import dynamically
 
 // ============================================================================
 // GLOBAL BASE INSTRUCTION v5.1 - Shared across all agents
@@ -527,7 +524,7 @@ Ofrece claridad sin lenguaje robótico.
       ],
       config: {
         ...clinicalModelConfig,
-        model: "gemini-2.5-pro", // Pro model for Socratic supervision
+        model: "gemini-3-flash-preview", // Pro model for Socratic supervision
         temperature: 0.5,
         topP: 0.95,
         topK: 40,
@@ -939,7 +936,7 @@ Usa tablas Markdown cuando documentes información que requiera comparación o e
       ],
       config: {
         ...clinicalModelConfig,
-        model: "gemini-2.5-flash", // Pro model for Clinical documentation
+        model: "gemini-3-flash-preview", // Pro model for Clinical documentation
         temperature: 0.1,
         topP: 1.0,
         topK: 1,
@@ -1522,7 +1519,7 @@ Basado en esta evidencia, opciones razonadas:
       ],
       config: {
         ...clinicalModelConfig,
-        model: "gemini-2.5-flash", // Pro model for Academic research
+        model: "gemini-3-flash-preview", // Pro model for Academic research
         temperature: 0.5,
         topP: 0.9,
         topK: 20,
@@ -2197,14 +2194,31 @@ Basado en esta evidencia, opciones razonadas:
                   const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
 
                   // Si estamos en servidor, llamar directamente a la función (evita fetch innecesario)
-                  if (typeof window === 'undefined' && academicMultiSourceSearch) {
-                    console.log(`🔍 [Server] Calling academicMultiSourceSearch directly for ${call.name}`)
-                    searchResults = await academicMultiSourceSearch.search({
-                      query: call.args.query,
-                      maxResults: call.args.max_results || defaultMaxResults,
-                      language: 'both',
-                      minTrustScore: 60
-                    })
+                  if (typeof window === 'undefined') {
+                    try {
+                      const { academicMultiSourceSearch } = await import('./academic-multi-source-search');
+                      console.log(`🔍 [Server] Calling academicMultiSourceSearch directly for ${call.name}`)
+                      searchResults = await academicMultiSourceSearch.search({
+                        query: call.args.query,
+                        maxResults: call.args.max_results || defaultMaxResults,
+                        language: 'both',
+                        minTrustScore: 60
+                      })
+                    } catch (error) {
+                      console.error('❌ Error importing academicMultiSourceSearch:', error);
+                      // Fallback to API call
+                      const response = await fetch('/api/academic-search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          query: call.args.query,
+                          maxResults: call.args.max_results || defaultMaxResults
+                        })
+                      });
+                      if (response.ok) {
+                        searchResults = await response.json();
+                      }
+                    }
                   } else {
                     // Si estamos en cliente (no debería pasar en producción), usar fetch con ruta relativa
                     console.warn('⚠️ [Client] Academic search called from client - using API route')
@@ -2699,6 +2713,7 @@ Tu postura: Científico clínico que democratiza el acceso a evidencia, no busca
               call.name === "search_evidence_for_documentation") {
             console.log(`🔍 [ClinicalRouter] Academic search in non-streaming mode`)
             try {
+              const { academicMultiSourceSearch } = await import('./academic-multi-source-search');
               const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
               const searchResults = await academicMultiSourceSearch.search({
                 query: call.args.query,
