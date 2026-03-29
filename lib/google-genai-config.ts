@@ -5,10 +5,32 @@ if (typeof window === 'undefined') {
   require('dotenv').config()
 }
 
+// ---------------------------------------------------------------------------
+// IMPORTANT: Use bracket notation (process.env['VAR']) instead of dot notation
+// (process.env.VAR) for server-side env var access. Next.js webpack DefinePlugin
+// replaces dot-notation process.env.NEXT_PUBLIC_* references with their BUILD-TIME
+// values. If a var was added to Vercel AFTER the build, dot notation returns the
+// stale (empty) build-time value. Bracket notation bypasses inlining and reads the
+// real runtime value from the OS environment.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an environment variable at RUNTIME, bypassing Next.js webpack inlining.
+ * Falls back to dot-notation for NEXT_PUBLIC_ vars in the browser (where
+ * inlining is the only way to access them).
+ */
+function env(name: string): string | undefined {
+  // In the browser, process.env is not real — we must rely on webpack inlining
+  // which only works for NEXT_PUBLIC_ vars via dot notation. But bracket access
+  // on the build-time-replaced object still works for NEXT_PUBLIC_ vars.
+  // On the server, bracket access reads the real runtime environment.
+  return process.env[name] || undefined
+}
+
 // Resolve Google Auth options in server environments without relying on local file paths
 function resolveGoogleAuthOptions(): Record<string, any> {
   // Prefer explicit JSON in env to avoid filesystem dependencies on Vercel
-  const jsonEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON || process.env.GENAI_SERVICE_ACCOUNT_JSON
+  const jsonEnv = env('GOOGLE_APPLICATION_CREDENTIALS_JSON') || env('GENAI_SERVICE_ACCOUNT_JSON')
   if (jsonEnv) {
     try {
       const creds = JSON.parse(jsonEnv)
@@ -16,19 +38,19 @@ function resolveGoogleAuthOptions(): Record<string, any> {
         if (typeof creds.private_key === 'string') {
           creds.private_key = creds.private_key.replace(/\\n/g, '\n')
         }
-        console.log('[GenAI Config] Usando credenciales desde GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        console.error('[GenAI Config] Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON')
         return { credentials: creds }
       }
     } catch (e) {
-      console.warn('[GenAI Config] JSON de credenciales inválido en env (GOOGLE_APPLICATION_CREDENTIALS_JSON)')
+      console.error('[GenAI Config] Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON')
     }
   }
 
   // Support split env vars: email + private key
-  const svcEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-  const svcKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  const svcEmail = env('GOOGLE_SERVICE_ACCOUNT_EMAIL')
+  const svcKey = env('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
   if (svcEmail && svcKey) {
-    console.log('[GenAI Config] Usando credenciales desde GOOGLE_SERVICE_ACCOUNT_*')
+    console.error('[GenAI Config] Using credentials from GOOGLE_SERVICE_ACCOUNT_*')
     return {
       credentials: {
         client_email: svcEmail,
@@ -38,17 +60,16 @@ function resolveGoogleAuthOptions(): Record<string, any> {
   }
 
   // As a last resort, use keyFilename only if the file exists at runtime
-  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const keyFilename = env('GOOGLE_APPLICATION_CREDENTIALS')
   if (keyFilename) {
     try {
       const fs = require('fs') as typeof import('fs')
       if (fs.existsSync(keyFilename)) {
-        console.log('[GenAI Config] Usando service account key file:', keyFilename)
+        console.error('[GenAI Config] Using service account key file')
         return { keyFilename }
       }
-      console.warn(`[GenAI Config] Archivo de credenciales no encontrado: ${keyFilename}. Evitando rutas locales en Vercel.`)
     } catch {
-      console.warn('[GenAI Config] No se pudo verificar keyFilename; evitando dependencia de filesystem.')
+      // ignore filesystem errors
     }
   }
 
@@ -56,11 +77,20 @@ function resolveGoogleAuthOptions(): Record<string, any> {
   return {}
 }
 
+// All env var names we check for a Gemini API key, in priority order
+const API_KEY_VAR_NAMES = [
+  'GOOGLE_AI_API_KEY',
+  'GEMINI_API_KEY',
+  'GENAI_API_KEY',
+  'GOOGLE_API_KEY',
+  'NEXT_PUBLIC_GOOGLE_AI_API_KEY',
+] as const
+
 // Initialize Google Gen AI client with proper environment handling
 function createGenAIClient(): GoogleGenAI {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined') {
-    // Browser environment - use NEXT_PUBLIC_GOOGLE_AI_API_KEY
+    // Browser environment - use NEXT_PUBLIC_GOOGLE_AI_API_KEY (inlined at build time)
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY ||
       ((window as any).__NEXT_DATA__?.env?.NEXT_PUBLIC_GOOGLE_AI_API_KEY || '');
 
@@ -70,22 +100,21 @@ function createGenAIClient(): GoogleGenAI {
         'Asegúrate de definirla como variable de entorno pública en Vercel y de que esté disponible durante el build.'
       );
     }
-    // Browser must use Gemini API via apiKey
     return new GoogleGenAI({ apiKey });
   } else {
     // Server environment: prefer Vertex AI when fully configured, otherwise fall back to API key.
+    // Use env() helper for ALL lookups to bypass webpack build-time inlining.
 
-    const project = process.env.GOOGLE_CLOUD_PROJECT;
-    const rawLocation = process.env.GOOGLE_CLOUD_LOCATION || process.env.VERTEX_LOCATION;
+    const project = env('GOOGLE_CLOUD_PROJECT')
+    const rawLocation = env('GOOGLE_CLOUD_LOCATION') || env('VERTEX_LOCATION')
 
     if (project && rawLocation) {
       // Vertex AI path — only entered when both project and location are set.
       const normalizeVertexLocation = (loc: string): string => {
         const trimmed = (loc || '').trim().toLowerCase();
-        // Accept 'global' or patterns like 'us-central1', 'europe-west1', etc.
         const validPattern = /^(global|[a-z]+-[a-z]+[0-9])$/;
         if (!validPattern.test(trimmed)) {
-          console.warn(`[GenAI] GOOGLE_CLOUD_LOCATION inválida: '${loc}'. Usando 'global' conforme guía Vertex AI.`);
+          console.error(`[GenAI] Invalid GOOGLE_CLOUD_LOCATION: '${loc}'. Using 'global'.`);
           return 'global';
         }
         return trimmed;
@@ -96,34 +125,37 @@ function createGenAIClient(): GoogleGenAI {
       const hasExplicitCreds = !!(googleAuthOptions.credentials || googleAuthOptions.keyFilename)
 
       if (hasExplicitCreds) {
-        console.log('[GenAI Config] Using Vertex AI (server) with explicit credentials')
+        console.error('[GenAI Config] Using Vertex AI (server) with explicit credentials')
         return new GoogleGenAI({
           vertexai: true,
           project,
           location,
           googleAuthOptions,
-          apiVersion: process.env.GENAI_API_VERSION || 'v1'
+          apiVersion: env('GENAI_API_VERSION') || 'v1'
         });
       }
-      // Vertex AI env vars are set but no credentials found — fall through to API key.
-      console.warn('[GenAI Config] GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION set but no service account credentials found. Falling back to API key.')
+      console.error('[GenAI Config] GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION set but no service account credentials found. Falling back to API key.')
     }
 
     // API key fallback for server (e.g. Vercel without Vertex AI credentials).
-    const serverApiKey = process.env.GOOGLE_AI_API_KEY ||
-      process.env.GENAI_API_KEY ||
-      process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
-
-    if (serverApiKey) {
-      console.log('[GenAI Config] Using Gemini API key (server fallback)')
-      return new GoogleGenAI({ apiKey: serverApiKey });
+    // Check all common env var names via runtime bracket access.
+    for (const varName of API_KEY_VAR_NAMES) {
+      const key = env(varName)
+      if (key) {
+        console.error(`[GenAI Config] Using Gemini API key from ${varName}`)
+        return new GoogleGenAI({ apiKey: key });
+      }
     }
+
+    // Diagnostic: list which vars we checked
+    const checked = API_KEY_VAR_NAMES.map(n => `${n}=${env(n) ? 'SET' : 'MISSING'}`).join(', ')
+    console.error(`[GenAI Config] DIAGNOSTIC — env vars checked: ${checked}`)
 
     throw new Error(
       'No se encontraron credenciales de Google AI en el servidor. ' +
-      'Configure una de las siguientes variables en Vercel: ' +
-      '1) GOOGLE_AI_API_KEY (recomendado para Gemini API), ' +
-      '2) GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION + credenciales de service account (para Vertex AI).'
+      'Configure una de las siguientes variables en Vercel (Settings → Environment Variables → Production): ' +
+      API_KEY_VAR_NAMES.join(', ') + '. ' +
+      'IMPORTANTE: Después de agregar la variable, haga un nuevo deploy para que tome efecto.'
     );
   }
 }
@@ -185,17 +217,24 @@ export const ai = genAI
 
 function createFilesClient(): GoogleGenAI {
   // Always use API key-based client for Files API (both browser and server)
-  const apiKeyServer = process.env.GOOGLE_AI_API_KEY || process.env.GENAI_API_KEY;
-  const apiKeyBrowser = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
-
-  // Prefer server-side key when available; fall back to NEXT_PUBLIC if set
-  const apiKey = typeof window === 'undefined' ? (apiKeyServer || apiKeyBrowser) : apiKeyBrowser;
-
-  if (!apiKey) {
-    throw new Error('GOOGLE_AI_API_KEY (or NEXT_PUBLIC_GOOGLE_AI_API_KEY) is required for Files API operations');
+  // Use runtime env() helper on server to bypass webpack inlining
+  if (typeof window === 'undefined') {
+    // Server: try all common API key var names at runtime
+    for (const varName of API_KEY_VAR_NAMES) {
+      const key = env(varName)
+      if (key) {
+        return new GoogleGenAI({ apiKey: key });
+      }
+    }
+    throw new Error('GOOGLE_AI_API_KEY (or GEMINI_API_KEY / NEXT_PUBLIC_GOOGLE_AI_API_KEY) is required for Files API operations');
+  } else {
+    // Browser: use build-time inlined NEXT_PUBLIC var
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+    if (!apiKey) {
+      throw new Error('NEXT_PUBLIC_GOOGLE_AI_API_KEY is required for Files API operations in the browser');
+    }
+    return new GoogleGenAI({ apiKey });
   }
-
-  return new GoogleGenAI({ apiKey });
 }
 
 export const aiFiles = createLazyClient(createFilesClient)
