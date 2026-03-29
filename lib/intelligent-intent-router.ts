@@ -794,7 +794,7 @@ export class IntelligentIntentRouter {
         return { intentResult, entityResult };
   
       } catch (error) {
-        console.error('[IntelligentIntentRouter] Error en clasificación combinada:', error);
+        console.error('[IntelligentIntentRouter] Error en clasificación combinada: ' + (error instanceof Error ? error.message : String(error)));
         return {
           intentResult: null,
           entityResult: {

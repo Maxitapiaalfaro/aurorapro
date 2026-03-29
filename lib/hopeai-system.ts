@@ -198,8 +198,9 @@ export class HopeAISystem {
 
     console.log(`🆕 Creando nueva sesión clínica: ${finalSessionId}`)
 
-    // Create chat session with agent router
-    await clinicalAgentRouter.createChatSession(finalSessionId, agent, chatHistory)
+    // NOTE: The Gemini chat session is created lazily on first sendMessage call
+    // (see the getActiveChatSessions guard further below in sendMessage())
+    // to avoid triggering Vertex AI initialization during session metadata creation.
 
     // Create initial chat state with optional patient context
     const chatState: ChatState = {
@@ -1050,6 +1051,16 @@ export class HopeAISystem {
 
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
 
+      // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
+      if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
+        try {
+          await clinicalAgentRouter.createChatSession(sessionId, currentState.activeAgent, currentState.history)
+        } catch (chatSessionError) {
+          const msg = chatSessionError instanceof Error ? chatSessionError.message : String(chatSessionError)
+          throw new Error(`Error al inicializar la sesión de chat: ${msg}`)
+        }
+      }
+
       const response = await clinicalAgentRouter.sendMessage(
         sessionId,
         message,
@@ -1148,7 +1159,7 @@ export class HopeAISystem {
         interactionMetrics: null // Already captured and completed in router
       }
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error("Error sending message: " + (error instanceof Error ? error.message : String(error)))
       throw error
     }
   }

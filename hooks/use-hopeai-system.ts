@@ -292,10 +292,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       console.log('✅ Sesión HopeAI creada:', sessionId)
       return sessionId
     } catch (error) {
-      console.error('❌ Error creando sesión:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error('❌ Error creando sesión: ' + errorMessage)
       setSystemState(prev => ({
         ...prev,
-        error: 'Error al crear la sesión',
+        error: errorMessage || 'Error al crear la sesión',
         isLoading: false
       }))
       return null
