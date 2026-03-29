@@ -207,13 +207,14 @@ export async function POST(request: NextRequest) {
           console.log('✅ [API /send-message] Stream completado exitosamente')
 
         } catch (error) {
-          console.error('❌ [API /send-message] Error en stream:', error)
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          console.error('❌ [API /send-message] Error en stream: ' + errorMessage)
 
           // Enviar error vía SSE
           sendSSE({
             type: 'error',
             error: 'Error al procesar mensaje',
-            details: error instanceof Error ? error.message : 'Error desconocido'
+            details: errorMessage
           })
 
           // Seguimiento de errores
@@ -241,7 +242,8 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ [API /send-message] Error inicial:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('❌ [API /send-message] Error inicial: ' + errorMessage)
 
     // Seguimiento mejorado de errores
     Sentry.captureException(error, {
@@ -255,7 +257,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Error al inicializar stream',
-        details: error instanceof Error ? error.message : 'Error desconocido',
+        details: errorMessage,
         timestamp: new Date().toISOString()
       },
       { status: 500 }

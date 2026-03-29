@@ -73,50 +73,58 @@ function createGenAIClient(): GoogleGenAI {
     // Browser must use Gemini API via apiKey
     return new GoogleGenAI({ apiKey });
   } else {
-    // Server environment - use Vertex AI with Google Cloud credentials
+    // Server environment: prefer Vertex AI when fully configured, otherwise fall back to API key.
+
     const project = process.env.GOOGLE_CLOUD_PROJECT;
-    const rawLocation = process.env.GOOGLE_CLOUD_LOCATION || process.env.VERTEX_LOCATION; // fallback if provided
+    const rawLocation = process.env.GOOGLE_CLOUD_LOCATION || process.env.VERTEX_LOCATION;
 
-    if (!project) {
-      throw new Error('GOOGLE_CLOUD_PROJECT no está configurada para Vertex AI en entorno de servidor');
-    }
-    if (!rawLocation) {
-      throw new Error('GOOGLE_CLOUD_LOCATION no está configurada para Vertex AI en entorno de servidor');
-    }
-
-    // Fallback seguro: normalizar la ubicación para evitar valores inválidos
-    const normalizeVertexLocation = (loc: string): string => {
-      const trimmed = (loc || '').trim().toLowerCase();
-      // Aceptar 'global' o patrones tipo 'us-central1', 'europe-west1', etc.
-      const validPattern = /^(global|[a-z]+-[a-z]+[0-9])$/;
-      if (!validPattern.test(trimmed)) {
-        console.warn(`[GenAI] GOOGLE_CLOUD_LOCATION inválida: '${loc}'. Usando 'global' conforme guía Vertex AI.`);
-        return 'global';
+    if (project && rawLocation) {
+      // Vertex AI path — only entered when both project and location are set.
+      const normalizeVertexLocation = (loc: string): string => {
+        const trimmed = (loc || '').trim().toLowerCase();
+        // Accept 'global' or patterns like 'us-central1', 'europe-west1', etc.
+        const validPattern = /^(global|[a-z]+-[a-z]+[0-9])$/;
+        if (!validPattern.test(trimmed)) {
+          console.warn(`[GenAI] GOOGLE_CLOUD_LOCATION inválida: '${loc}'. Usando 'global' conforme guía Vertex AI.`);
+          return 'global';
+        }
+        return trimmed;
       }
-      return trimmed;
+
+      const location = normalizeVertexLocation(rawLocation);
+      const googleAuthOptions = resolveGoogleAuthOptions()
+      const hasExplicitCreds = !!(googleAuthOptions.credentials || googleAuthOptions.keyFilename)
+
+      if (hasExplicitCreds) {
+        console.log('[GenAI Config] Using Vertex AI (server) with explicit credentials')
+        return new GoogleGenAI({
+          vertexai: true,
+          project,
+          location,
+          googleAuthOptions,
+          apiVersion: process.env.GENAI_API_VERSION || 'v1'
+        });
+      }
+      // Vertex AI env vars are set but no credentials found — fall through to API key.
+      console.warn('[GenAI Config] GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION set but no service account credentials found. Falling back to API key.')
     }
 
-    const location = normalizeVertexLocation(rawLocation);
-    const googleAuthOptions = resolveGoogleAuthOptions()
-    const hasExplicitCreds = !!(googleAuthOptions.credentials || googleAuthOptions.keyFilename)
-    if (!hasExplicitCreds) {
-      throw new Error(
-        'Credenciales de Google Cloud no configuradas para Vertex AI. ' +
-        'Configure una de las siguientes opciones en Vercel: ' +
-        '1) GOOGLE_APPLICATION_CREDENTIALS_JSON (contenido JSON del service account), ' +
-        '2) GOOGLE_SERVICE_ACCOUNT_EMAIL y GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY, ' +
-        '3) GOOGLE_APPLICATION_CREDENTIALS con una ruta válida en el runtime.'
-      )
+    // API key fallback for server (e.g. Vercel without Vertex AI credentials).
+    const serverApiKey = process.env.GOOGLE_AI_API_KEY ||
+      process.env.GENAI_API_KEY ||
+      process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY;
+
+    if (serverApiKey) {
+      console.log('[GenAI Config] Using Gemini API key (server fallback)')
+      return new GoogleGenAI({ apiKey: serverApiKey });
     }
 
-    return new GoogleGenAI({
-      vertexai: true,
-      project,
-      location,
-      // Usar credenciales explícitas (JSON/env) o keyFilename sólo si existe
-      googleAuthOptions,
-      apiVersion: process.env.GENAI_API_VERSION || 'v1'
-    });
+    throw new Error(
+      'No se encontraron credenciales de Google AI en el servidor. ' +
+      'Configure una de las siguientes variables en Vercel: ' +
+      '1) GOOGLE_AI_API_KEY (recomendado para Gemini API), ' +
+      '2) GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION + credenciales de service account (para Vertex AI).'
+    );
   }
 }
 

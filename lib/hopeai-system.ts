@@ -199,6 +199,7 @@ export class HopeAISystem {
     console.log(`🆕 Creando nueva sesión clínica: ${finalSessionId}`)
 
     // NOTE: The Gemini chat session is created lazily on first sendMessage call
+    // (see the getActiveChatSessions guard further below in sendMessage())
     // to avoid triggering Vertex AI initialization during session metadata creation.
 
     // Create initial chat state with optional patient context
@@ -1158,7 +1159,7 @@ export class HopeAISystem {
         interactionMetrics: null // Already captured and completed in router
       }
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error("Error sending message: " + (error instanceof Error ? error.message : String(error)))
       throw error
     }
   }
