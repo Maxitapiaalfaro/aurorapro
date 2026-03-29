@@ -246,11 +246,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     mode: ClinicalMode,
     agent: AgentType
   ): Promise<string | null> => {
-    if (!hopeAISystem.current) {
-      console.error('Sistema HopeAI no inicializado')
-      return null
-    }
-
     // Prevenir múltiples ejecuciones simultáneas
     if (isCreatingSession) {
       console.log('⚠️ Hook: Creación de sesión ya en progreso, ignorando solicitud duplicada')
@@ -261,11 +256,27 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       setIsCreatingSession(true)
       setSystemState(prev => ({ ...prev, isLoading: true, error: null }))
 
-      const { sessionId, chatState } = await hopeAISystem.current.createClinicalSession(
-        userId,
-        mode,
-        agent
-      )
+      // 🔥 FIX: Llamar al endpoint API en lugar de ejecutar código de IA en el cliente.
+      // createClinicalSession() invoca ai.chats.create() que requiere credenciales del servidor
+      // (Vertex AI). En el navegador no hay credenciales y lanzaba "Error al crear la sesión".
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, mode, agent }),
+      })
+
+      let data: any
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error(`Error al crear la sesión (HTTP ${response.status})`)
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.details || data?.error || `Error al crear la sesión (HTTP ${response.status})`)
+      }
+
+      const { sessionId, chatState } = data
 
       setSystemState(prev => ({
         ...prev,
@@ -291,7 +302,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     } finally {
       setIsCreatingSession(false)
     }
-  }, [systemState.isInitialized, isCreatingSession])
+  }, [isCreatingSession])
 
 
 
