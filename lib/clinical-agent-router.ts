@@ -1577,7 +1577,7 @@ Basado en esta evidencia, opciones razonadas:
 
       return chat
     } catch (error) {
-      console.error("Error creating chat session:", error)
+      console.error("Error creating chat session: " + (error instanceof Error ? error.message : String(error)))
       throw error
     }
   }

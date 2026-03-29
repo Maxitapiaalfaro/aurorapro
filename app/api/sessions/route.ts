@@ -27,11 +27,12 @@ export async function POST(request: NextRequest) {
       chatState
     })
   } catch (error) {
-    console.error('❌ API Error (Create Session):', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('❌ API Error (Create Session): ' + errorMessage)
     return NextResponse.json(
       { 
         error: 'Error al crear sesión',
-        details: error instanceof Error ? error.message : 'Error desconocido'
+        details: errorMessage
       },
       { status: 500 }
     )
@@ -64,11 +65,12 @@ export async function GET(request: NextRequest) {
       sessions
     })
   } catch (error) {
-    console.error('❌ API Error (Get Sessions):', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('❌ API Error (Get Sessions): ' + errorMessage)
     return NextResponse.json(
       { 
         error: 'Error al obtener sesiones',
-        details: error instanceof Error ? error.message : 'Error desconocido'
+        details: errorMessage
       },
       { status: 500 }
     )
