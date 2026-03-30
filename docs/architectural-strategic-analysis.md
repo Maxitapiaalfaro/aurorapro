@@ -3,7 +3,7 @@
 ## 1. System Overview
 
 AuroraPro is a Next.js 15 (App Router) clinical psychology AI assistant using:
-- **AI Backend**: Google Gemini API via `@google/genai` SDK (v1.10.0, specified as `"latest"`)
+- **AI Backend**: Google Gemini API via `@google/genai` SDK (pinned to `^1.10.0`)
 - **Streaming Protocol**: Server-Sent Events (SSE) via `ReadableStream`
 - **Deployment**: Vercel serverless functions
 - **Monitoring**: Sentry for error tracking
@@ -124,8 +124,8 @@ The function is `async` but not `await`ed. While JavaScript Promise flattening h
 - Error propagation timing is unpredictable
 - The Promise is resolved lazily when `sendMessage()` returns
 
-#### ISSUE 3: `@google/genai: "latest"` Version Pinning (MEDIUM)
-Using `"latest"` in `package.json` means every deployment could install a different SDK version. The code contains comments referencing the Vertex AI SDK's API (`{ stream, response }`), but the unified `@google/genai` SDK returns `Promise<AsyncGenerator>`. A version change could silently break the streaming.
+#### ISSUE 3: `@google/genai` Version Pinning (MEDIUM — FIXED)
+Using `"latest"` in `package.json` meant every deployment could install a different SDK version. The code contains comments referencing the Vertex AI SDK's API (`{ stream, response }`), but the unified `@google/genai` SDK returns `Promise<AsyncGenerator>`. A version change could silently break the streaming. **Resolution**: Pinned to `^1.10.0` in this PR.
 
 #### ISSUE 4: No Client-Side Stream Timeout (LOW)
 The SSE client has no timeout. If the server stops sending events (due to timeout or error), the client waits indefinitely with no feedback to the user.
