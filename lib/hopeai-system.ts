@@ -1086,13 +1086,14 @@ export class HopeAISystem {
         const streamingResponse = response
         
         // Add routing info as a property on the async generator
+        const routingInfo = {
+          detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
+          targetAgent: routingResult.targetAgent,
+          confidence: routingResult.enrichedContext?.confidence || 0,
+          extractedEntities: routingResult.enrichedContext?.extractedEntities || []
+        }
         if (streamingResponse && typeof streamingResponse[Symbol.asyncIterator] === 'function') {
-          (streamingResponse as any).routingInfo = {
-            detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
-            targetAgent: routingResult.targetAgent,
-            confidence: routingResult.enrichedContext?.confidence || 0,
-            extractedEntities: routingResult.enrichedContext?.extractedEntities || []
-          }
+          (streamingResponse as any).routingInfo = routingInfo
         }
         
         // 📊 METRICS TRACKING for streaming
@@ -1102,8 +1103,50 @@ export class HopeAISystem {
         
         console.log(`🎉 [SessionMetrics] Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
         
+        // Wrap the async generator to save the assistant response to history
+        // when the stream is fully consumed by the API route
+        const self = this
+        const wrappedStream = (async function* () {
+          let accumulatedText = ''
+          try {
+            for await (const chunk of streamingResponse as AsyncIterable<any>) {
+              if (chunk.text) {
+                accumulatedText += chunk.text
+              }
+              yield chunk
+            }
+          } finally {
+            // Stream fully consumed (or aborted) — persist the assistant response
+            if (accumulatedText) {
+              const aiMessage: ChatMessage = {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                content: accumulatedText,
+                role: "model",
+                agent: currentState.activeAgent,
+                timestamp: new Date(),
+              }
+              currentState.history.push(aiMessage)
+              currentState.metadata.lastUpdated = new Date()
+              currentState.metadata.totalTokens += self.estimateTokens(message + accumulatedText)
+              try {
+                await self.saveChatSessionBoth(currentState)
+                console.log('💾 [HopeAI] Streaming response saved to history:', {
+                  sessionId,
+                  historyLength: currentState.history.length,
+                  responseLength: accumulatedText.length
+                })
+              } catch (saveError) {
+                console.error('❌ [HopeAI] Failed to save streaming response to history:', saveError)
+              }
+            }
+          }
+        })();
+        
+        // Preserve routing info on the wrapped stream
+        (wrappedStream as any).routingInfo = routingInfo
+        
         return { 
-          response: streamingResponse, 
+          response: wrappedStream, 
           updatedState: currentState,
           interactionMetrics: null // Will be captured by wrapper when stream completes
         }
