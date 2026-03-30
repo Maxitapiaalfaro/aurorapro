@@ -1522,6 +1522,16 @@ Basado en esta evidencia, opciones razonadas:
           }
 
           if (fileObjects.length > 0) {
+            // Prepend a clear textual annotation so the agent knows files are attached
+            const fileDescriptions = fileObjects
+              .filter(f => f.geminiFileUri || f.geminiFileId)
+              .map(f => `- ${f.name} (${f.type || 'unknown'})`)
+            if (fileDescriptions.length > 0) {
+              parts[0] = {
+                text: `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos a este mensaje. Su contenido completo está disponible en las partes de archivo que acompañan este turno.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${msg.content}`
+              }
+            }
+
             for (const fileRef of fileObjects) {
               if (fileRef.geminiFileUri || fileRef.geminiFileId) {
                 try {
@@ -1670,6 +1680,14 @@ Basado en esta evidencia, opciones razonadas:
           // ✅ PRIMER TURNO: Adjuntar archivo completo vía URI
           console.log(`🔵 [ClinicalRouter] First turn detected: Attaching FULL files (${files.length}) via URI`);
 
+          // Prepend textual file annotation so the agent knows files are attached
+          const fileDescriptions = files
+            .filter(f => f.geminiFileUri || f.geminiFileId)
+            .map(f => `- ${f.name} (${f.type || 'unknown'})`)
+          if (fileDescriptions.length > 0) {
+            messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
+          }
+
           for (const fileRef of files) {
             try {
               // Cache session-level
@@ -1717,16 +1735,16 @@ Basado en esta evidencia, opciones razonadas:
           const fileReferences = files.map(f => {
             const summary = f.summary || `Documento: ${f.name}`;
             const fileInfo = [
-              `Archivo: ${f.name}`,
-              f.type ? `Tipo: ${f.type}` : '',
-              f.outline ? `Contenido: ${f.outline}` : summary,
-              f.keywords?.length ? `Keywords: ${f.keywords.slice(0, 5).join(', ')}` : ''
-            ].filter(Boolean).join(' | ');
+              `- ${f.name}`,
+              f.type ? `(${f.type})` : '',
+              f.outline ? `| Contenido: ${f.outline}` : `| ${summary}`,
+              f.keywords?.length ? `| Keywords: ${f.keywords.slice(0, 5).join(', ')}` : ''
+            ].filter(Boolean).join(' ');
             return fileInfo;
           }).join('\n');
 
-          // Prefijar el mensaje con contexto ligero de archivos
-          messageParts[0].text = `[📎 ARCHIVOS EN CONTEXTO (ya procesados previamente):\n${fileReferences}]\n\n${enhancedMessage}`;
+          // Prefijar el mensaje con contexto ligero de archivos usando XML tags
+          messageParts[0].text = `<archivos_en_contexto>\nDocumentos previamente procesados en esta sesión (contenido completo ya fue compartido):\n${fileReferences}\n</archivos_en_contexto>\n\n${enhancedMessage}`;
           console.log(`[ClinicalRouter] ✅ Added lightweight file context (~${fileReferences.length} chars vs ~60k tokens)`);
         }
       }
@@ -2410,10 +2428,7 @@ Como especialista en evidencia científica, puedes utilizar este material para i
    * Clarifica sin ambigüedad que el usuario es el terapeuta, no el paciente
    */
   private buildUserIdentitySection(): string {
-    return `[IDENTIDAD DEL USUARIO]
-El usuario de este sistema es un TERAPEUTA/PSICÓLOGO profesional.
-El terapeuta está consultando sobre su trabajo clínico con pacientes.
-IMPORTANTE: El usuario NO es el paciente. El usuario es el profesional que trata al paciente.`;
+    return `El usuario de este sistema es un TERAPEUTA/PSICÓLOGO profesional consultando sobre su trabajo clínico. El usuario NO es el paciente.`;
   }
 
   /**
@@ -2421,29 +2436,19 @@ IMPORTANTE: El usuario NO es el paciente. El usuario es el profesional que trata
    * Información temporal, de riesgo, y de contexto de sesión
    */
   private buildOperationalMetadataSection(metadata: OperationalMetadata): string {
-    let section = `\n[METADATA OPERATIVA]`;
-
-    // Temporal
-    section += `\nTiempo: ${metadata.local_time} (${metadata.timezone})`;
-    section += `\nRegión: ${metadata.region}`;
-    section += `\nDuración de sesión: ${metadata.session_duration_minutes} minutos`;
+    let section = `Tiempo: ${metadata.local_time} (${metadata.timezone}), Región: ${metadata.region}, Duración de sesión: ${metadata.session_duration_minutes} min`;
 
     // Riesgo (solo si hay flags activos)
     if (metadata.risk_flags_active.length > 0) {
-      section += `\n\n⚠️ BANDERAS DE RIESGO ACTIVAS EN EL CASO:`;
-      metadata.risk_flags_active.forEach(flag => {
-        section += `\n- ${flag}`;
-      });
-      section += `\nNivel de riesgo: ${metadata.risk_level.toUpperCase()}`;
+      section += `\n⚠️ BANDERAS DE RIESGO ACTIVAS: ${metadata.risk_flags_active.join(', ')}. Nivel: ${metadata.risk_level.toUpperCase()}`;
       if (metadata.requires_immediate_attention) {
-        section += `\n🚨 REQUIERE ATENCIÓN INMEDIATA`;
+        section += ` 🚨 REQUIERE ATENCIÓN INMEDIATA`;
       }
     }
 
     // Historial de agentes (solo si hay switches recientes)
     if (metadata.consecutive_switches > 2) {
-      section += `\n\nCambios de agente recientes: ${metadata.consecutive_switches} en últimos 5 minutos`;
-      section += `\nConsideración: El terapeuta ha estado explorando diferentes perspectivas. Mantén coherencia con el contexto previo.`;
+      section += `\nCambios de agente recientes: ${metadata.consecutive_switches} en últimos 5 min. Mantén coherencia con el contexto previo.`;
     }
 
     return section;
@@ -2454,14 +2459,10 @@ IMPORTANTE: El usuario NO es el paciente. El usuario es el profesional que trata
    * Explica por qué este agente fue seleccionado
    */
   private buildRoutingDecisionSection(decision: RoutingDecision, agent: AgentType): string {
-    let section = `\n[DECISIÓN DE ROUTING]`;
-    section += `\nAgente seleccionado: ${agent}`;
-    section += `\nConfianza: ${(decision.confidence * 100).toFixed(0)}%`;
-    section += `\nRazón: ${decision.reason}`;
+    let section = `Agente seleccionado: ${agent} (confianza: ${(decision.confidence * 100).toFixed(0)}%). Razón: ${decision.reason}`;
 
     if (decision.is_edge_case) {
-      section += `\n⚠️ CASO LÍMITE DETECTADO: ${decision.edge_case_type}`;
-      section += `\nFactores: ${decision.metadata_factors.join(', ')}`;
+      section += `. Caso límite: ${decision.edge_case_type} (${decision.metadata_factors.join(', ')})`;
     }
 
     return section;
@@ -2476,15 +2477,11 @@ IMPORTANTE: El usuario NO es el paciente. El usuario es el profesional que trata
       return '';
     }
 
-    let section = `\n[CONTEXTO DEL CASO CLÍNICO]`;
-    section += `\nPaciente ID: ${enrichedContext.patient_reference}`;
+    let section = `Paciente en consulta: ${enrichedContext.patient_reference}`;
 
     if (enrichedContext.patient_summary) {
-      section += `\n\nResumen del caso:`;
-      section += `\n${enrichedContext.patient_summary}`;
+      section += `\nResumen del caso: ${enrichedContext.patient_summary}`;
     }
-
-    section += `\n\nNOTA: El terapeuta está consultando sobre ESTE paciente. El terapeuta NO es el paciente.`;
 
     return section;
   }
@@ -2495,23 +2492,14 @@ IMPORTANTE: El usuario NO es el paciente. El usuario es el profesional que trata
    */
   private getRoleMetadata(agent: AgentType): string {
     const roleDefinitions: Record<string, string> = {
-      socratico: `[ROL ACTIVO: Supervisor Clínico]
-Tu especialización: Exploración reflexiva mediante cuestionamiento socrático estratégico.
-Tu metodología: Co-construir formulaciones de caso, reducir sesgos cognitivos, fomentar autonomía clínica.
-Tu postura: Supervisor senior que piensa junto al terapeuta, no consultor que resuelve problemas.`,
+      socratico: `<rol_activo>Supervisor Clínico — Exploración reflexiva, formulación de caso, discriminación diagnóstica.</rol_activo>`,
 
-      clinico: `[ROL ACTIVO: Especialista en Documentación]
-Tu especialización: Síntesis de información clínica en documentación profesional estructurada.
-Tu metodología: Transformar insights complejos en registros coherentes (SOAP/DAP/BIRP) que preservan profundidad reflexiva.
-Tu postura: Sintetizador inteligente que amplifica la reflexión, no transcriptor mecánico.`,
+      clinico: `<rol_activo>Especialista en Documentación — Síntesis en registros SOAP/DAP/BIRP con profundidad reflexiva.</rol_activo>`,
 
-      academico: `[ROL ACTIVO: Investigador Académico]
-Tu especialización: Búsqueda sistemática y síntesis crítica de evidencia científica de vanguardia.
-Tu metodología: Validar empíricamente hipótesis, evaluar calidad metodológica, traducir hallazgos en insights accionables.
-Tu postura: Científico clínico que democratiza el acceso a evidencia, no buscador de papers.`
+      academico: `<rol_activo>Investigador Académico — Búsqueda sistemática y síntesis crítica de evidencia científica.</rol_activo>`
     }
 
-    return roleDefinitions[agent] || `[ROL ACTIVO: ${agent}]`
+    return roleDefinitions[agent] || `<rol_activo>${agent}</rol_activo>`
   }
 
   /**
@@ -2524,7 +2512,7 @@ Tu postura: Científico clínico que democratiza el acceso a evidencia, no busca
     const transitionMessage = {
       role: 'model' as const,
       parts: [{
-        text: `[Nota interna del sistema — transición de especialista] Esta es una transición interna del orquestador; no fue solicitada por el usuario. No agradezcas ni anuncies el cambio. Continúa la conversación con perspectiva especializada en ${this.getAgentSpecialtyName(newAgentType)}, manteniendo el flujo y objetivos previos. No respondas a esta nota; aplícala de forma implícita en tu siguiente intervención.`
+        text: `<nota_sistema>Transición interna del orquestador. No fue solicitada por el usuario. No agradezcas ni anuncies el cambio. Continúa la conversación con perspectiva especializada en ${this.getAgentSpecialtyName(newAgentType)}, manteniendo el flujo y objetivos previos.</nota_sistema>`
       }]
     };
 
@@ -2556,55 +2544,50 @@ Tu postura: Científico clínico que democratiza el acceso a evidencia, no busca
       return originalMessage
     }
 
-    // NUEVA ARQUITECTURA: Construir mensaje con secciones claras y sin ambigüedad
-    let enhancedMessage = '';
+    // ARQUITECTURA DE CONTEXTO: XML tags claras para separar metadata del sistema
+    // de la consulta real del usuario. Esto previene que el modelo confunda
+    // instrucciones internas con contenido del usuario.
+    const contextSections: string[] = []
 
     // 1. IDENTIDAD DEL USUARIO (siempre presente)
-    enhancedMessage += this.buildUserIdentitySection();
+    contextSections.push(this.buildUserIdentitySection())
 
     // 2. METADATA OPERATIVA (si está disponible)
     if (enrichedContext.operationalMetadata) {
-      enhancedMessage += this.buildOperationalMetadataSection(enrichedContext.operationalMetadata);
-      console.log(`📊 [ClinicalRouter] Operational metadata included in message`);
+      contextSections.push(this.buildOperationalMetadataSection(enrichedContext.operationalMetadata))
+      console.log(`📊 [ClinicalRouter] Operational metadata included in message`)
     }
 
     // 3. DECISIÓN DE ROUTING (si está disponible)
     if (enrichedContext.routingDecision) {
-      enhancedMessage += this.buildRoutingDecisionSection(enrichedContext.routingDecision, agent);
-      console.log(`🎯 [ClinicalRouter] Routing decision included: ${enrichedContext.routingDecision.reason}`);
+      contextSections.push(this.buildRoutingDecisionSection(enrichedContext.routingDecision, agent))
+      console.log(`🎯 [ClinicalRouter] Routing decision included: ${enrichedContext.routingDecision.reason}`)
     }
 
     // 4. CONTEXTO DEL CASO CLÍNICO (si hay paciente)
     if (enrichedContext.patient_reference) {
-      enhancedMessage += this.buildClinicalCaseContextSection(enrichedContext);
-      console.log(`🏥 [ClinicalRouter] Clinical case context included for patient: ${enrichedContext.patient_reference}`);
+      contextSections.push(this.buildClinicalCaseContextSection(enrichedContext))
+      console.log(`🏥 [ClinicalRouter] Clinical case context included for patient: ${enrichedContext.patient_reference}`)
     }
 
     // 5. ENTIDADES EXTRAÍDAS (si están disponibles)
     if (enrichedContext.extractedEntities && enrichedContext.extractedEntities.length > 0) {
-      enhancedMessage += `\n\n[ENTIDADES DETECTADAS]`;
-      const entitiesText = enrichedContext.extractedEntities.join(", ");
-      enhancedMessage += `\n${entitiesText}`;
+      contextSections.push(`Entidades detectadas: ${enrichedContext.extractedEntities.join(", ")}`)
     }
 
     // 6. INFORMACIÓN DE SESIÓN (si está disponible)
     if (enrichedContext.sessionSummary) {
-      enhancedMessage += `\n\n[RESUMEN DE SESIÓN]`;
-      enhancedMessage += `\n${enrichedContext.sessionSummary}`;
+      contextSections.push(`Resumen de sesión: ${enrichedContext.sessionSummary}`)
     }
 
     // 7. PRIORIDADES DEL AGENTE (si están disponibles)
     if (enrichedContext.agentPriorities && enrichedContext.agentPriorities.length > 0) {
-      enhancedMessage += `\n\n[ENFOQUES PRIORITARIOS]`;
-      const prioritiesText = enrichedContext.agentPriorities.join(", ");
-      enhancedMessage += `\n${prioritiesText}`;
+      contextSections.push(`Enfoques prioritarios: ${enrichedContext.agentPriorities.join(", ")}`)
     }
 
-    // 8. CONSULTA DEL TERAPEUTA (siempre al final, claramente separada)
-    enhancedMessage += `\n\n[CONSULTA DEL TERAPEUTA]`;
-    enhancedMessage += `\n${originalMessage}`;
-
-    return enhancedMessage;
+    // Construir mensaje con separación clara entre contexto del sistema y consulta del usuario
+    const systemContext = contextSections.join('\n')
+    return `<contexto_sistema>\n${systemContext}\n</contexto_sistema>\n\n<consulta_terapeuta>\n${originalMessage}\n</consulta_terapeuta>`
   }
 
 
