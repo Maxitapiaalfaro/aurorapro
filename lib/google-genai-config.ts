@@ -151,6 +151,15 @@ function createGenAIClient(): GoogleGenAI {
     const checked = API_KEY_VAR_NAMES.map(n => `${n}=${env(n) ? 'SET' : 'MISSING'}`).join(', ')
     console.error(`[GenAI Config] DIAGNOSTIC — env vars checked: ${checked}`)
 
+    // Extended diagnostics to help identify configuration issues
+    const envKeys = Object.keys(process.env)
+    console.error(`[GenAI Config] DIAGNOSTIC — total env vars available: ${envKeys.length}`)
+    console.error(`[GenAI Config] DIAGNOSTIC — NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, VERCEL_ENV=${process.env.VERCEL_ENV ?? 'undefined'}, NEXT_RUNTIME=${process.env.NEXT_RUNTIME ?? 'undefined'}`)
+    const relatedVars = envKeys
+      .filter(k => /GOOGLE|GEMINI|GENAI|API_KEY/i.test(k))
+      .join(', ')
+    console.error(`[GenAI Config] DIAGNOSTIC — env vars matching GOOGLE/GEMINI/GENAI/API_KEY: ${relatedVars || 'NONE'}`)
+
     throw new Error(
       'No se encontraron credenciales de Google AI en el servidor. ' +
       'Configure una de las siguientes variables en Vercel (Settings → Environment Variables → Production): ' +

@@ -1,4 +1,7 @@
 import {withSentryConfig} from '@sentry/nextjs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 // 🔒 SEGURIDAD CRÍTICA: Bloquear console.log ANTES de que Next.js importe cualquier módulo
 // Esto se ejecuta durante el build, ANTES de que se carguen los módulos de la aplicación
@@ -63,6 +66,14 @@ if (isProduction && !FORCE_ENABLE_LOGS) {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Expose NEXT_PUBLIC env vars at build time for the client bundle
+  env: {
+    NEXT_PUBLIC_GOOGLE_AI_API_KEY:
+      process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_AI_API_KEY ||
+      '',
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -83,6 +94,20 @@ const nextConfig = {
 
   // 🔒 SEGURIDAD: Webpack configuration para eliminar logs en producción
   webpack: (config, { dev, isServer }) => {
+    if (!isServer) {
+      // Exclude Node.js modules from the client bundle
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        'better-sqlite3': false,
+      };
+      config.externals = config.externals || [];
+      config.externals.push('better-sqlite3');
+    }
+
     // En producción, eliminar console.log del código
     if (!dev) {
       // Usar Terser para eliminar console statements
