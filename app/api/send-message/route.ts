@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(':\n\n'))
         }
 
+        // 🛡️ Guard flag for fire-and-forget bullets arriving after controller closes
+        let controllerClosed = false
+
         try {
           // 🔥 CRÍTICO: Enviar evento inicial inmediatamente para establecer conexión SSE
           // Esto previene buffering y confirma que el stream está activo
@@ -78,13 +81,19 @@ export async function POST(request: NextRequest) {
           const systemInitTime = Date.now() - systemStartTime
           console.log(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
 
-          // Callback para bullets progresivos
+          // Callback para bullets progresivos (con guardia contra controller cerrado)
           const onBulletUpdate = (bullet: ReasoningBullet) => {
-            console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
-            sendSSE({
-              type: 'bullet',
-              bullet
-            })
+            if (controllerClosed) return // Guard: bullets may arrive after stream closes
+            try {
+              console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
+              sendSSE({
+                type: 'bullet',
+                bullet
+              })
+            } catch (err) {
+              console.warn('[SSE] Failed to send bullet (controller likely closed):', err)
+              controllerClosed = true // Mark as closed to avoid further attempts
+            }
           }
 
           // Callback para selección de agente
@@ -229,6 +238,7 @@ export async function POST(request: NextRequest) {
             }
           })
         } finally {
+          controllerClosed = true
           controller.close()
         }
       }

@@ -1836,7 +1836,24 @@ Basado en esta evidencia, opciones razonadas:
 
             let result;
       if (useStreaming) {
-        const streamResult = await chat.sendMessageStream(messageParams)
+        // 🔁 Retry with exponential backoff for 429 RESOURCE_EXHAUSTED errors
+        const MAX_RETRIES = 3;
+        let streamResult: any;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            streamResult = await chat.sendMessageStream(messageParams);
+            break; // Success - exit retry loop
+          } catch (err: any) {
+            const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED');
+            if (is429 && attempt < MAX_RETRIES) {
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+              console.warn(`⏳ [ClinicalRouter] 429 rate limit on attempt ${attempt}/${MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+              continue;
+            }
+            throw err; // Non-retryable or exhausted retries
+          }
+        }
 
         // Handle function calls for ALL agents that have tools (academico, socratico, clinico)
         // Estos agentes tienen acceso a herramientas de búsqueda académica

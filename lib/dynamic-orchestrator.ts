@@ -191,9 +191,11 @@ export class DynamicOrchestrator {
             contextualTools: orchestrationResult.contextualTools as any[]
           };
 
-          // Lanzar en paralelo sin esperar a que finalice
+          // Lanzar en paralelo con pequeño stagger para evitar 429 por llamadas concurrentes a Vertex AI
           (async () => {
             try {
+              // ⏳ Stagger: esperar a que el intent router libere su cuota antes de lanzar bullets
+              await new Promise(resolve => setTimeout(resolve, 150));
               for await (const _ of this.generateReasoningBullets(bulletContext, onBulletUpdate)) {
                 // La emisión ya ocurre dentro del generador; aquí no hacemos nada adicional
               }
@@ -327,7 +329,7 @@ FORMATO: Genera exactamente 4-6 bullets, uno por línea, comenzando con "• ".
       
       // Crear chat para generar bullets progresivos coherentes con el agente (usar prompt contextual, no sólo systemInstruction)
       const bulletChat = ai.chats.create({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite-preview',
         config: {
           temperature: 0.6,
           maxOutputTokens: 600,
@@ -797,7 +799,7 @@ Ejemplo de bullets de orquestación:
       const contextPrompt = this.buildRecommendationPrompt(orchestrationResult, session, personalizedRecs);
       
       const result = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: contextPrompt
       });
       
