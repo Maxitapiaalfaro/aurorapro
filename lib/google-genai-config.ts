@@ -147,6 +147,18 @@ function createGenAIClient(): GoogleGenAI {
       }
     }
 
+    // Build-time fallback: In Vercel serverless functions the runtime process.env
+    // may not contain user-defined env vars. However, next.config.mjs `env` block
+    // resolves NEXT_PUBLIC_GOOGLE_AI_API_KEY at BUILD time from multiple var names
+    // (GEMINI_API_KEY, GOOGLE_AI_API_KEY, etc.) and webpack inlines the value into
+    // dot-notation references. Use dot notation here so webpack can replace it.
+    // eslint-disable-next-line dot-notation
+    const buildTimeKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY
+    if (buildTimeKey) {
+      console.error('[GenAI Config] Using build-time inlined NEXT_PUBLIC_GOOGLE_AI_API_KEY (runtime env vars not available)')
+      return new GoogleGenAI({ apiKey: buildTimeKey });
+    }
+
     // Diagnostic: list which vars we checked
     const checked = API_KEY_VAR_NAMES.map(n => `${n}=${env(n) ? 'SET' : 'MISSING'}`).join(', ')
     console.error(`[GenAI Config] DIAGNOSTIC — env vars checked: ${checked}`)
@@ -248,6 +260,12 @@ function createFilesClient(): GoogleGenAI {
       if (key) {
         return new GoogleGenAI({ apiKey: key });
       }
+    }
+    // Build-time fallback (see createGenAIClient for explanation)
+    // eslint-disable-next-line dot-notation
+    const buildTimeKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY
+    if (buildTimeKey) {
+      return new GoogleGenAI({ apiKey: buildTimeKey });
     }
     throw new Error('GOOGLE_AI_API_KEY (or GEMINI_API_KEY / NEXT_PUBLIC_GOOGLE_AI_API_KEY) is required for Files API operations');
   } else {

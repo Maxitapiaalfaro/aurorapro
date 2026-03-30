@@ -5,12 +5,17 @@ const require = createRequire(import.meta.url);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Expose NEXT_PUBLIC env vars at build time for the client bundle
+  // Expose NEXT_PUBLIC env vars at build time for both client and server bundles.
+  // webpack DefinePlugin inlines these into all dot-notation process.env.X references.
+  // This ensures the API key is available even when the serverless function runtime
+  // does not include user-defined env vars in process.env (common in Vercel).
   env: {
     NEXT_PUBLIC_GOOGLE_AI_API_KEY:
       process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY ||
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_AI_API_KEY ||
+      process.env.GENAI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
       '',
   },
   eslint: {
