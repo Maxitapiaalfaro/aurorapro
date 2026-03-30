@@ -698,18 +698,13 @@ export class HopeAISystem {
         patientReference
       );
 
-      // 🚨 EDGE CASE PRE-CHECK: Detectar contenido sensible ANTES de orchestration
-      // Si detectamos contenido sensible, forzamos routing estándar con override al clínico
-      const hasSensitiveContent = this.detectSensitiveContent(message, operationalMetadata);
-
-      // 🚨 RISK STATE PERSISTENCE: DISABLED - Risk session consecutive-turn routing is off for now
-      // The 3-turn forced routing to documentalist is temporarily disabled.
-      // Only current-turn sensitive content detection remains active.
-      const forceStandardRouting = hasSensitiveContent;
-
-      if (hasSensitiveContent) {
-        console.log(`🚨 [HopeAI] SENSITIVE CONTENT DETECTED - Forcing standard routing with edge case detection`);
-      }
+      // 🚨 SENSITIVE CONTENT PRE-CHECK: DISABLED
+      // Sensitive content detection was forcing all messages with clinical keywords
+      // (e.g. "diagnóstico diferencial", "crisis", "abuso") to bypass the advanced
+      // orchestrator and route directly to clinico. This prevented the intent router
+      // from properly discriminating based on the full context of the user input.
+      // The intent router's own classification is now trusted to handle routing.
+      const forceStandardRouting = false;
 
       // Determinar si usar orquestación avanzada o routing directo
       let routingResult: { enrichedContext: any; targetAgent: any; routingDecision?: any };
