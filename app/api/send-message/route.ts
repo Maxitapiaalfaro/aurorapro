@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta } = requestBody
+    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta, fileReferences } = requestBody
 
     console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
       useStreaming,
       userId,
       suggestedAgent,
-      patientReference: sessionMeta?.patient?.reference || 'None'
+      patientReference: sessionMeta?.patient?.reference || 'None',
+      fileReferences: fileReferences?.length || 0
     })
 
     // Crear stream SSE con auto-flush
@@ -113,7 +114,8 @@ export async function POST(request: NextRequest) {
             suggestedAgent,
             sessionMeta,
             onBulletUpdate,    // ← Callback para bullets
-            onAgentSelected    // ← Callback para agente
+            onAgentSelected,   // ← Callback para agente
+            fileReferences     // ← File IDs from client
           )
 
           console.log('🎯 [API /send-message] Orquestación completada:', {

@@ -42,6 +42,7 @@ export interface SendMessageParams {
   userId?: string
   suggestedAgent?: string
   sessionMeta?: any
+  fileReferences?: string[]
 }
 
 /**
@@ -75,6 +76,7 @@ export class SSEClient {
           userId: params.userId ?? 'default-user',
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
+          fileReferences: params.fileReferences,
         }),
         signal: this.abortController.signal,
       })
@@ -143,6 +145,7 @@ export class SSEClient {
           userId: params.userId ?? 'default-user',
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
+          fileReferences: params.fileReferences,
         }),
         signal: this.abortController.signal,
       })

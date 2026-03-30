@@ -1666,7 +1666,7 @@ Basado en esta evidencia, opciones razonadas:
 
       // 🔧 FIX: Estrategia de archivos - SOLO enviar completo en primer turno
       // Turnos posteriores: solo referencia ligera para evitar sobrecarga de tokens
-      if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles)) {
+      if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles) && enrichedContext.sessionFiles.length > 0) {
         // Heurística: adjuntar solo los archivos más recientes o con índice
         const files = (enrichedContext.sessionFiles as any[])
           .slice(-2) // preferir los últimos 2

@@ -490,7 +490,8 @@ export class HopeAISystem {
     suggestedAgent?: string,
     sessionMeta?: PatientSessionMeta,
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
-    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void
+    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
+    clientFileReferences?: string[]
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -539,8 +540,29 @@ export class HopeAISystem {
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
-    // Fallback: if no pending files, reuse most recently referenced processed files from history
+    // Fallback chain for resolving session files:
+    // 1. getPendingFilesForSession (server storage)
+    // 2. Client-provided fileReferences (survives serverless cold starts)
+    // 3. Most recent message with fileReferences from history
     let resolvedSessionFiles = sessionFiles || []
+
+    if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
+      // Fallback: use file IDs sent from the client (reliable across serverless invocations)
+      try {
+        let clientFiles = await this.getFilesByIds(clientFileReferences)
+        if (clientFiles && clientFiles.length > 0) {
+          try {
+            const { clinicalFileManager } = await import('./clinical-file-manager')
+            clientFiles = await Promise.all(clientFiles.map(f => clinicalFileManager.buildLightweightIndex(f)))
+          } catch {}
+          resolvedSessionFiles = clientFiles
+          console.log(`📎 [HopeAI] Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
+        }
+      } catch (e) {
+        console.warn('⚠️ [HopeAI] Could not resolve client file references:', e)
+      }
+    }
+
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && currentState?.history?.length) {
       try {
         const lastMsgWithFiles = [...currentState.history].reverse().find((m: any) => m.fileReferences && m.fileReferences.length > 0)

@@ -525,7 +525,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               useStreaming,
               userId: systemState.userId || 'demo_user',
               suggestedAgent: undefined,
-              sessionMeta: sessionMetaToUse
+              sessionMeta: sessionMetaToUse,
+              fileReferences: attachedFiles?.map(file => file.id) || []
             },
             {
               onBullet: handleBulletUpdate,
