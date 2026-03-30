@@ -702,41 +702,13 @@ export class HopeAISystem {
       // Si detectamos contenido sensible, forzamos routing estándar con override al clínico
       const hasSensitiveContent = this.detectSensitiveContent(message, operationalMetadata);
 
-      // 🚨 RISK STATE PERSISTENCE: Verificar si la sesión ya está marcada como de riesgo
-      const isExistingRiskSession = currentState.riskState?.isRiskSession || false;
-      const consecutiveSafeTurns = currentState.riskState?.consecutiveSafeTurns || 0;
-
-      // Decidir si forzar routing estándar:
-      // 1. Si detectamos contenido sensible en este turno
-      // 2. Si la sesión ya está marcada como de riesgo Y no ha habido suficientes turnos seguros
-      const SAFE_TURNS_THRESHOLD = 3; // Número de turnos seguros para desescalar
-      const forceStandardRouting = hasSensitiveContent ||
-                                   (isExistingRiskSession && consecutiveSafeTurns < SAFE_TURNS_THRESHOLD);
+      // 🚨 RISK STATE PERSISTENCE: DISABLED - Risk session consecutive-turn routing is off for now
+      // The 3-turn forced routing to documentalist is temporarily disabled.
+      // Only current-turn sensitive content detection remains active.
+      const forceStandardRouting = hasSensitiveContent;
 
       if (hasSensitiveContent) {
         console.log(`🚨 [HopeAI] SENSITIVE CONTENT DETECTED - Forcing standard routing with edge case detection`);
-
-        // Actualizar estado de riesgo en la sesión
-        currentState.riskState = {
-          isRiskSession: true,
-          riskLevel: operationalMetadata.risk_level,
-          detectedAt: currentState.riskState?.detectedAt || new Date(),
-          riskType: 'sensitive_content',
-          lastRiskCheck: new Date(),
-          consecutiveSafeTurns: 0 // Reset contador
-        };
-      } else if (isExistingRiskSession) {
-        console.log(`⚠️ [HopeAI] RISK SESSION ACTIVE - Maintaining standard routing (safe turns: ${consecutiveSafeTurns}/${SAFE_TURNS_THRESHOLD})`);
-
-        // Incrementar contador de turnos seguros
-        currentState.riskState!.consecutiveSafeTurns = consecutiveSafeTurns + 1;
-        currentState.riskState!.lastRiskCheck = new Date();
-
-        // Si alcanzamos el umbral, desescalar
-        if (currentState.riskState!.consecutiveSafeTurns >= SAFE_TURNS_THRESHOLD) {
-          console.log(`✅ [HopeAI] RISK SESSION DEESCALATED - Returning to normal orchestration`);
-          currentState.riskState!.isRiskSession = false;
-        }
       }
 
       // Determinar si usar orquestación avanzada o routing directo

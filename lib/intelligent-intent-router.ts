@@ -360,54 +360,9 @@ export class IntelligentIntentRouter {
 
       // Paso 0.5: METADATA-INFORMED ROUTING - Detección de casos límite
       if (operationalMetadata) {
-        // 🚨 PRIORITY CHECK: Sesión de riesgo activa (persistencia de estado)
-        const isRiskSessionActive = operationalMetadata.session_risk_state?.isRiskSession || false;
-
-        if (isRiskSessionActive) {
-          const safeTurns = operationalMetadata.session_risk_state!.consecutiveSafeTurns;
-          const riskType = operationalMetadata.session_risk_state!.riskType || 'unknown';
-
-          console.log(`🚨 [IntentRouter] RISK SESSION ACTIVE - Maintaining clinico routing (safe turns: ${safeTurns})`);
-
-          // Extracción básica de entidades para contexto
-          const entityExtractionResult = await this.entityExtractor.extractEntities(
-            userInput,
-            enrichedSessionContext
-          );
-
-          const routingDecision: RoutingDecision = {
-            agent: 'clinico',
-            confidence: 1.0,
-            reason: RoutingReason.SENSITIVE_CONTENT_OVERRIDE,
-            metadata_factors: [
-              'risk_session_active',
-              `risk_type_${riskType}`,
-              `safe_turns_${safeTurns}`
-            ],
-            is_edge_case: true,
-            edge_case_type: operationalMetadata.session_risk_state!.riskType
-          };
-
-          const enrichedContext = this.createEnrichedContext(
-            userInput,
-            'activar_modo_clinico',
-            entityExtractionResult.entities,
-            entityExtractionResult,
-            optimizedContext,
-            currentAgent,
-            `RISK SESSION ACTIVE: Maintaining clinico routing (safe turns: ${safeTurns}/3)`,
-            1.0,
-            false
-          );
-
-          return {
-            success: true,
-            targetAgent: 'clinico',
-            enrichedContext,
-            requiresUserClarification: false,
-            routingDecision
-          };
-        }
+        // 🚨 RISK SESSION CONSECUTIVE-TURN ROUTING: DISABLED FOR NOW
+        // The 3-turn forced routing to documentalist is temporarily disabled.
+        // Only edge case detection below remains active.
 
         // Detectar casos límite ANTES de clasificación
         const edgeCaseRisk = this.isEdgeCaseRisk(operationalMetadata);

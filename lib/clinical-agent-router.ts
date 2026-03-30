@@ -529,7 +529,7 @@ Ofrece claridad sin lenguaje robótico.
         topP: 0.95,
         topK: 40,
         thinkingConfig: {
-          thinkingBudget: 600 // Razonamiento profundo para análisis reflexivo y cuestionamiento socrático
+          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para análisis reflexivo
         },
       },
     })
@@ -941,7 +941,7 @@ Usa tablas Markdown cuando documentes información que requiera comparación o e
         topP: 1.0,
         topK: 1,
         thinkingConfig: {
-          thinkingBudget: 300 // Razonamiento para síntesis estructurada y organización documental
+          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para documentación
         },
       },
     })
@@ -1524,7 +1524,7 @@ Basado en esta evidencia, opciones razonadas:
         topP: 0.9,
         topK: 20,
         thinkingConfig: {
-          thinkingBudget: 0 // Razonamiento para análisis crítico de evidencia
+          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para análisis de evidencia
         },
       },
     })
