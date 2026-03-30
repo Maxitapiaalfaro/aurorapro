@@ -58,6 +58,7 @@ Cada interacción debe promover:
 
 // Escape XML-special characters in strings interpolated into XML-style tags
 function escapeXml(str: string): string {
+  if (!str) return ''
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
@@ -437,7 +438,7 @@ Eres una supervisora clínica experta conversando con un colega.
         topP: 0.95,
         topK: 40,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para análisis reflexivo
+          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para análisis reflexivo
         },
       },
     })
@@ -849,7 +850,7 @@ Usa tablas Markdown cuando documentes información que requiera comparación o e
         topP: 1.0,
         topK: 1,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para documentación
+          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para documentación
         },
       },
     })
@@ -1432,7 +1433,7 @@ Basado en esta evidencia, opciones razonadas:
         topP: 0.9,
         topK: 20,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // Gemini 3: nivel de razonamiento medio para análisis de evidencia
+          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para análisis de evidencia
         },
       },
     })
