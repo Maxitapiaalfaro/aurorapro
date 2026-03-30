@@ -56,6 +56,11 @@ Cada interacción debe promover:
    - Uso lenguaje técnico DSM5/CIE11 basado en evidencia
 `;
 
+// Escape XML-special characters in strings interpolated into XML-style tags
+function escapeXml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export class ClinicalAgentRouter {
   private agents: Map<AgentType, AgentConfig> = new Map()
   private activeChatSessions: Map<string, any> = new Map()
@@ -1525,7 +1530,7 @@ Basado en esta evidencia, opciones razonadas:
             // Prepend a clear textual annotation so the agent knows files are attached
             const fileDescriptions = fileObjects
               .filter(f => f.geminiFileUri || f.geminiFileId)
-              .map(f => `- ${f.name} (${f.type || 'unknown'})`)
+              .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
             if (fileDescriptions.length > 0) {
               parts[0] = {
                 text: `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos a este mensaje. Su contenido completo está disponible en las partes de archivo que acompañan este turno.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${msg.content}`
@@ -1683,7 +1688,7 @@ Basado en esta evidencia, opciones razonadas:
           // Prepend textual file annotation so the agent knows files are attached
           const fileDescriptions = files
             .filter(f => f.geminiFileUri || f.geminiFileId)
-            .map(f => `- ${f.name} (${f.type || 'unknown'})`)
+            .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
           if (fileDescriptions.length > 0) {
             messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
           }
@@ -1733,12 +1738,13 @@ Basado en esta evidencia, opciones razonadas:
           console.log(`🟢 [ClinicalRouter] Subsequent turn detected: Using LIGHTWEIGHT file references (saves ~60k tokens)`);
 
           const fileReferences = files.map(f => {
-            const summary = f.summary || `Documento: ${f.name}`;
+            const safeName = escapeXml(f.name)
+            const summary = f.summary || `Documento: ${safeName}`;
             const fileInfo = [
-              `- ${f.name}`,
-              f.type ? `(${f.type})` : '',
-              f.outline ? `| Contenido: ${f.outline}` : `| ${summary}`,
-              f.keywords?.length ? `| Keywords: ${f.keywords.slice(0, 5).join(', ')}` : ''
+              `- ${safeName}`,
+              f.type ? `(${escapeXml(f.type)})` : '',
+              f.outline ? `| Contenido: ${escapeXml(f.outline)}` : `| ${escapeXml(summary)}`,
+              f.keywords?.length ? `| Keywords: ${f.keywords.slice(0, 5).map(escapeXml).join(', ')}` : ''
             ].filter(Boolean).join(' ');
             return fileInfo;
           }).join('\n');
