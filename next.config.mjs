@@ -3,67 +3,6 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
-// 🔒 SEGURIDAD CRÍTICA: Bloquear console.log ANTES de que Next.js importe cualquier módulo
-// Esto se ejecuta durante el build, ANTES de que se carguen los módulos de la aplicación
-const isProduction = process.env.NODE_ENV === 'production' ||
-                     process.env.VERCEL_ENV === 'production' ||
-                     process.env.NEXT_PUBLIC_FORCE_PRODUCTION_MODE === 'true';
-
-const FORCE_ENABLE_LOGS = process.env.NEXT_PUBLIC_ENABLE_PRODUCTION_LOGS === 'true';
-
-if (isProduction && !FORCE_ENABLE_LOGS) {
-  const originalLog = console.log;
-  const originalInfo = console.info;
-  const noop = () => {};
-
-  const shouldAllowLog = (args) => {
-    const message = args.join(' ');
-
-    // Permitir SOLO logs del sistema Next.js
-    if (message.includes('▲ Next.js') ||
-        message.includes('Compiled') ||
-        message.includes('Ready in') ||
-        message.includes('✓') ||
-        message.includes('○') ||
-        message.includes('ƒ') ||
-        message.includes('Route (') ||
-        message.includes('Middleware') ||
-        message.includes('Creating an optimized') ||
-        message.includes('Collecting page data') ||
-        message.includes('Generating static pages') ||
-        message.includes('Finalizing page optimization')) {
-      return true;
-    }
-
-    // Permitir SOLO logs de seguridad
-    if (message.includes('🔒 SECURITY')) {
-      return true;
-    }
-
-    return false;
-  };
-
-  console.log = (...args) => {
-    if (shouldAllowLog(args)) {
-      originalLog(...args);
-    }
-  };
-
-  console.info = (...args) => {
-    if (shouldAllowLog(args)) {
-      originalInfo(...args);
-    }
-  };
-
-  console.debug = noop;
-  console.warn = noop;
-  console.trace = noop;
-  console.table = noop;
-  console.dir = noop;
-
-  originalLog('🔒 SECURITY: Console logging blocked at build time');
-}
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Expose NEXT_PUBLIC env vars at build time for the client bundle
@@ -106,57 +45,52 @@ const nextConfig = {
       };
       config.externals = config.externals || [];
       config.externals.push('better-sqlite3');
-    }
 
-    // En producción, eliminar console.log del código
-    if (!dev) {
-      // Usar Terser para eliminar console statements
-      const TerserPlugin = require('terser-webpack-plugin')
+      // Strip console.log from the client (browser) bundle only.
+      // Server-side API routes intentionally keep their logs so errors
+      // appear in Vercel function logs for debugging.
+      if (!dev) {
+        const TerserPlugin = require('terser-webpack-plugin')
 
-      // REEMPLAZAR los minimizers existentes con nuestra configuración
-      config.optimization.minimizer = [
-        new TerserPlugin({
-          terserOptions: {
-            compress: {
-              // 🔒 Eliminar TODOS los console.* excepto console.error
-              drop_console: true,
-              pure_funcs: [
-                'console.log',
-                'console.info',
-                'console.debug',
-                'console.warn',
-                'console.trace',
-                'console.table',
-                'console.dir',
-                'console.dirxml',
-                'console.group',
-                'console.groupCollapsed',
-                'console.groupEnd',
-                'console.time',
-                'console.timeEnd',
-                'console.timeLog',
-                'console.count',
-                'console.countReset',
-                'console.assert',
-                'console.clear'
-              ],
-              // Eliminar código muerto
-              dead_code: true,
-              // Eliminar código no alcanzable
-              unused: true,
+        config.optimization.minimizer = [
+          new TerserPlugin({
+            terserOptions: {
+              compress: {
+                drop_console: true,
+                pure_funcs: [
+                  'console.log',
+                  'console.info',
+                  'console.debug',
+                  'console.warn',
+                  'console.trace',
+                  'console.table',
+                  'console.dir',
+                  'console.dirxml',
+                  'console.group',
+                  'console.groupCollapsed',
+                  'console.groupEnd',
+                  'console.time',
+                  'console.timeEnd',
+                  'console.timeLog',
+                  'console.count',
+                  'console.countReset',
+                  'console.assert',
+                  'console.clear'
+                ],
+                dead_code: true,
+                unused: true,
+              },
+              mangle: {
+                safari10: true,
+              },
+              format: {
+                comments: false,
+              },
             },
-            mangle: {
-              // Ofuscar nombres de variables
-              safari10: true,
-            },
-            format: {
-              // Eliminar comentarios
-              comments: false,
-            },
-          },
-          extractComments: false,
-        })
-      ];
+            extractComments: false,
+          })
+        ];
+      }
     }
 
     return config
