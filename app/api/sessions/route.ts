@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 
+// Allow sufficient time for session creation and retrieval
+export const maxDuration = 30
+
 // POST: Create new session
 export async function POST(request: NextRequest) {
   try {

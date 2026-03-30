@@ -7,6 +7,9 @@ import type { AgentType, ReasoningBullet } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
+// Allow sufficient time for AI streaming responses (Gemini API + orchestration)
+export const maxDuration = 60
+
 /**
  * SSE Event Types
  */

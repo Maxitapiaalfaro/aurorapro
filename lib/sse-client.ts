@@ -164,6 +164,23 @@ export class SSEClient {
       let buffer = ''
       let finalResult: any = null
 
+      // Stream inactivity timeout: if no data arrives within this period,
+      // assume the server function was killed (e.g. Vercel timeout) and
+      // surface the error to the user instead of hanging silently.
+      const STREAM_TIMEOUT_MS = 90_000 // 90 seconds
+      let streamTimeoutId: ReturnType<typeof setTimeout> | null = null
+
+      const resetStreamTimeout = () => {
+        if (streamTimeoutId) clearTimeout(streamTimeoutId)
+        streamTimeoutId = setTimeout(() => {
+          console.error('⏱️ [SSEClient] Stream timeout — no data received within', STREAM_TIMEOUT_MS / 1000, 'seconds')
+          this.abortController?.abort()
+        }, STREAM_TIMEOUT_MS)
+      }
+
+      // Start the inactivity timer
+      resetStreamTimeout()
+
       try {
         while (true) {
           const { done, value } = await reader.read()
@@ -172,6 +189,9 @@ export class SSEClient {
             console.log('✅ [SSEClient] Stream terminado')
             break
           }
+
+          // Reset timeout on every received chunk of data
+          resetStreamTimeout()
 
           buffer += decoder.decode(value, { stream: true })
           const lines = buffer.split('\n')
@@ -245,6 +265,7 @@ export class SSEClient {
           }
         }
       } finally {
+        if (streamTimeoutId) clearTimeout(streamTimeoutId)
         reader.releaseLock()
       }
 

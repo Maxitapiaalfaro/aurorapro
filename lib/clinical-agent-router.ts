@@ -1841,7 +1841,7 @@ Basado en esta evidencia, opciones razonadas:
         // Handle function calls for ALL agents that have tools (academico, socratico, clinico)
         // Estos agentes tienen acceso a herramientas de búsqueda académica
         if (agent === "academico" || agent === "socratico" || agent === "clinico") {
-          result = this.handleStreamingWithTools(streamResult, sessionId, interactionId)
+          result = await this.handleStreamingWithTools(streamResult, sessionId, interactionId)
         } else {
           // 📊 Create streaming wrapper that captures metrics when stream completes
           result = this.createMetricsStreamingWrapper(streamResult, interactionId, enhancedMessage)

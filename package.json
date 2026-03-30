@@ -19,7 +19,7 @@
     "verify:security:old": "node scripts/verify-production-security.js"
   },
   "dependencies": {
-    "@google/genai": "latest",
+    "@google/genai": "^1.10.0",
     "google-auth-library": "^9.14.0",
     "gtoken": "^7.0.0",
     "@hookform/resolvers": "^3.9.1",
