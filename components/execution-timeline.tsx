@@ -214,7 +214,7 @@ function SourcesList({ sources }: { sources: AcademicSourceReference[] }) {
       </div>
       <ul className="space-y-0.5">
         {sources.map((source, idx) => (
-          <li key={`${source.url}-${idx}`} className="flex items-start gap-1 text-[10px] text-muted-foreground/70">
+          <li key={idx} className="flex items-start gap-1 text-[10px] text-muted-foreground/70">
             <span className="text-muted-foreground/40 flex-shrink-0 mt-px">{idx + 1}.</span>
             <div className="min-w-0 flex-1">
               <a

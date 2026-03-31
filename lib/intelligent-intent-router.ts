@@ -593,9 +593,9 @@ export class IntelligentIntentRouter {
         'activar_modo_academico': 'Investigador Académico'
       };
       const agentName = agentDisplayNames[classificationResult.functionName] || 'especialista';
-      const transitionReason = justificacion && justificacion.trim().length > 0
-        ? justificacion.trim()
-        : `${agentName} seleccionado para procesar esta consulta`;
+      const trimmedJustificacion = justificacion?.trim() || '';
+      const transitionReason = trimmedJustificacion
+        || `${agentName} seleccionado para procesar esta consulta`;
 
       const enrichedContext = this.createEnrichedContext(
         userInput,
@@ -1438,8 +1438,9 @@ ${(() => {
   ): string {
     // Usar la justificación clínica generada por el LLM (natural, legible)
     const justificacion = intentResult.parameters?.justificacion_clinica as string | undefined;
-    if (justificacion && justificacion.trim().length > 0) {
-      return justificacion.trim();
+    const trimmed = justificacion?.trim();
+    if (trimmed) {
+      return trimmed;
     }
 
     // Fallback: construir justificación legible a partir de los parámetros disponibles
