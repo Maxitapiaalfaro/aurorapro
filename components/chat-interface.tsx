@@ -32,9 +32,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
-import { CognitiveTransparencyPanel } from "@/components/cognitive-transparency-panel"
 import { ExecutionTimeline } from "@/components/execution-timeline"
-import { generateDynamicStatus, snapshotExecutionTimeline } from "@/lib/dynamic-status"
+import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-status"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -1328,66 +1327,38 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   </div>
                 )}
                 {/* Indicador clínico contextual - refleja el proceso REAL según transitionState CON ANIMACIONES */}
-                {!streamingResponse && (() => {
-                  // Determinar el agente que REALMENTE está respondiendo
-                  const respondingAgent = routingInfo?.targetAgent || activeAgent
-                  const isInitialRouting = transitionState === 'thinking' || transitionState === 'selecting_agent'
-                  
-                  // Dynamic status generation — no hardcoded dictionaries
-                  const dynamicStatus = generateDynamicStatus(
-                    processingStatus,
-                    activeAgent,
-                    respondingAgent
-                  )
-                  // Override with basic phase when still in initial routing
-                  const statusMessage = isInitialRouting
-                    ? 'Evaluando consulta y determinando modalidad de análisis...'
-                    : dynamicStatus.message
-                  const statusKey = isInitialRouting
-                    ? 'selecting'
-                    : dynamicStatus.key
-                  
-                  return (
-                    <div className="space-y-0">
-                      <motion.div 
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="p-4 flex items-center gap-3 text-muted-foreground/80"
-                      >
-                        <motion.div 
-                          animate={{ rotate: 360 }}
-                          transition={{ 
-                            duration: 1.2, 
-                            repeat: Infinity, 
-                            ease: "linear" 
-                          }}
-                          className="relative flex items-center justify-center w-5 h-5"
-                        >
-                          <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
-                          <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
-                        </motion.div>
-                        <motion.span 
-                          key={statusKey}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 10 }}
-                          transition={{ duration: 0.3, ease: "easeOut" }}
-                          className="text-sm font-sans"
-                        >
-                          {statusMessage}
-                        </motion.span>
-                      </motion.div>
-                      {/* Cognitive Transparency Panel - progressive disclosure */}
-                      {processingStatus && !processingStatus.isComplete && processingStatus.phase !== 'idle' && (
-                        <div className="px-4 pb-2">
-                          <CognitiveTransparencyPanel processingStatus={processingStatus} />
-                        </div>
+                {/* Sequential action timeline — single source of truth (replaces old status text + accordion) */}
+                {processingStatus && !processingStatus.isComplete && processingStatus.phase !== 'idle' && (
+                  <div className="px-4 py-2">
+                    <ExecutionTimeline
+                      timeline={buildLiveTimeline(
+                        processingStatus,
+                        activeAgent,
+                        routingInfo?.targetAgent
                       )}
-                    </div>
-                  )
-                })()}
+                      defaultCollapsed={false}
+                    />
+                  </div>
+                )}
+                {/* Basic loading indicator when no processingStatus yet */}
+                {!streamingResponse && (!processingStatus || processingStatus.phase === 'idle') && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="p-4 flex items-center gap-3 text-muted-foreground/80"
+                  >
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                      className="relative flex items-center justify-center w-5 h-5"
+                    >
+                      <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
+                      <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
+                    </motion.div>
+                    <span className="text-sm font-sans">Inicializando…</span>
+                  </motion.div>
+                )}
                 {/* Contenido de streaming - solo cuando hay texto */}
                 {streamingResponse && (
                   <div className="p-4 min-w-0 overflow-hidden">

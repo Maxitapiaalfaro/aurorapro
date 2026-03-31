@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle, AlertCircle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep } from '@/types/clinical-types'
@@ -17,33 +17,31 @@ interface ExecutionTimelineProps {
 /**
  * Persistent Execution Timeline
  *
- * Renders a hierarchical, collapsed-by-default summary of the AI's
- * execution pipeline for a completed message turn.
+ * Renders a sequence of independent, collapsible items — one per
+ * discrete step in the agent's execution pipeline.
  *
- * Level 1 (Parent): Agent name + step count summary
- * Level 2 (Children): Individual execution steps (routing, tool calls, etc.)
+ * - Completed steps display a ✓ icon and are collapsed by default.
+ * - Active steps (live mode) display a spinner.
+ * - Steps with a `detail` field get an expand/collapse toggle.
+ * - Steps without `detail` have no toggle (simple action statements).
  *
- * This component is meant to be stored as part of the ChatMessage and
- * rendered permanently above the Markdown response, NOT as an ephemeral
- * loading indicator.
+ * The component is designed to be:
+ * 1. Used **during** streaming (fed a live timeline built from processingStatus).
+ * 2. **Persisted** on the ChatMessage and rendered in history.
  */
 export function ExecutionTimeline({
   timeline,
   className,
   defaultCollapsed = true
 }: ExecutionTimelineProps) {
-  const [isExpanded, setIsExpanded] = useState(!defaultCollapsed)
   const agentConfig = getAgentVisualConfig(timeline.agentType)
 
   if (!timeline.steps || timeline.steps.length === 0) {
     return null
   }
 
-  const errorCount = timeline.steps.filter(s => s.status === 'error').length
-  const toolSteps = timeline.steps.filter(s => !!s.toolName)
-
-  // Build compact summary text
   const summaryParts: string[] = []
+  const toolSteps = timeline.steps.filter(s => !!s.toolName)
   if (toolSteps.length > 0) {
     summaryParts.push(`${toolSteps.length} herramienta${toolSteps.length !== 1 ? 's' : ''}`)
   }
@@ -57,69 +55,124 @@ export function ExecutionTimeline({
   const summaryText = summaryParts.length > 0 ? summaryParts.join(' · ') : ''
 
   return (
-    <div className={cn("rounded-lg border border-border/40 bg-secondary/20 overflow-hidden", className)}>
-      {/* Level 1: Parent – Agent + summary */}
-      <button
-        type="button"
-        onClick={() => setIsExpanded(prev => !prev)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary/40 transition-colors"
-      >
-        <div className="flex items-center gap-1.5 min-w-0">
-          {isExpanded
-            ? <ChevronDown className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
-          }
-          <span className={cn("text-[11px] font-semibold", agentConfig.textColor)}>
-            {timeline.agentDisplayName}
-          </span>
-          {errorCount > 0 && (
-            <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
-          )}
-        </div>
-
+    <div className={cn("space-y-1", className)}>
+      {/* Agent header line */}
+      <div className="flex items-center gap-1.5 px-1 py-0.5">
+        <span className={cn("text-[11px] font-semibold", agentConfig.textColor)}>
+          {timeline.agentDisplayName}
+        </span>
         {summaryText && (
-          <span className="text-[10px] text-muted-foreground/60 ml-auto flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground/60 ml-auto">
             {summaryText}
           </span>
         )}
-      </button>
+      </div>
 
-      {/* Level 2: Children – Individual steps */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <ul className="px-3 pb-2 space-y-0.5 border-t border-border/30 pt-1.5">
-              {timeline.steps.map((step) => (
-                <TimelineStep key={step.id} step={step} />
-              ))}
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Sequential independent items */}
+      <ul className="space-y-1">
+        {timeline.steps.map((step) => (
+          <TimelineStepItem key={step.id} step={step} defaultCollapsed={defaultCollapsed} />
+        ))}
+      </ul>
     </div>
   )
 }
 
-function TimelineStep({ step }: { step: ExecutionStep }) {
-  const icon = step.status === 'error'
-    ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
-    : <CheckCircle className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
+// ---------------------------------------------------------------------------
+// Individual step item – each step is its own independent accordion
+// ---------------------------------------------------------------------------
 
+function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; defaultCollapsed: boolean }) {
+  // Build the detail string to show inside the expanded area
+  const detailText = buildDetailText(step)
+  const hasDetail = !!detailText
+  const [isOpen, setIsOpen] = useState(!defaultCollapsed && step.status === 'active')
+
+  // Auto-collapse when a step transitions from active → completed
+  const prevStatusRef = useRef(step.status)
+  useEffect(() => {
+    if (prevStatusRef.current === 'active' && step.status !== 'active') {
+      setIsOpen(false)
+    }
+    prevStatusRef.current = step.status
+  }, [step.status])
+
+  const icon = step.status === 'active'
+    ? <Loader2 className="w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
+    : step.status === 'error'
+      ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+      : <CheckCircle className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
+
+  if (!hasDetail) {
+    // Simple action statement — no toggle
+    return (
+      <motion.li
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15 }}
+        className={cn(
+          "flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-muted-foreground leading-relaxed",
+          step.status === 'active' && "bg-secondary/40"
+        )}
+      >
+        <div className="flex-shrink-0">{icon}</div>
+        <span>{step.label}</span>
+      </motion.li>
+    )
+  }
+
+  // Expandable accordion item
   return (
-    <li className="flex items-start gap-1.5 text-[11px] text-muted-foreground leading-relaxed">
-      <div className="mt-[3px]">{icon}</div>
-      <span>{step.label}</span>
-      {step.result && step.result.sourcesValidated != null && (
-        <span className="text-[10px] text-muted-foreground/50 ml-auto flex-shrink-0">
-          {step.result.sourcesValidated}/{step.result.sourcesFound ?? '?'}
-        </span>
+    <motion.li
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15 }}
+      className={cn(
+        "rounded-md border border-border/40 bg-secondary/20 overflow-hidden",
+        step.status === 'active' && "border-clarity-blue-500/30 bg-secondary/30"
       )}
-    </li>
+    >
+      <button
+        type="button"
+        onClick={() => setIsOpen(prev => !prev)}
+        className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-secondary/40 transition-colors"
+      >
+        <div className="flex-shrink-0">{icon}</div>
+        <span className="text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate">
+          {step.label}
+        </span>
+        {isOpen
+          ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+        }
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.12, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-2 pb-1.5 pt-0.5 pl-7 text-[10px] text-muted-foreground/70 leading-relaxed">
+              {detailText}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
   )
+}
+
+function buildDetailText(step: ExecutionStep): string | null {
+  const parts: string[] = []
+  if (step.detail) parts.push(step.detail)
+  if (step.result) {
+    if (step.result.sourcesFound != null && step.result.sourcesValidated != null) {
+      parts.push(`${step.result.sourcesValidated}/${step.result.sourcesFound} fuentes validadas`)
+    }
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }

@@ -41,9 +41,11 @@ export interface ExecutionTimeline {
 export interface ExecutionStep {
   id: string
   label: string
-  status: 'completed' | 'error'
+  status: 'completed' | 'error' | 'active'
   toolName?: string
   query?: string
+  /** Optional expandable detail text shown when the step accordion is opened */
+  detail?: string
   result?: {
     sourcesFound?: number
     sourcesValidated?: number
