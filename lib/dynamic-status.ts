@@ -178,10 +178,7 @@ export function snapshotExecutionTimeline(
       label: processingStatus.routingInfo.reasoning
         ? truncate(processingStatus.routingInfo.reasoning, 120)
         : `Especialista seleccionado: ${agentConfig.name}`,
-      status: 'completed',
-      detail: processingStatus.routingInfo.confidence != null
-        ? `Confianza: ${Math.round(processingStatus.routingInfo.confidence * 100)}%`
-        : undefined
+      status: 'completed'
     })
   }
 
@@ -260,7 +257,7 @@ export function buildLiveTimeline(
     const isActive = processingStatus.phase === 'analyzing_intent'
     steps.push({
       id: 'analyzing_intent',
-      label: 'Evaluando consulta y determinando modalidad de análisis…',
+      label: `Analizando consulta…`,
       status: isActive ? 'active' : 'completed'
     })
   }
@@ -273,15 +270,12 @@ export function buildLiveTimeline(
       label: processingStatus.routingInfo.reasoning
         ? truncate(processingStatus.routingInfo.reasoning, 120)
         : `Especialista seleccionado: ${agentConfig.name}`,
-      status: isActive ? 'active' : 'completed',
-      detail: processingStatus.routingInfo.confidence != null
-        ? `Confianza: ${Math.round(processingStatus.routingInfo.confidence * 100)}%`
-        : undefined
+      status: isActive ? 'active' : 'completed'
     })
   } else if (processingStatus.phase === 'routing_agent') {
     steps.push({
       id: 'routing',
-      label: 'Determinando especialista más adecuado…',
+      label: `Seleccionando especialista…`,
       status: 'active'
     })
   }

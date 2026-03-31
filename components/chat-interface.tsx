@@ -25,7 +25,6 @@ import { getFilesByIds } from "@/lib/hopeai-system"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
-import { ReasoningBullets } from "@/components/reasoning-bullets"
 import type { ReasoningBulletsState, MessageProcessingStatus } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion, AnimatePresence } from "framer-motion"
@@ -232,13 +231,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [previewAgent, setPreviewAgent] = useState<AgentType | null>(null)
-  // Collapse states for reasoning bullets - CLOSED BY DEFAULT
-  const [areBulletsCollapsed, setAreBulletsCollapsed] = useState(true)
-  const [collapsedMessageBullets, setCollapsedMessageBullets] = useState<Record<string, boolean>>({})
   const [shouldScrollOnce, setShouldScrollOnce] = useState(false)
-
-  const toggleExternalBullets = () => setAreBulletsCollapsed(prev => !prev)
-  const toggleMessageBullets = (id: string) => setCollapsedMessageBullets(prev => ({ ...prev, [id]: !prev[id] }))
 
   // Hook para preferencias de visualización
   const { preferences } = useDisplayPreferences()
@@ -249,17 +242,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   // Hook para preferencias de UI (sugerencias dinámicas)
   const { shouldShowDynamicSuggestions, hideDynamicSuggestions, isLoading: isLoadingUIPreferences } = useUIPreferences()
 
-  // MANTENER bullets COLAPSADOS - siempre cerrados por defecto
-  useEffect(() => {
-    if (isStreaming) {
-      setAreBulletsCollapsed(true)
-    } else {
-      // Mantener colapsado después del streaming (usuario debe hacer clic para ver)
-      setAreBulletsCollapsed(true)
-    }
-  }, [isStreaming])
-  // Snapshot of reasoning bullets for current streaming response
-  const bulletsSnapshotRef = useRef<ReasoningBullet[]>([])
+  // Ref to always have the latest processingStatus for use in async closures (e.g. handleSend)
+  const processingStatusRef = useRef(processingStatus)
+  processingStatusRef.current = processingStatus
   
   // Hook para speech-to-text con Chilean Spanish
   const { isListening, interimTranscript, error: speechError} = useSpeechToText({
@@ -289,22 +274,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
     loadMessageFiles()
   }, [currentSession?.history])
-
-  // Keep snapshot of reasoning bullets during streaming cycle
-  useEffect(() => {
-    if (isStreaming && reasoningBullets?.bullets) {
-      bulletsSnapshotRef.current = [...reasoningBullets.bullets]
-    }
-  }, [isStreaming, reasoningBullets?.bullets])
-
-  // Default-collapse reasoning inside the freshly added model message (post-stream commit)
-  useEffect(() => {
-    const last = currentSession?.history && currentSession.history[currentSession.history.length - 1]
-    if (!last) return
-    if (last.role === 'model' && last.reasoningBullets && last.reasoningBullets.length > 0) {
-      setCollapsedMessageBullets(prev => (prev[last.id] === undefined ? { ...prev, [last.id]: true } : prev))
-    }
-  }, [currentSession?.history?.length])
 
   // Auto-scroll ÚNICO cuando el usuario envía un mensaje
   // Solo se activa una vez por mensaje del usuario, no bloquea al usuario durante el streaming
@@ -488,7 +457,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     // Limpiar input y preparar UI para streaming
     setInputValue("")
     setIsStreaming(true)
-    bulletsSnapshotRef.current = []
     setStreamingResponse("")
 
     // 🔄 Resetear indicador académico para el nuevo mensaje
@@ -689,10 +657,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   // 📚 Combinar groundingUrls y referencias académicas
                   const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
                   // 📊 Snapshot execution timeline for persistent storage on the message
-                  const timeline = processingStatus
-                    ? snapshotExecutionTimeline(processingStatus, responseAgent, streamingDuration)
+                  // Use ref to get the LATEST processingStatus (closure captures stale prop value)
+                  const latestStatus = processingStatusRef.current
+                  const timeline = latestStatus
+                    ? snapshotExecutionTimeline(latestStatus, responseAgent, streamingDuration)
                     : undefined
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current, timeline)
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline)
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
@@ -894,15 +864,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const tooltipAgent = previewAgent || activeAgent
   const tooltipConfig = getAgentVisualConfig(tooltipAgent)
   const TooltipIconComponent = tooltipConfig.icon
-  
-  // Determine if the latest model message already contains persisted reasoning bullets
-  const lastHistoryMessage = currentSession?.history && currentSession.history.length > 0
-    ? currentSession.history[currentSession.history.length - 1]
-    : undefined
-  const lastModelMessageHasBullets = !!(
-    lastHistoryMessage?.role === 'model' &&
-    ((lastHistoryMessage?.reasoningBullets?.length ?? 0) > 0)
-  )
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-background relative">
@@ -1040,37 +1001,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                             )}>
                               {messageAgentConfig.name}
                             </h3>
-                            {/* Toggle de bullets para mensajes históricos */}
-                            {((message.reasoningBullets?.length ?? 0) > 0) && (
-                              <button
-                                type="button"
-                                onClick={() => toggleMessageBullets(message.id)}
-                                className={cn(
-                                  "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
-                                  "hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal"
-                                )}
-                                aria-label={collapsedMessageBullets[message.id] ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
-                              >
-                                {collapsedMessageBullets[message.id] ? 'Mostrar' : 'Ocultar'}
-                              </button>
-                            )}
                           </div>
                           <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
                             {messageAgentConfig.description}
                           </p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {/* Reasoning bullets en mensajes históricos */}
-                  {message.role === 'model' && ((message.reasoningBullets?.length ?? 0) > 0) && !collapsedMessageBullets[message.id] && (
-                    <div className="p-3 md:p-4">
-                      <ReasoningBullets
-                        bullets={message.reasoningBullets ?? []}
-                        isGenerating={false}
-                        showHeader={false}
-                        className="text-sm"
-                      />
                     </div>
                   )}
                   {/* Persistent execution timeline for historical messages */}
@@ -1288,20 +1224,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           >
                             {realConfig.name}
                           </motion.h3>
-                          {/* Toggle de bullets en streaming */}
-                          {((reasoningBullets?.bullets?.length ?? 0) > 0) && (
-                            <button
-                              type="button"
-                              onClick={() => setAreBulletsCollapsed(prev => !prev)}
-                              className={cn(
-                                "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
-                                "hover:bg-secondary text-muted-foreground hover:text-foreground"
-                              )}
-                              aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
-                            >
-                              {areBulletsCollapsed ? 'Mostrar' : 'Ocultar'}
-                            </button>
-                          )}
                         </div>
                         <motion.p
                           key={`agent-desc-${realAgent}`}
@@ -1315,20 +1237,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       </div>
                     </div>
                   </div>
-                {/* ⚠️ BULLETS INHABILITADOS: Bullets dentro de streaming deshabilitados para optimizar latencia */}
-                {((reasoningBullets?.bullets?.length ?? 0) > 0) && !areBulletsCollapsed && (
-                  <div className="px-4 pt-4 pb-2">
-                    <ReasoningBullets
-                      bullets={reasoningBullets?.bullets ?? []}
-                      isGenerating={!!reasoningBullets?.isGenerating}
-                      className="w-full"
-                      showHeader={false}
-                    />
-                  </div>
-                )}
-                {/* Indicador clínico contextual - refleja el proceso REAL según transitionState CON ANIMACIONES */}
-                {/* Sequential action timeline — single source of truth (replaces old status text + accordion) */}
-                {processingStatus && !processingStatus.isComplete && processingStatus.phase !== 'idle' && (
+                {/* Sequential action timeline — single source of truth for processing transparency */}
+                {/* Stays visible during the entire streaming lifecycle; historical messages take over after */}
+                {processingStatus && processingStatus.phase !== 'idle' && (
                   <div className="px-4 py-2">
                     <ExecutionTimeline
                       timeline={buildLiveTimeline(
@@ -1584,95 +1495,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               </motion.div>
             )
           })()}
-
-          {/* Contenedor de bullets externos (post-stream) con toggle y colapsado por defecto */}
-          {/* Los bullets añadían ~500-1000ms de latencia al streaming */}
-          {!isStreaming && reasoningBullets && (
-            (!!reasoningBullets?.isGenerating) || ((reasoningBullets?.bullets?.length ?? 0) > 0 && !lastModelMessageHasBullets)
-          ) && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="flex items-start pt-4"
-            >
-              <motion.div
-                initial={{ scale: 0.98 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className={cn("relative rounded-lg border w-full", fontSizeClass, config.bgColor, config.borderColor)}
-              >
-                {/* Mobile: Agent icon in corner - Aurora v2.0 */}
-                <div className={cn(
-                  "mobile-icon-corner mobile-icon-left absolute -top-2.5 -left-2.5 sm:hidden",
-                  "w-7 h-7 rounded-lg flex items-center justify-center shadow-md",
-                  "ring-1 ring-inset border-2 border-cloud-white",
-                  config.bgColor,
-                  config.borderColor
-                )}>
-                  <IconComponent
-                    className={cn("w-3.5 h-3.5", config.textColor)}
-                    weight="duotone"
-                  />
-                </div>
-                {/* Agent Context Header - Aurora v2.0 con toggle */}
-                <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
-                      config.bgColor,
-                      "ring-1 ring-inset",
-                      config.borderColor
-                    )}>
-                      <IconComponent
-                        className={cn("w-5 h-5", config.textColor)}
-                        weight="duotone"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <h3 className={cn(
-                          "text-base font-semibold font-sans tracking-tight",
-                          config.textColor
-                        )}>
-                          {config.name}
-                        </h3>
-                        {((reasoningBullets?.bullets?.length ?? 0) > 0) && (
-                          <button
-                            type="button"
-                            onClick={() => setAreBulletsCollapsed(prev => !prev)}
-                            className={cn(
-                              "inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium rounded-lg transition-all",
-                              "hover:bg-secondary text-muted-foreground hover:text-foreground"
-                            )}
-                            aria-label={areBulletsCollapsed ? 'Expandir razonamiento' : 'Colapsar razonamiento'}
-                          >
-                            {areBulletsCollapsed ? 'Mostrar' : 'Ocultar'}
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
-                        {config.description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {!areBulletsCollapsed && (
-                  <div className="p-4">
-                    <ReasoningBullets
-                      bullets={reasoningBullets?.bullets ?? []}
-                      isGenerating={!!reasoningBullets?.isGenerating}
-                      className="w-full"
-                      showHeader={false}
-                    />
-                  </div>
-                )}
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* Removed typing indicator; reasoning bullets serve as the only thinking indicator */}
 
           <div ref={messagesEndRef} />
         </div>

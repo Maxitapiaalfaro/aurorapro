@@ -7,6 +7,23 @@ import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep } from '@/types/clinical-types'
 
+/**
+ * Small elapsed-time counter rendered next to active (in-progress) steps.
+ * Provides continuous visual feedback so the user never thinks the UI froze.
+ */
+function ElapsedTimer() {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed(prev => prev + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <span className="text-[10px] text-muted-foreground/50 ml-auto tabular-nums flex-shrink-0">
+      {elapsed}s
+    </span>
+  )
+}
+
 interface ExecutionTimelineProps {
   timeline: ExecutionTimelineType
   className?: string
@@ -116,7 +133,8 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
         )}
       >
         <div className="flex-shrink-0">{icon}</div>
-        <span>{step.label}</span>
+        <span className={step.status === 'active' ? 'animate-pulse' : ''}>{step.label}</span>
+        {step.status === 'active' && <ElapsedTimer />}
       </motion.li>
     )
   }
@@ -138,9 +156,13 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
         className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-secondary/40 transition-colors"
       >
         <div className="flex-shrink-0">{icon}</div>
-        <span className="text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate">
+        <span className={cn(
+          "text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate",
+          step.status === 'active' && "animate-pulse"
+        )}>
           {step.label}
         </span>
+        {step.status === 'active' && <ElapsedTimer />}
         {isOpen
           ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
           : <ChevronRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
