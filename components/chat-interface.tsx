@@ -26,12 +26,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
 import { ReasoningBullets } from "@/components/reasoning-bullets"
-import type { ReasoningBulletsState } from "@/types/clinical-types"
+import type { ReasoningBulletsState, MessageProcessingStatus } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
+import { CognitiveTransparencyPanel } from "@/components/cognitive-transparency-panel"
+import { ExecutionTimeline } from "@/components/execution-timeline"
+import { generateDynamicStatus, snapshotExecutionTimeline } from "@/lib/dynamic-status"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -44,7 +47,8 @@ interface ChatInterfaceProps {
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
-    reasoningBulletsForThisResponse?: ReasoningBullet[]
+    reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimeline?: import('@/types/clinical-types').ExecutionTimeline
   ) => Promise<void>
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
@@ -65,6 +69,7 @@ interface ChatInterfaceProps {
   generateLoading?: boolean
   canRevertFicha?: boolean
   reasoningBullets?: ReasoningBulletsState
+  processingStatus?: MessageProcessingStatus
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
@@ -177,7 +182,7 @@ function FichaClinicaDisabledButton({
   )
 }
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, processingStatus }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -684,7 +689,11 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   const responseAgent = response?.routingInfo?.targetAgent || activeAgent
                   // 📚 Combinar groundingUrls y referencias académicas
                   const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current)
+                  // 📊 Snapshot execution timeline for persistent storage on the message
+                  const timeline = processingStatus
+                    ? snapshotExecutionTimeline(processingStatus, responseAgent, streamingDuration)
+                    : undefined
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current, timeline)
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
@@ -1065,6 +1074,15 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       />
                     </div>
                   )}
+                  {/* Persistent execution timeline for historical messages */}
+                  {message.role === 'model' && message.executionTimeline && (
+                    <div className="px-3 md:px-4 pb-1 pt-1">
+                      <ExecutionTimeline
+                        timeline={message.executionTimeline}
+                        defaultCollapsed={true}
+                      />
+                    </div>
+                  )}
                   <div className="p-3 md:p-4 min-w-0 overflow-hidden">
                     <MarkdownRenderer
                       content={message.content}
@@ -1313,65 +1331,61 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {!streamingResponse && (() => {
                   // Determinar el agente que REALMENTE está respondiendo
                   const respondingAgent = routingInfo?.targetAgent || activeAgent
+                  const isInitialRouting = transitionState === 'thinking' || transitionState === 'selecting_agent'
                   
-                  // Mensajes contextuales según la fase real del proceso
-                  let statusMessage = ''
-                  let statusKey = ''
-                  
-                  if (transitionState === 'thinking' || transitionState === 'selecting_agent') {
-                    statusMessage = 'Evaluando consulta y determinando modalidad de análisis...'
-                    statusKey = 'selecting'
-                  } else if (transitionState === 'specialist_responding') {
-                    // Mostrar el agente que REALMENTE fue seleccionado - mensaje genérico
-                    if (respondingAgent === 'socratico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'socratico-responding'
-                    } else if (respondingAgent === 'clinico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'clinico-responding'
-                    } else if (respondingAgent === 'academico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'academico-responding'
-                    } else {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'preparing'
-                    }
-                  } else {
-                    statusMessage = 'Inicializando sistema...'
-                    statusKey = 'idle'
-                  }
+                  // Dynamic status generation — no hardcoded dictionaries
+                  const dynamicStatus = generateDynamicStatus(
+                    processingStatus,
+                    activeAgent,
+                    respondingAgent
+                  )
+                  // Override with basic phase when still in initial routing
+                  const statusMessage = isInitialRouting
+                    ? 'Evaluando consulta y determinando modalidad de análisis...'
+                    : dynamicStatus.message
+                  const statusKey = isInitialRouting
+                    ? 'selecting'
+                    : dynamicStatus.key
                   
                   return (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -5 }}
-                      transition={{ duration: 0.3, ease: "easeOut" }}
-                      className="p-4 flex items-center gap-3 text-muted-foreground/80"
-                    >
+                    <div className="space-y-0">
                       <motion.div 
-                        animate={{ rotate: 360 }}
-                        transition={{ 
-                          duration: 1.2, 
-                          repeat: Infinity, 
-                          ease: "linear" 
-                        }}
-                        className="relative flex items-center justify-center w-5 h-5"
-                      >
-                        <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
-                        <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
-                      </motion.div>
-                      <motion.span 
-                        key={statusKey}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10 }}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="text-sm font-sans"
+                        className="p-4 flex items-center gap-3 text-muted-foreground/80"
                       >
-                        {statusMessage}
-                      </motion.span>
-                    </motion.div>
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ 
+                            duration: 1.2, 
+                            repeat: Infinity, 
+                            ease: "linear" 
+                          }}
+                          className="relative flex items-center justify-center w-5 h-5"
+                        >
+                          <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
+                          <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
+                        </motion.div>
+                        <motion.span 
+                          key={statusKey}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 10 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="text-sm font-sans"
+                        >
+                          {statusMessage}
+                        </motion.span>
+                      </motion.div>
+                      {/* Cognitive Transparency Panel - progressive disclosure */}
+                      {processingStatus && !processingStatus.isComplete && processingStatus.phase !== 'idle' && (
+                        <div className="px-4 pb-2">
+                          <CognitiveTransparencyPanel processingStatus={processingStatus} />
+                        </div>
+                      )}
+                    </div>
                   )
                 })()}
                 {/* Contenido de streaming - solo cuando hay texto */}

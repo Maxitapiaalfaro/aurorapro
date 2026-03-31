@@ -195,7 +195,7 @@ export class DynamicOrchestrator {
           (async () => {
             try {
               // ⏳ Stagger: esperar a que el intent router libere su cuota antes de lanzar bullets
-              await new Promise(resolve => setTimeout(resolve, 150));
+              await new Promise(resolve => setTimeout(resolve, 1500));
               for await (const _ of this.generateReasoningBullets(bulletContext, onBulletUpdate)) {
                 // La emisión ya ocurre dentro del generador; aquí no hacemos nada adicional
               }

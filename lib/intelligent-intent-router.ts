@@ -269,6 +269,34 @@ export class IntelligentIntentRouter {
   }
 
   /**
+   * Retries an async operation with exponential backoff on 429 (RESOURCE_EXHAUSTED) errors.
+   */
+  private async withRetry<T>(operation: () => Promise<T>, label: string): Promise<T> {
+    const maxRetries = this.config.maxRetries;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: unknown) {
+        lastError = error;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isRetryable = errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED');
+
+        if (!isRetryable || attempt >= maxRetries) {
+          throw error;
+        }
+
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`⏳ [${label}] 429 rate limit hit, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
    * Método principal de orquestación inteligente con selección dinámica de herramientas
    */
   async orchestrateWithTools(
@@ -627,7 +655,7 @@ export class IntelligentIntentRouter {
         const entityFunctions = this.entityExtractor.getEntityExtractionFunctions();
         const combinedFunctions = [...this.intentFunctions, ...entityFunctions];
         
-        const result = await this.ai.models.generateContent({
+        const result = await this.withRetry(() => this.ai.models.generateContent({
           model: 'gemini-3.1-flash-lite-preview',
           contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
           config: {
@@ -645,7 +673,7 @@ export class IntelligentIntentRouter {
             seed: 42,
             maxOutputTokens: 600
           }
-        });
+        }), 'classifyIntentAndExtractEntities');
   
         // Validar respuesta
         if (!result.candidates || result.candidates.length === 0 || !result.functionCalls || result.functionCalls.length === 0) {
@@ -720,7 +748,7 @@ export class IntelligentIntentRouter {
       // Construir prompt con contexto
       const contextPrompt = this.buildContextualPrompt(userInput, sessionContext, enrichedSessionContext);
       
-      const result = await this.ai.models.generateContent({
+      const result = await this.withRetry(() => this.ai.models.generateContent({
         model: 'gemini-3.1-flash-lite-preview',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
@@ -740,7 +768,7 @@ export class IntelligentIntentRouter {
           seed: 42,
           maxOutputTokens: 600
         }
-      });
+      }), 'classifyIntent');
 
       // Validar calidad de la respuesta usando métricas nativas del SDK
       if (!result.candidates || result.candidates.length === 0) {

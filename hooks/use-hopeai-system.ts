@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 import { getSSEClient } from '@/lib/sse-client'
+import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
 const MAX_HISTORICAL_BULLETS = 15
@@ -34,6 +35,8 @@ interface HopeAISystemState {
   }
   // Estado de bullets progresivos
   reasoningBullets: ReasoningBulletsState
+  // Cognitive Transparency Layer: granular processing lifecycle
+  processingStatus: MessageProcessingStatus
 }
 
 interface UseHopeAISystemReturn {
@@ -58,7 +61,8 @@ interface UseHopeAISystemReturn {
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
-    reasoningBulletsForThisResponse?: ReasoningBullet[]
+    reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimeline?: ExecutionTimeline
   ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
   
@@ -68,6 +72,14 @@ interface UseHopeAISystemReturn {
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
+  const initialProcessingStatus: MessageProcessingStatus = {
+    phase: 'idle',
+    startedAt: new Date(),
+    toolExecutions: [],
+    bullets: [],
+    isComplete: true
+  }
+
   const [systemState, setSystemState] = useState<HopeAISystemState>({
     sessionId: null,
     userId: 'demo_user',
@@ -86,7 +98,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       currentStep: 0,
       totalSteps: undefined,
       error: undefined
-    }
+    },
+    processingStatus: initialProcessingStatus
   })
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
@@ -94,6 +107,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Ref to access the latest history in callbacks without adding it to dependency arrays
   const historyRef = useRef<ChatMessage[]>(systemState.history)
   historyRef.current = systemState.history
+  // Ref to access the latest processingStatus in callbacks without re-renders
+  const processingStatusRef = useRef<MessageProcessingStatus>(systemState.processingStatus)
+  processingStatusRef.current = systemState.processingStatus
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
@@ -389,6 +405,13 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             bullets: [], // Limpiar bullets globales para el nuevo mensaje
             isGenerating: true,
             currentStep: 0
+          },
+          processingStatus: {
+            phase: 'analyzing_intent',
+            startedAt: new Date(),
+            toolExecutions: [],
+            bullets: [],
+            isComplete: false
           }
         }
       })
@@ -473,7 +496,16 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               confidence: routingInfo.confidence,
               extractedEntities: []
             },
-            transitionState: 'specialist_responding'
+            transitionState: 'specialist_responding',
+            processingStatus: {
+              ...prev.processingStatus,
+              phase: 'agent_selected',
+              routingInfo: {
+                targetAgent: routingInfo.targetAgent as AgentType,
+                confidence: routingInfo.confidence,
+                reasoning: routingInfo.reasoning
+              }
+            }
           }
         })
 
@@ -531,10 +563,61 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             {
               onBullet: handleBulletUpdate,
               onAgentSelected: handleAgentSelected,
+              onToolExecution: (tool: ToolExecutionEvent) => {
+                console.log('🔧 Tool execution event:', tool.toolName, tool.status)
+                setSystemState(prev => {
+                  if (tool.status === 'started') {
+                    // Deduplicate: skip if a tool with the same toolName and query is already in 'started' state
+                    const alreadyStarted = prev.processingStatus.toolExecutions.some(
+                      t => t.toolName === tool.toolName && t.status === 'started' && t.query === tool.query
+                    )
+                    if (alreadyStarted) {
+                      return prev
+                    }
+                    return {
+                      ...prev,
+                      processingStatus: {
+                        ...prev.processingStatus,
+                        phase: 'executing_tools',
+                        toolExecutions: [...prev.processingStatus.toolExecutions, tool]
+                      }
+                    }
+                  }
+                  // For completed/error: find the first matching tool still in 'started' state
+                  let matched = false
+                  const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
+                    if (!matched && t.toolName === tool.toolName && t.status === 'started') {
+                      matched = true
+                      return { ...t, status: tool.status, result: tool.result } as ToolExecutionEvent
+                    }
+                    return t
+                  })
+                  return {
+                    ...prev,
+                    processingStatus: {
+                      ...prev.processingStatus,
+                      toolExecutions: updatedExecutions
+                    }
+                  }
+                })
+              },
               onChunk: (chunk) => {
                 // Este callback se ejecuta pero no necesitamos hacer nada aquí
                 // porque el generator ya está yieldando los chunks
                 console.log('📝 Chunk procesado en callback')
+                // Update phase to streaming on first chunk
+                setSystemState(prev => {
+                  if (prev.processingStatus.phase !== 'streaming') {
+                    return {
+                      ...prev,
+                      processingStatus: {
+                        ...prev.processingStatus,
+                        phase: 'streaming'
+                      }
+                    }
+                  }
+                  return prev
+                })
               },
               onResponse: (responseData) => {
                 console.log('✅ Respuesta final recibida vía SSE')
@@ -557,6 +640,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   reasoningBullets: {
                     ...prev.reasoningBullets,
                     isGenerating: false
+                  },
+                  processingStatus: {
+                    ...prev.processingStatus,
+                    phase: 'synthesizing'
                   }
                 }))
               },
@@ -572,6 +659,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   reasoningBullets: {
                     ...prev.reasoningBullets,
                     isGenerating: false
+                  },
+                  processingStatus: {
+                    ...prev.processingStatus,
+                    phase: 'complete',
+                    isComplete: true
                   }
                 }))
               }
@@ -604,7 +696,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         ...prev,
         error: 'Error al enviar el mensaje',
         isLoading: false,
-        transitionState: 'idle'
+        transitionState: 'idle',
+        processingStatus: {
+          ...prev.processingStatus,
+          phase: 'error',
+          isComplete: true
+        }
       }))
       throw error
     }
@@ -667,7 +764,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         currentStep: 0,
         totalSteps: undefined,
         error: undefined
-      }
+      },
+      processingStatus: initialProcessingStatus
     })
     lastSessionIdRef.current = null
   }, [systemState.isInitialized])
@@ -678,6 +776,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimelineForThisResponse?: ExecutionTimeline,
     sessionIdOverride?: string
   ): Promise<void> => {
     if (!hopeAISystem.current) {
@@ -709,7 +808,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       agent: agent,
       timestamp: new Date(),
       groundingUrls: groundingUrls || [],
-      reasoningBullets: undefined
+      reasoningBullets: undefined,
+      executionTimeline: executionTimelineForThisResponse
     }
 
     // Asociar bullets si existen

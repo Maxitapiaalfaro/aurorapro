@@ -25,6 +25,29 @@ export interface ChatMessage {
   // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
   // NUEVA FUNCIONALIDAD: Bullets de razonamiento específicos por mensaje
   reasoningBullets?: ReasoningBullet[]
+  // Persistent execution timeline: hierarchical log of the AI's process for this turn
+  executionTimeline?: ExecutionTimeline
+}
+
+// Persistent, hierarchical log of the agent execution pipeline for a single message
+export interface ExecutionTimeline {
+  agentType: AgentType
+  agentDisplayName: string
+  steps: ExecutionStep[]
+  durationMs?: number
+}
+
+// A single step in the agent execution pipeline
+export interface ExecutionStep {
+  id: string
+  label: string
+  status: 'completed' | 'error'
+  toolName?: string
+  query?: string
+  result?: {
+    sourcesFound?: number
+    sourcesValidated?: number
+  }
 }
 
 // Tipos para bullets progresivos de razonamiento
@@ -44,6 +67,46 @@ export interface ReasoningBulletsState {
   currentStep: number
   totalSteps?: number
   error?: string
+}
+
+// Cognitive Transparency Layer: Granular processing lifecycle phases
+export type ProcessingPhase =
+  | 'idle'
+  | 'analyzing_intent'
+  | 'routing_agent'
+  | 'agent_selected'
+  | 'executing_tools'
+  | 'synthesizing'
+  | 'streaming'
+  | 'complete'
+  | 'error'
+
+// Tool execution event emitted during processing
+export interface ToolExecutionEvent {
+  id: string
+  toolName: string
+  displayName: string
+  query?: string
+  status: 'started' | 'completed' | 'error'
+  timestamp: Date
+  result?: {
+    sourcesFound?: number
+    sourcesValidated?: number
+  }
+}
+
+// Granular message processing status for transparency UI
+export interface MessageProcessingStatus {
+  phase: ProcessingPhase
+  startedAt: Date
+  routingInfo?: {
+    targetAgent: AgentType
+    confidence: number
+    reasoning: string
+  }
+  toolExecutions: ToolExecutionEvent[]
+  bullets: ReasoningBullet[]
+  isComplete: boolean
 }
 
 export interface BulletGenerationContext {
