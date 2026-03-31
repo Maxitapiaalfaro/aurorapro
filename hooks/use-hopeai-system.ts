@@ -560,20 +560,34 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               onAgentSelected: handleAgentSelected,
               onToolExecution: (tool: ToolExecutionEvent) => {
                 console.log('🔧 Tool execution event:', tool.toolName, tool.status)
-                setSystemState(prev => ({
-                  ...prev,
-                  processingStatus: {
-                    ...prev.processingStatus,
-                    phase: tool.status === 'started' ? 'executing_tools' : prev.processingStatus.phase,
-                    toolExecutions: tool.status === 'started'
-                      ? [...prev.processingStatus.toolExecutions, tool]
-                      : prev.processingStatus.toolExecutions.map(t =>
-                          t.toolName === tool.toolName && t.status === 'started'
-                            ? { ...t, status: tool.status, result: tool.result }
-                            : t
-                        )
+                setSystemState(prev => {
+                  if (tool.status === 'started') {
+                    return {
+                      ...prev,
+                      processingStatus: {
+                        ...prev.processingStatus,
+                        phase: 'executing_tools',
+                        toolExecutions: [...prev.processingStatus.toolExecutions, tool]
+                      }
+                    }
                   }
-                }))
+                  // For completed/error: find the first matching tool still in 'started' state
+                  let matched = false
+                  const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
+                    if (!matched && t.toolName === tool.toolName && t.status === 'started') {
+                      matched = true
+                      return { ...t, status: tool.status, result: tool.result } as ToolExecutionEvent
+                    }
+                    return t
+                  })
+                  return {
+                    ...prev,
+                    processingStatus: {
+                      ...prev.processingStatus,
+                      toolExecutions: updatedExecutions
+                    }
+                  }
+                })
               },
               onChunk: (chunk) => {
                 // Este callback se ejecuta pero no necesitamos hacer nada aquí

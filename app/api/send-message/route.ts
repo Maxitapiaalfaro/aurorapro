@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
                     sendSSE({
                       type: 'tool_execution',
                       tool: {
-                        id: `tool_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                        id: crypto.randomUUID(),
                         toolName: chunk.metadata.toolName,
                         displayName: getToolDisplayName(chunk.metadata.toolName),
                         query: chunk.metadata.query,
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
                     sendSSE({
                       type: 'tool_execution',
                       tool: {
-                        id: `tool_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                        id: crypto.randomUUID(),
                         toolName: chunk.metadata.toolName,
                         displayName: getToolDisplayName(chunk.metadata.toolName),
                         status: 'completed',

@@ -6,7 +6,7 @@ import { CheckCircle, Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lu
 import { MagnifyingGlass, Brain, Lightning, ArrowsClockwise, BookOpen } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
-import type { MessageProcessingStatus, ProcessingPhase, ToolExecutionEvent, ReasoningBullet, AgentType } from '@/types/clinical-types'
+import type { MessageProcessingStatus, ProcessingPhase, ToolExecutionEvent } from '@/types/clinical-types'
 
 interface CognitiveTransparencyPanelProps {
   processingStatus: MessageProcessingStatus
@@ -197,7 +197,7 @@ function ToolExecutionItem({ tool }: { tool: ToolExecutionEvent }) {
         </span>
         {tool.query && (
           <span className="text-[10px] text-muted-foreground ml-1">
-            — &quot;{tool.query}&quot;
+            {`— "${tool.query}"`}
           </span>
         )}
         {tool.result && tool.status === 'completed' && (
