@@ -2279,11 +2279,9 @@ Basado en esta evidencia, opciones razonadas:
               },
             }))
 
-            // Send all function responses - use array if multiple, single part if one
+            // Send all function responses using consistent array format
             const followUpResult = await sessionData.chat.sendMessageStream({
-              message: functionResponseParts.length === 1
-                ? functionResponseParts[0]
-                : functionResponseParts,
+              message: functionResponseParts,
             })
 
             // 🔥 CRÍTICO: Iterar sobre followUpResult.stream (no followUpResult directamente)
