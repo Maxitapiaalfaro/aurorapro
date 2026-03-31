@@ -1331,6 +1331,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {!streamingResponse && (() => {
                   // Determinar el agente que REALMENTE está respondiendo
                   const respondingAgent = routingInfo?.targetAgent || activeAgent
+                  const isInitialRouting = transitionState === 'thinking' || transitionState === 'selecting_agent'
                   
                   // Dynamic status generation — no hardcoded dictionaries
                   const dynamicStatus = generateDynamicStatus(
@@ -1339,10 +1340,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     respondingAgent
                   )
                   // Override with basic phase when still in initial routing
-                  const statusMessage = (transitionState === 'thinking' || transitionState === 'selecting_agent')
+                  const statusMessage = isInitialRouting
                     ? 'Evaluando consulta y determinando modalidad de análisis...'
                     : dynamicStatus.message
-                  const statusKey = (transitionState === 'thinking' || transitionState === 'selecting_agent')
+                  const statusKey = isInitialRouting
                     ? 'selecting'
                     : dynamicStatus.key
                   

@@ -31,7 +31,7 @@ export interface ChatMessage {
 
 // Persistent, hierarchical log of the agent execution pipeline for a single message
 export interface ExecutionTimeline {
-  agentKey: AgentType
+  agentType: AgentType
   agentDisplayName: string
   steps: ExecutionStep[]
   durationMs?: number

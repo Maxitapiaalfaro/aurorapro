@@ -33,7 +33,7 @@ export function ExecutionTimeline({
   defaultCollapsed = true
 }: ExecutionTimelineProps) {
   const [isExpanded, setIsExpanded] = useState(!defaultCollapsed)
-  const agentConfig = getAgentVisualConfig(timeline.agentKey)
+  const agentConfig = getAgentVisualConfig(timeline.agentType)
 
   if (!timeline.steps || timeline.steps.length === 0) {
     return null

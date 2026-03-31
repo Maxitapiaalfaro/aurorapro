@@ -182,7 +182,7 @@ export function snapshotExecutionTimeline(
   }
 
   return {
-    agentKey: agent,
+    agentType: agent,
     agentDisplayName: agentConfig.name,
     steps,
     durationMs
