@@ -608,10 +608,18 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                     }
                     return t
                   })
+                  // Bridge the latency gap: when ALL tools finish, transition to
+                  // 'synthesizing' so the UI shows an active "analyzing evidence"
+                  // step instead of freezing with no spinner until the first
+                  // streaming text chunk arrives from the model.
+                  const allToolsDone = updatedExecutions.length > 0 &&
+                    updatedExecutions.every(t => t.status === 'completed' || t.status === 'error')
+                  const nextPhase = allToolsDone ? 'synthesizing' : prev.processingStatus.phase
                   return {
                     ...prev,
                     processingStatus: {
                       ...prev.processingStatus,
+                      phase: nextPhase,
                       toolExecutions: updatedExecutions
                     }
                   }
@@ -650,18 +658,25 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 }
 
                 // 🛠️ FIX: Finalizar indicador de generación de bullets si el backend
-                // no envía bullets progresivos (o ya terminó la generación)
-                setSystemState(prev => ({
-                  ...prev,
-                  reasoningBullets: {
-                    ...prev.reasoningBullets,
-                    isGenerating: false
-                  },
-                  processingStatus: {
-                    ...prev.processingStatus,
-                    phase: 'synthesizing'
+                // no envía bullets progresivos (o ya terminó la generación).
+                // Don't regress the phase: if we've already reached 'streaming'
+                // (from onChunk), keep it — only advance to 'synthesizing' if
+                // we're still in an earlier phase (e.g. executing_tools).
+                setSystemState(prev => {
+                  const phase = prev.processingStatus.phase
+                  const shouldAdvance = phase !== 'streaming' && phase !== 'complete'
+                  return {
+                    ...prev,
+                    reasoningBullets: {
+                      ...prev.reasoningBullets,
+                      isGenerating: false
+                    },
+                    processingStatus: {
+                      ...prev.processingStatus,
+                      phase: shouldAdvance ? 'synthesizing' : phase
+                    }
                   }
-                }))
+                })
               },
               onError: (error, details) => {
                 console.error('❌ Error SSE:', error, details)
