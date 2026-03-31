@@ -567,9 +567,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 console.log('🔧 Tool execution event:', tool.toolName, tool.status)
                 setSystemState(prev => {
                   if (tool.status === 'started') {
-                    // Deduplicate: skip if a tool with the same toolName is already in 'started' state
+                    // Deduplicate: skip if a tool with the same toolName and query is already in 'started' state
                     const alreadyStarted = prev.processingStatus.toolExecutions.some(
-                      t => t.toolName === tool.toolName && t.status === 'started'
+                      t => t.toolName === tool.toolName && t.status === 'started' && t.query === tool.query
                     )
                     if (alreadyStarted) {
                       return prev
