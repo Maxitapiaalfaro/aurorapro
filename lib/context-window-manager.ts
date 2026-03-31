@@ -67,7 +67,7 @@ export class ContextWindowManager {
 
   constructor(config: Partial<ContextWindowConfig> = {}) {
     this.config = {
-      maxExchanges: 4, // Óptimo para mantener contexto relevante sin sobrecarga
+      maxExchanges: 50, // Preservar últimos 50 intercambios para evitar pérdida de contexto en conversaciones largas
       triggerTokens: 2000, // Activar compresión cuando se acerque al límite
       targetTokens: 1200, // Objetivo después de compresión
       enableLogging: true,

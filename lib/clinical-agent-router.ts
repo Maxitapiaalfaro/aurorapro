@@ -2268,16 +2268,20 @@ Basado en esta evidencia, opciones razonadas:
           if (validResponses.length > 0) {
             console.log(`[ClinicalRouter] Sending ${validResponses.length} function responses back to model`)
 
-            // Send function results back to the model and stream the response
-            const followUpResult = await sessionData.chat.sendMessageStream({
-              message: {
-                functionResponse: {
-                  name: validResponses[0].name,
-                  response: {
-                    output: validResponses[0].response
-                  },
+            // Send ALL function results back to the model (not just the first one)
+            // Build an array of functionResponse parts for all valid responses
+            const functionResponseParts = validResponses.map((resp: any) => ({
+              functionResponse: {
+                name: resp.name,
+                response: {
+                  output: resp.response
                 },
               },
+            }))
+
+            // Send all function responses using consistent array format
+            const followUpResult = await sessionData.chat.sendMessageStream({
+              message: functionResponseParts,
             })
 
             // 🔥 CRÍTICO: Iterar sobre followUpResult.stream (no followUpResult directamente)

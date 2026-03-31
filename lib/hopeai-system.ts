@@ -588,9 +588,9 @@ export class HopeAISystem {
       // Esto previene sobrecarga con archivos grandes + conversaciones largas
       const { ContextWindowManager } = await import('./context-window-manager');
       const contextWindowManager = new ContextWindowManager({
-        maxExchanges: 6,        // Últimos 6 intercambios = 12 mensajes max
-        triggerTokens: 50000,   // Activar compresión a 50k tokens
-        targetTokens: 30000,    // Reducir a 30k tokens después de compresión
+        maxExchanges: 50,       // Preservar últimos 50 intercambios = 100 mensajes max para evitar pérdida de contexto
+        triggerTokens: 800000,  // Activar compresión a 800k tokens (80% del context window de 1M)
+        targetTokens: 600000,   // Reducir a 600k tokens después de compresión
         enableLogging: true
       });
 
@@ -687,7 +687,7 @@ export class HopeAISystem {
       const enrichedSessionContext: EnrichedContext = {
         sessionFiles: resolvedSessionFiles || [],
         currentMessage: message,
-        conversationHistory: currentState.history.slice(-5), // Últimos 5 mensajes para contexto
+        conversationHistory: currentState.history.slice(-20), // Últimos 20 mensajes para contexto de routing
         activeAgent: currentState.activeAgent,
         clinicalMode: currentState.mode,
         sessionMetadata: currentState.metadata,
@@ -705,7 +705,10 @@ export class HopeAISystem {
           confidence: 0,
           processingTime: 0
         },
-        sessionHistory: [],
+        sessionHistory: sessionContext.map(c => ({
+          role: c.role || 'user',
+          parts: (c.parts || []).map(p => ({ text: ('text' in p && p.text) ? p.text : '' }))
+        })),
         transitionReason: '',
         confidence: 0
       }
