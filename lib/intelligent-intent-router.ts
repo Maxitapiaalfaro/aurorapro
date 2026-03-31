@@ -926,7 +926,7 @@ ${(() => {
    * Resumir contexto reciente de manera concisa (método legacy mantenido para compatibilidad)
    */
   private summarizeRecentContext(sessionContext: Content[]): string {
-    const recentMessages = sessionContext.slice(-2);
+    const recentMessages = sessionContext.slice(-6);
     if (recentMessages.length === 0) return 'Inicio de conversación';
     
     return recentMessages
