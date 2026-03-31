@@ -2285,58 +2285,90 @@ Basado en esta evidencia, opciones razonadas:
             })
 
             // 🔥 CRÍTICO: Iterar sobre followUpResult.stream (no followUpResult directamente)
-            const followUpStream = followUpResult.stream || followUpResult;
+            let currentStream = followUpResult.stream || followUpResult;
 
-            // Yield the follow-up response chunks
-            for await (const chunk of followUpStream) {
-              const extractedText = self.extractTextFromChunk(chunk)
-              if (extractedText) {
-                hasYieldedContent = true
+            // Handle recursive function calls: the follow-up response may itself contain
+            // function calls that need another round-trip (max 3 iterations to prevent infinite loops)
+            const MAX_FOLLOWUP_ROUNDS = 3
+            for (let round = 0; round < MAX_FOLLOWUP_ROUNDS; round++) {
+              let followUpFunctionCalls: any[] = []
 
-                // Convertir vertex links en el texto antes de enviar
-                let processedText = extractedText
-                if (vertexLinkConverter.hasVertexLinks(processedText)) {
-                  console.log('[ClinicalRouter] Detected vertex links in response, converting...')
-                  const conversionResult = await vertexLinkConverter.convertResponse(
-                    processedText,
-                    chunk.groundingMetadata
-                  )
-                  processedText = conversionResult.convertedResponse
+              // Yield the follow-up response chunks
+              for await (const chunk of currentStream) {
+                const extractedText = self.extractTextFromChunk(chunk)
+                if (extractedText) {
+                  hasYieldedContent = true
 
-                  if (conversionResult.conversionCount > 0) {
-                    console.log(`[ClinicalRouter] Converted ${conversionResult.conversionCount} vertex links`)
-                  }
-                }
+                  // Convertir vertex links en el texto antes de enviar
+                  let processedText = extractedText
+                  if (vertexLinkConverter.hasVertexLinks(processedText)) {
+                    console.log('[ClinicalRouter] Detected vertex links in response, converting...')
+                    const conversionResult = await vertexLinkConverter.convertResponse(
+                      processedText,
+                      chunk.groundingMetadata
+                    )
+                    processedText = conversionResult.convertedResponse
 
-                yield {
-                  ...chunk,
-                  text: processedText
-                }
-              }
-
-              // Extract and yield grounding metadata with URLs if available
-              if (chunk.groundingMetadata) {
-                const urls = await self.extractUrlsFromGroundingMetadata(chunk.groundingMetadata)
-                if (urls.length > 0) {
-                  // 🎯 UX: Emitir evento con el número REAL de fuentes usadas por Gemini
-                  yield {
-                    text: "",
-                    metadata: {
-                      type: "sources_used_by_ai",
-                      sourcesUsed: urls.length
+                    if (conversionResult.conversionCount > 0) {
+                      console.log(`[ClinicalRouter] Converted ${conversionResult.conversionCount} vertex links`)
                     }
                   }
 
                   yield {
-                    text: "",
-                    groundingUrls: urls,
-                    metadata: {
-                      type: "grounding_references",
-                      sources: urls
+                    ...chunk,
+                    text: processedText
+                  }
+                }
+
+                // Collect any recursive function calls from the follow-up
+                if (chunk.functionCalls) {
+                  followUpFunctionCalls.push(...chunk.functionCalls)
+                }
+
+                // Extract and yield grounding metadata with URLs if available
+                if (chunk.groundingMetadata) {
+                  const urls = await self.extractUrlsFromGroundingMetadata(chunk.groundingMetadata)
+                  if (urls.length > 0) {
+                    // 🎯 UX: Emitir evento con el número REAL de fuentes usadas por Gemini
+                    yield {
+                      text: "",
+                      metadata: {
+                        type: "sources_used_by_ai",
+                        sourcesUsed: urls.length
+                      }
+                    }
+
+                    yield {
+                      text: "",
+                      groundingUrls: urls,
+                      metadata: {
+                        type: "grounding_references",
+                        sources: urls
+                      }
                     }
                   }
                 }
               }
+
+              // If no more function calls, we're done
+              if (followUpFunctionCalls.length === 0) break
+
+              // Otherwise, send empty responses for the recursive function calls
+              // so the model can proceed to generate text
+              console.log(`[ClinicalRouter] Follow-up round ${round + 1}: handling ${followUpFunctionCalls.length} recursive function calls`)
+              const recursiveResponseParts = followUpFunctionCalls.map((call: any) => ({
+                functionResponse: {
+                  name: call.name,
+                  response: {
+                    output: { acknowledged: true }
+                  },
+                },
+              }))
+
+              const recursiveResult = await sessionData.chat.sendMessageStream({
+                message: recursiveResponseParts,
+              })
+              currentStream = recursiveResult.stream || recursiveResult
             }
 
             // 🎯 NUEVA FUNCIONALIDAD: Emitir referencias académicas de ParallelAI al final del streaming
