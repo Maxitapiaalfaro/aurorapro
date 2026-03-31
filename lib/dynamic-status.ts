@@ -136,6 +136,18 @@ function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen).trimEnd() + '…'
 }
 
+/**
+ * Builds a detail string from tool execution result data.
+ * Shared by both snapshot and live timeline builders.
+ */
+function buildToolResultDetail(result: { sourcesFound?: number; sourcesValidated?: number } | undefined, status: string): string | undefined {
+  if (!result || status !== 'completed') return undefined
+  const parts: string[] = []
+  if (result.sourcesFound != null) parts.push(`${result.sourcesFound} encontradas`)
+  if (result.sourcesValidated != null) parts.push(`${result.sourcesValidated} validadas`)
+  return parts.length > 0 ? parts.join(', ') : undefined
+}
+
 // ---------------------------------------------------------------------------
 // Area 1 – Snapshot: build a persistent ExecutionTimeline from live status
 // ---------------------------------------------------------------------------
@@ -175,16 +187,6 @@ export function snapshotExecutionTimeline(
 
   // Steps from tool executions
   for (const tool of processingStatus.toolExecutions) {
-    const detailParts: string[] = []
-    if (tool.result && tool.status === 'completed') {
-      if (tool.result.sourcesFound != null) {
-        detailParts.push(`${tool.result.sourcesFound} encontradas`)
-      }
-      if (tool.result.sourcesValidated != null) {
-        detailParts.push(`${tool.result.sourcesValidated} validadas`)
-      }
-    }
-
     steps.push({
       id: tool.id,
       label: tool.query
@@ -193,7 +195,7 @@ export function snapshotExecutionTimeline(
       status: tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: detailParts.length > 0 ? detailParts.join(', ') : undefined,
+      detail: buildToolResultDetail(tool.result, tool.status),
       result: tool.result
     })
   }
@@ -286,12 +288,6 @@ export function buildLiveTimeline(
 
   // 3. Tool executions – each gets its own step
   for (const tool of processingStatus.toolExecutions) {
-    const detailParts: string[] = []
-    if (tool.result && tool.status === 'completed') {
-      if (tool.result.sourcesFound != null) detailParts.push(`${tool.result.sourcesFound} encontradas`)
-      if (tool.result.sourcesValidated != null) detailParts.push(`${tool.result.sourcesValidated} validadas`)
-    }
-
     steps.push({
       id: tool.id,
       label: tool.query
@@ -300,7 +296,7 @@ export function buildLiveTimeline(
       status: tool.status === 'started' ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: detailParts.length > 0 ? detailParts.join(', ') : undefined,
+      detail: buildToolResultDetail(tool.result, tool.status),
       result: tool.result
     })
   }

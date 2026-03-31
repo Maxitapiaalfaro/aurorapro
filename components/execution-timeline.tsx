@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, AlertCircle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -83,8 +83,19 @@ export function ExecutionTimeline({
 // ---------------------------------------------------------------------------
 
 function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; defaultCollapsed: boolean }) {
-  const hasDetail = !!step.detail || (step.result && step.result.sourcesValidated != null)
+  // Build the detail string to show inside the expanded area
+  const detailText = buildDetailText(step)
+  const hasDetail = !!detailText
   const [isOpen, setIsOpen] = useState(!defaultCollapsed && step.status === 'active')
+
+  // Auto-collapse when a step transitions from active → completed
+  const prevStatusRef = useRef(step.status)
+  useEffect(() => {
+    if (prevStatusRef.current === 'active' && step.status !== 'active') {
+      setIsOpen(false)
+    }
+    prevStatusRef.current = step.status
+  }, [step.status])
 
   const icon = step.status === 'active'
     ? <Loader2 className="w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
@@ -92,10 +103,7 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
       ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
       : <CheckCircle className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
 
-  // Build the detail string to show inside the expanded area
-  const detailText = buildDetailText(step)
-
-  if (!hasDetail && !detailText) {
+  if (!hasDetail) {
     // Simple action statement — no toggle
     return (
       <motion.li
