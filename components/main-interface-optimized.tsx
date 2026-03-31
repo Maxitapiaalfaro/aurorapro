@@ -820,6 +820,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               transitionState={systemState.transitionState}
               routingInfo={systemState.routingInfo}
               reasoningBullets={systemState.reasoningBullets}
+              processingStatus={systemState.processingStatus}
               onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
               onCancelFichaGeneration={handleCancelFichaGeneration}
               onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}

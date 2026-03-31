@@ -3,7 +3,7 @@ import { hopeAI } from '@/lib/hopeai-system'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ReasoningBullet } from '@/types/clinical-types'
+import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
@@ -16,6 +16,7 @@ export const maxDuration = 60
 type SSEEvent =
   | { type: 'bullet', bullet: ReasoningBullet }
   | { type: 'agent_selected', info: { targetAgent: string; confidence: number; reasoning: string } }
+  | { type: 'tool_execution', tool: ToolExecutionEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
@@ -156,6 +157,38 @@ export async function POST(request: NextRequest) {
               for await (const chunk of result.response) {
                 chunkCount++
 
+                // 🔍 TRANSPARENCY: Intercept tool execution metadata and emit as dedicated SSE events
+                if (chunk.metadata) {
+                  if (chunk.metadata.type === 'tool_call_start') {
+                    sendSSE({
+                      type: 'tool_execution',
+                      tool: {
+                        id: `tool_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                        toolName: chunk.metadata.toolName,
+                        displayName: getToolDisplayName(chunk.metadata.toolName),
+                        query: chunk.metadata.query,
+                        status: 'started',
+                        timestamp: new Date()
+                      }
+                    })
+                  } else if (chunk.metadata.type === 'tool_call_complete') {
+                    sendSSE({
+                      type: 'tool_execution',
+                      tool: {
+                        id: `tool_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                        toolName: chunk.metadata.toolName,
+                        displayName: getToolDisplayName(chunk.metadata.toolName),
+                        status: 'completed',
+                        timestamp: new Date(),
+                        result: {
+                          sourcesFound: chunk.metadata.sourcesFound,
+                          sourcesValidated: chunk.metadata.sourcesValidated
+                        }
+                      }
+                    })
+                  }
+                }
+
                 if (chunk.text) {
                   fullText += chunk.text
 
@@ -278,4 +311,21 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+/**
+ * Maps internal tool names to human-readable display names
+ */
+function getToolDisplayName(toolName: string): string {
+  const displayNames: Record<string, string> = {
+    'search_academic_literature': 'Búsqueda académica',
+    'search_evidence_for_reflection': 'Búsqueda de evidencia reflexiva',
+    'search_evidence_for_documentation': 'Búsqueda de evidencia documental',
+    'google_search': 'Búsqueda web',
+    'formulateClarifyingQuestion': 'Formulación de preguntas',
+    'identifyCoreEmotion': 'Identificación emocional',
+    'analyzeThoughtPattern': 'Análisis de patrones cognitivos',
+    'detectCognitiveDistortion': 'Detección de distorsiones cognitivas',
+  }
+  return displayNames[toolName] || toolName
 }

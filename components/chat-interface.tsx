@@ -26,12 +26,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
 import { ReasoningBullets } from "@/components/reasoning-bullets"
-import type { ReasoningBulletsState } from "@/types/clinical-types"
+import type { ReasoningBulletsState, MessageProcessingStatus } from "@/types/clinical-types"
 import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
+import { CognitiveTransparencyPanel } from "@/components/cognitive-transparency-panel"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -65,6 +66,7 @@ interface ChatInterfaceProps {
   generateLoading?: boolean
   canRevertFicha?: boolean
   reasoningBullets?: ReasoningBulletsState
+  processingStatus?: MessageProcessingStatus
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
@@ -177,7 +179,7 @@ function FichaClinicaDisabledButton({
   )
 }
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, processingStatus }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -1313,6 +1315,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {!streamingResponse && (() => {
                   // Determinar el agente que REALMENTE está respondiendo
                   const respondingAgent = routingInfo?.targetAgent || activeAgent
+                  const respondingConfig = getAgentVisualConfig(respondingAgent)
                   
                   // Mensajes contextuales según la fase real del proceso
                   let statusMessage = ''
@@ -1322,19 +1325,23 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     statusMessage = 'Evaluando consulta y determinando modalidad de análisis...'
                     statusKey = 'selecting'
                   } else if (transitionState === 'specialist_responding') {
-                    // Mostrar el agente que REALMENTE fue seleccionado - mensaje genérico
-                    if (respondingAgent === 'socratico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'socratico-responding'
-                    } else if (respondingAgent === 'clinico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'clinico-responding'
-                    } else if (respondingAgent === 'academico') {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'academico-responding'
+                    // Use processingStatus for more granular messages when available
+                    if (processingStatus && processingStatus.phase === 'executing_tools') {
+                      const activeTool = processingStatus.toolExecutions.find(t => t.status === 'started')
+                      if (activeTool?.query) {
+                        statusMessage = `${activeTool.displayName}: "${activeTool.query}"...`
+                      } else if (activeTool) {
+                        statusMessage = `${activeTool.displayName}...`
+                      } else {
+                        statusMessage = 'Ejecutando herramientas de análisis...'
+                      }
+                      statusKey = 'executing-tools'
+                    } else if (processingStatus && processingStatus.phase === 'synthesizing') {
+                      statusMessage = 'Sintetizando resultados del análisis...'
+                      statusKey = 'synthesizing'
                     } else {
-                      statusMessage = 'procesando análisis...'
-                      statusKey = 'preparing'
+                      statusMessage = `${respondingConfig.name} procesando análisis...`
+                      statusKey = `${respondingAgent}-responding`
                     }
                   } else {
                     statusMessage = 'Inicializando sistema...'
@@ -1342,36 +1349,44 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   }
                   
                   return (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -5 }}
-                      transition={{ duration: 0.3, ease: "easeOut" }}
-                      className="p-4 flex items-center gap-3 text-muted-foreground/80"
-                    >
+                    <div className="space-y-0">
                       <motion.div 
-                        animate={{ rotate: 360 }}
-                        transition={{ 
-                          duration: 1.2, 
-                          repeat: Infinity, 
-                          ease: "linear" 
-                        }}
-                        className="relative flex items-center justify-center w-5 h-5"
-                      >
-                        <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
-                        <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
-                      </motion.div>
-                      <motion.span 
-                        key={statusKey}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10 }}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="text-sm font-sans"
+                        className="p-4 flex items-center gap-3 text-muted-foreground/80"
                       >
-                        {statusMessage}
-                      </motion.span>
-                    </motion.div>
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ 
+                            duration: 1.2, 
+                            repeat: Infinity, 
+                            ease: "linear" 
+                          }}
+                          className="relative flex items-center justify-center w-5 h-5"
+                        >
+                          <div className="absolute w-full h-full rounded-full border-2 border-muted-foreground/20"></div>
+                          <div className="absolute w-full h-full rounded-full border-2 border-t-muted-foreground/60"></div>
+                        </motion.div>
+                        <motion.span 
+                          key={statusKey}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 10 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="text-sm font-sans"
+                        >
+                          {statusMessage}
+                        </motion.span>
+                      </motion.div>
+                      {/* Cognitive Transparency Panel - progressive disclosure */}
+                      {processingStatus && !processingStatus.isComplete && processingStatus.phase !== 'idle' && (
+                        <div className="px-4 pb-2">
+                          <CognitiveTransparencyPanel processingStatus={processingStatus} />
+                        </div>
+                      )}
+                    </div>
                   )
                 })()}
                 {/* Contenido de streaming - solo cuando hay texto */}

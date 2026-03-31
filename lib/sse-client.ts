@@ -7,7 +7,7 @@
  * - Respuesta final
  */
 
-import type { ReasoningBullet } from '@/types/clinical-types'
+import type { ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
 
 /**
  * Tipos de eventos SSE
@@ -15,6 +15,7 @@ import type { ReasoningBullet } from '@/types/clinical-types'
 export type SSEEvent =
   | { type: 'bullet', bullet: ReasoningBullet }
   | { type: 'agent_selected', info: { targetAgent: string; confidence: number; reasoning: string } }
+  | { type: 'tool_execution', tool: ToolExecutionEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
@@ -26,6 +27,7 @@ export type SSEEvent =
 export interface SSECallbacks {
   onBullet?: (bullet: ReasoningBullet) => void
   onAgentSelected?: (info: { targetAgent: string; confidence: number; reasoning: string }) => void
+  onToolExecution?: (tool: ToolExecutionEvent) => void
   onChunk?: (chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] }) => void
   onResponse?: (result: any) => void
   onError?: (error: string, details?: string) => void
@@ -223,6 +225,13 @@ export class SSEClient {
                     }
                     break
 
+                  case 'tool_execution':
+                    console.log('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
+                    if (callbacks.onToolExecution) {
+                      callbacks.onToolExecution(event.tool)
+                    }
+                    break
+
                   case 'chunk':
                     const timestamp = new Date().toISOString()
                     console.log(`📝 [SSEClient] Chunk recibido en ${timestamp} (${event.chunk.text?.length || 0} chars) - YIELDING`)
@@ -348,6 +357,13 @@ export class SSEClient {
                   console.log('🎯 [SSEClient] Agente seleccionado:', event.info.targetAgent)
                   if (callbacks.onAgentSelected) {
                     callbacks.onAgentSelected(event.info)
+                  }
+                  break
+
+                case 'tool_execution':
+                  console.log('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
+                  if (callbacks.onToolExecution) {
+                    callbacks.onToolExecution(event.tool)
                   }
                   break
 

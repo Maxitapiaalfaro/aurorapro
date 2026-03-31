@@ -46,6 +46,46 @@ export interface ReasoningBulletsState {
   error?: string
 }
 
+// Cognitive Transparency Layer: Granular processing lifecycle phases
+export type ProcessingPhase =
+  | 'idle'
+  | 'analyzing_intent'
+  | 'routing_agent'
+  | 'agent_selected'
+  | 'executing_tools'
+  | 'synthesizing'
+  | 'streaming'
+  | 'complete'
+  | 'error'
+
+// Tool execution event emitted during processing
+export interface ToolExecutionEvent {
+  id: string
+  toolName: string
+  displayName: string
+  query?: string
+  status: 'started' | 'completed' | 'error'
+  timestamp: Date
+  result?: {
+    sourcesFound?: number
+    sourcesValidated?: number
+  }
+}
+
+// Granular message processing status for transparency UI
+export interface MessageProcessingStatus {
+  phase: ProcessingPhase
+  startedAt: Date
+  routingInfo?: {
+    targetAgent: AgentType
+    confidence: number
+    reasoning: string
+  }
+  toolExecutions: ToolExecutionEvent[]
+  bullets: ReasoningBullet[]
+  isComplete: boolean
+}
+
 export interface BulletGenerationContext {
   userInput: string
   sessionContext: any[]

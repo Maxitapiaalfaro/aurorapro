@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 import { getSSEClient } from '@/lib/sse-client'
 
@@ -34,6 +34,8 @@ interface HopeAISystemState {
   }
   // Estado de bullets progresivos
   reasoningBullets: ReasoningBulletsState
+  // Cognitive Transparency Layer: granular processing lifecycle
+  processingStatus: MessageProcessingStatus
 }
 
 interface UseHopeAISystemReturn {
@@ -68,6 +70,14 @@ interface UseHopeAISystemReturn {
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
+  const initialProcessingStatus: MessageProcessingStatus = {
+    phase: 'idle',
+    startedAt: new Date(),
+    toolExecutions: [],
+    bullets: [],
+    isComplete: true
+  }
+
   const [systemState, setSystemState] = useState<HopeAISystemState>({
     sessionId: null,
     userId: 'demo_user',
@@ -86,7 +96,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       currentStep: 0,
       totalSteps: undefined,
       error: undefined
-    }
+    },
+    processingStatus: initialProcessingStatus
   })
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
@@ -389,6 +400,13 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             bullets: [], // Limpiar bullets globales para el nuevo mensaje
             isGenerating: true,
             currentStep: 0
+          },
+          processingStatus: {
+            phase: 'analyzing_intent',
+            startedAt: new Date(),
+            toolExecutions: [],
+            bullets: [],
+            isComplete: false
           }
         }
       })
@@ -473,7 +491,16 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               confidence: routingInfo.confidence,
               extractedEntities: []
             },
-            transitionState: 'specialist_responding'
+            transitionState: 'specialist_responding',
+            processingStatus: {
+              ...prev.processingStatus,
+              phase: 'agent_selected',
+              routingInfo: {
+                targetAgent: routingInfo.targetAgent as AgentType,
+                confidence: routingInfo.confidence,
+                reasoning: routingInfo.reasoning
+              }
+            }
           }
         })
 
@@ -531,10 +558,40 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             {
               onBullet: handleBulletUpdate,
               onAgentSelected: handleAgentSelected,
+              onToolExecution: (tool: ToolExecutionEvent) => {
+                console.log('🔧 Tool execution event:', tool.toolName, tool.status)
+                setSystemState(prev => ({
+                  ...prev,
+                  processingStatus: {
+                    ...prev.processingStatus,
+                    phase: tool.status === 'started' ? 'executing_tools' : prev.processingStatus.phase,
+                    toolExecutions: tool.status === 'started'
+                      ? [...prev.processingStatus.toolExecutions, tool]
+                      : prev.processingStatus.toolExecutions.map(t =>
+                          t.toolName === tool.toolName && t.status === 'started'
+                            ? { ...t, status: tool.status, result: tool.result }
+                            : t
+                        )
+                  }
+                }))
+              },
               onChunk: (chunk) => {
                 // Este callback se ejecuta pero no necesitamos hacer nada aquí
                 // porque el generator ya está yieldando los chunks
                 console.log('📝 Chunk procesado en callback')
+                // Update phase to streaming on first chunk
+                setSystemState(prev => {
+                  if (prev.processingStatus.phase !== 'streaming') {
+                    return {
+                      ...prev,
+                      processingStatus: {
+                        ...prev.processingStatus,
+                        phase: 'streaming'
+                      }
+                    }
+                  }
+                  return prev
+                })
               },
               onResponse: (responseData) => {
                 console.log('✅ Respuesta final recibida vía SSE')
@@ -557,6 +614,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   reasoningBullets: {
                     ...prev.reasoningBullets,
                     isGenerating: false
+                  },
+                  processingStatus: {
+                    ...prev.processingStatus,
+                    phase: 'synthesizing'
                   }
                 }))
               },
@@ -572,6 +633,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   reasoningBullets: {
                     ...prev.reasoningBullets,
                     isGenerating: false
+                  },
+                  processingStatus: {
+                    ...prev.processingStatus,
+                    phase: 'complete',
+                    isComplete: true
                   }
                 }))
               }
@@ -604,7 +670,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         ...prev,
         error: 'Error al enviar el mensaje',
         isLoading: false,
-        transitionState: 'idle'
+        transitionState: 'idle',
+        processingStatus: {
+          ...prev.processingStatus,
+          phase: 'error',
+          isComplete: true
+        }
       }))
       throw error
     }
@@ -667,7 +738,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         currentStep: 0,
         totalSteps: undefined,
         error: undefined
-      }
+      },
+      processingStatus: initialProcessingStatus
     })
     lastSessionIdRef.current = null
   }, [systemState.isInitialized])
