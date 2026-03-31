@@ -50,6 +50,18 @@ export interface ExecutionStep {
     sourcesFound?: number
     sourcesValidated?: number
   }
+  /** Academic sources retrieved from Parallel AI, displayed as a readable list */
+  sources?: AcademicSourceReference[]
+}
+
+/** A single academic source reference for display in the execution timeline */
+export interface AcademicSourceReference {
+  title: string
+  url: string
+  doi?: string
+  authors?: string
+  year?: number
+  journal?: string
 }
 
 // Tipos para bullets progresivos de razonamiento
@@ -89,12 +101,16 @@ export interface ToolExecutionEvent {
   toolName: string
   displayName: string
   query?: string
-  status: 'started' | 'completed' | 'error'
+  status: 'started' | 'in_progress' | 'completed' | 'error'
   timestamp: Date
+  /** Optional progress message for intermediate states */
+  progressMessage?: string
   result?: {
     sourcesFound?: number
     sourcesValidated?: number
   }
+  /** Academic sources from Parallel AI, attached on completion */
+  academicSources?: AcademicSourceReference[]
 }
 
 // Granular message processing status for transparency UI

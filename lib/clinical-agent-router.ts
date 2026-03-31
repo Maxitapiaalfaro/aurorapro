@@ -2107,6 +2107,15 @@ Basado en esta evidencia, opciones razonadas:
                 query: academicSearchCalls[0].args.query
               }
             }
+            // 🔍 Intermediate progress: connecting to academic databases
+            yield {
+              text: "",
+              metadata: {
+                type: "tool_call_progress",
+                toolName: toolName,
+                message: "Conectando con bases de datos académicas (Parallel AI)…"
+              }
+            }
           }
 
           // 🎯 Almacenar referencias académicas obtenidas de ParallelAI
@@ -2253,13 +2262,29 @@ Basado en esta evidencia, opciones razonadas:
             )
             if (academicResponse && typeof academicResponse.response === 'object') {
               const responseData = academicResponse.response as any
+              const sourcesCount = responseData.validated_count || responseData.sources?.length || 0
+
+              // 🔍 Intermediate progress: parsing sources
+              if (sourcesCount > 0) {
+                yield {
+                  text: "",
+                  metadata: {
+                    type: "tool_call_progress",
+                    toolName: academicResponse.name,
+                    message: `Validando ${responseData.total_found || sourcesCount} fuentes académicas…`
+                  }
+                }
+              }
+
               yield {
                 text: "",
                 metadata: {
                   type: "tool_call_complete",
                   toolName: academicResponse.name,
                   sourcesFound: responseData.total_found || 0,
-                  sourcesValidated: responseData.validated_count || responseData.sources?.length || 0
+                  sourcesValidated: sourcesCount,
+                  // 📚 Include academic sources for timeline display
+                  academicSources: academicReferences
                 }
               }
             }

@@ -145,9 +145,13 @@ export class IntelligentIntentRouter {
           nivel_confianza: {
             type: 'number' as const,
             description: 'Nivel de confianza en la clasificación socrática (0-1)'
+          },
+          justificacion_clinica: {
+            type: 'string' as const,
+            description: 'Breve justificación clínica en lenguaje natural (1-2 oraciones) explicando POR QUÉ se selecciona este especialista para la consulta del usuario. Ejemplo: "La consulta busca explorar patrones de pensamiento del paciente, lo cual requiere facilitación socrática reflexiva."'
           }
         },
-        required: ['razon_activacion', 'nivel_confianza']
+        required: ['razon_activacion', 'nivel_confianza', 'justificacion_clinica']
       }
     },
     {
@@ -184,9 +188,13 @@ export class IntelligentIntentRouter {
           nivel_confianza: {
             type: 'number' as const,
             description: 'Nivel de confianza en la clasificación clínica (0-1)'
+          },
+          justificacion_clinica: {
+            type: 'string' as const,
+            description: 'Breve justificación clínica en lenguaje natural (1-2 oraciones) explicando POR QUÉ se selecciona este especialista para la consulta del usuario. Ejemplo: "El usuario necesita estructurar notas de sesión en formato profesional, lo cual es tarea del Documentalista Clínico."'
           }
         },
-        required: ['tipo_documentacion', 'nivel_confianza']
+        required: ['tipo_documentacion', 'nivel_confianza', 'justificacion_clinica']
       }
     },
     {
@@ -234,9 +242,13 @@ export class IntelligentIntentRouter {
           nivel_confianza: {
             type: 'number' as const,
             description: 'Nivel de confianza en la clasificación académica (0-1)'
+          },
+          justificacion_clinica: {
+            type: 'string' as const,
+            description: 'Breve justificación clínica en lenguaje natural (1-2 oraciones) explicando POR QUÉ se selecciona este especialista para la consulta del usuario. Ejemplo: "La consulta requiere una revisión exhaustiva de la literatura científica sobre eficacia terapéutica, lo cual es competencia del Investigador Académico."'
           }
         },
-        required: ['tipo_busqueda', 'nivel_confianza']
+        required: ['tipo_busqueda', 'nivel_confianza', 'justificacion_clinica']
       }
     }
   ];
@@ -560,7 +572,7 @@ export class IntelligentIntentRouter {
             entityExtractionResult,
             optimizedContext,
             currentAgent,
-            `Confianza insuficiente para enrutamiento automático (${combinedConfidence.toFixed(3)} < ${dynamicThreshold.toFixed(3)}). Intención: ${classificationResult.confidence.toFixed(3)}, Entidades: ${entityExtractionResult.confidence.toFixed(3)}.`,
+            `Confianza insuficiente: se procederá con análisis general por el Supervisor Clínico`,
             combinedConfidence,
             false
           ),
@@ -573,6 +585,18 @@ export class IntelligentIntentRouter {
       const targetAgent = this.mapFunctionToAgent(classificationResult.functionName);
 
       // Paso 6: Crear contexto enriquecido con entidades
+      // Use the LLM-generated clinical justification for the transition reason
+      const justificacion = classificationResult.parameters?.justificacion_clinica as string | undefined;
+      const agentDisplayNames: Record<string, string> = {
+        'activar_modo_socratico': 'Supervisor Clínico',
+        'activar_modo_clinico': 'Especialista en Documentación',
+        'activar_modo_academico': 'Investigador Académico'
+      };
+      const agentName = agentDisplayNames[classificationResult.functionName] || 'especialista';
+      const transitionReason = justificacion && justificacion.trim().length > 0
+        ? justificacion.trim()
+        : `${agentName} seleccionado para procesar esta consulta`;
+
       const enrichedContext = this.createEnrichedContext(
         userInput,
         classificationResult.functionName,
@@ -580,7 +604,7 @@ export class IntelligentIntentRouter {
         entityExtractionResult,
         optimizedContext,
         currentAgent,
-        `Clasificación automática: ${classificationResult.functionName} con ${entityExtractionResult.entities.length} entidades`,
+        transitionReason,
         combinedConfidence,
         false // No es solicitud explícita (ya se manejó arriba)
       );
@@ -1405,15 +1429,36 @@ ${(() => {
 
   /**
    * Genera razonamiento para la decisión de orquestación
+   * Utiliza la justificación clínica generada por el LLM en lugar de datos técnicos crudos
    */
   private generateOrchestrationReasoning(
     intentResult: IntentClassificationResult,
     entityResult: EntityExtractionResult,
     selectedTools: ClinicalTool[]
   ): string {
-    return `Intención detectada: ${intentResult.functionName} (confianza: ${intentResult.confidence.toFixed(2)}). ` +
-           `Entidades extraídas: ${entityResult.entities.length} (confianza: ${entityResult.confidence.toFixed(2)}). ` +
-           `Herramientas seleccionadas: ${selectedTools.length} herramientas especializadas.`;
+    // Usar la justificación clínica generada por el LLM (natural, legible)
+    const justificacion = intentResult.parameters?.justificacion_clinica as string | undefined;
+    if (justificacion && justificacion.trim().length > 0) {
+      return justificacion.trim();
+    }
+
+    // Fallback: construir justificación legible a partir de los parámetros disponibles
+    const agentDisplayNames: Record<string, string> = {
+      'activar_modo_socratico': 'Supervisor Clínico',
+      'activar_modo_clinico': 'Especialista en Documentación',
+      'activar_modo_academico': 'Investigador Académico'
+    };
+    const agentName = agentDisplayNames[intentResult.functionName] || 'especialista';
+    const razon = (intentResult.parameters?.razon_activacion as string)
+      || (intentResult.parameters?.tipo_documentacion as string)
+      || (intentResult.parameters?.tipo_busqueda as string)
+      || '';
+
+    if (razon) {
+      return `${agentName} seleccionado: ${razon}`;
+    }
+
+    return `${agentName} seleccionado para procesar esta consulta`;
   }
 
   /**
@@ -1431,7 +1476,7 @@ ${(() => {
       contextualTools: fallbackTools.map(tool => tool.declaration),
       toolMetadata: fallbackTools,
       confidence: 0.5,
-      reasoning: `Fallback activado: ${reason}`
+      reasoning: `Supervisor Clínico seleccionado como especialista predeterminado para analizar la consulta`
     };
   }
 

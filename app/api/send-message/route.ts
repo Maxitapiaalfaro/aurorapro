@@ -171,6 +171,18 @@ export async function POST(request: NextRequest) {
                         timestamp: new Date()
                       }
                     })
+                  } else if (chunk.metadata.type === 'tool_call_progress') {
+                    sendSSE({
+                      type: 'tool_execution',
+                      tool: {
+                        id: crypto.randomUUID(),
+                        toolName: chunk.metadata.toolName,
+                        displayName: getToolDisplayName(chunk.metadata.toolName),
+                        status: 'in_progress',
+                        progressMessage: chunk.metadata.message,
+                        timestamp: new Date()
+                      }
+                    })
                   } else if (chunk.metadata.type === 'tool_call_complete') {
                     sendSSE({
                       type: 'tool_execution',
@@ -183,7 +195,8 @@ export async function POST(request: NextRequest) {
                         result: {
                           sourcesFound: chunk.metadata.sourcesFound,
                           sourcesValidated: chunk.metadata.sourcesValidated
-                        }
+                        },
+                        academicSources: chunk.metadata.academicSources
                       }
                     })
                   }
