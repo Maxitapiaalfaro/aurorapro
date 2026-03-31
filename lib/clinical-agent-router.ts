@@ -1456,7 +1456,7 @@ Basado en esta evidencia, opciones razonadas:
 
       // Create chat session using the correct SDK API
       const chat = ai.chats.create({
-        model: agentConfig.config.model || 'gemini-2.5-flash',
+        model: agentConfig.config.model || clinicalModelConfig.model,
         config: {
           temperature: agentConfig.config.temperature,
           topK: agentConfig.config.topK,
@@ -1469,7 +1469,7 @@ Basado en esta evidencia, opciones razonadas:
           // 🔧 FIX CAPA 3: Compresión de contexto manejada en capas previas
           // - CAPA 1: Context Window Manager comprime historial en hopeai-system.ts (línea ~269)
           // - CAPA 2: Archivos solo en primer turno, referencias ligeras después (línea ~1527)
-          // - Gemini 2.5 Flash maneja internamente sliding window con 1M context window
+          // - El modelo del agente maneja internamente sliding window con 1M context window
           // Resultado: Protección triple contra sobrecarga de tokens
         },
         history: geminiHistory,
@@ -1630,7 +1630,7 @@ Basado en esta evidencia, opciones razonadas:
         const contextTokens = this.estimateTokenCount(currentHistory);
         // Get the actual model used by this agent
         const agentConfig = this.agents.get(agent);
-        const modelUsed = agentConfig?.config?.model || 'gemini-2.5-flash';
+        const modelUsed = agentConfig?.config?.model || clinicalModelConfig.model;
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
@@ -1641,7 +1641,7 @@ Basado en esta evidencia, opciones razonadas:
           const agentConfig = this.agents.get(agent)
           const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [], agent)
           const fileChat = aiFiles.chats.create({
-            model: agentConfig?.config?.model || 'gemini-2.5-flash',
+            model: agentConfig?.config?.model || clinicalModelConfig.model,
             config: {
               temperature: agentConfig?.config?.temperature,
               topK: agentConfig?.config?.topK,
