@@ -63,11 +63,11 @@ export function generateDynamicStatus(
       }
 
     case 'executing_tools': {
-      const activeTool = processingStatus.toolExecutions.find(t => t.status === 'started')
+      const activeTool = processingStatus.toolExecutions.find(t => t.status === 'started' || t.status === 'in_progress')
       if (activeTool) {
         return {
           message: buildToolStatusText(activeTool, agentName),
-          key: `tool_${activeTool.id}`
+          key: `tool_${activeTool.id}_${activeTool.status}`
         }
       }
       return {
@@ -109,6 +109,10 @@ export function generateDynamicStatus(
  * "Consultando literatura sobre terapia cognitivo-conductual..."
  */
 function buildToolStatusText(tool: ToolExecutionEvent, agentName: string): string {
+  // Show progress message if available (e.g. "Conectando con Parallel AI...")
+  if (tool.progressMessage) {
+    return tool.progressMessage
+  }
   if (tool.query) {
     // Dynamic: use the actual query the model sent
     return `${tool.displayName}: "${truncate(tool.query, 50)}"...`
@@ -193,7 +197,8 @@ export function snapshotExecutionTimeline(
       toolName: tool.toolName,
       query: tool.query,
       detail: buildToolResultDetail(tool.result, tool.status),
-      result: tool.result
+      result: tool.result,
+      sources: tool.academicSources
     })
   }
 
@@ -282,16 +287,23 @@ export function buildLiveTimeline(
 
   // 3. Tool executions – each gets its own step
   for (const tool of processingStatus.toolExecutions) {
+    const isToolActive = tool.status === 'started' || tool.status === 'in_progress'
+    // When in_progress, show the progress message instead of the generic label
+    const toolLabel = tool.status === 'in_progress' && tool.progressMessage
+      ? tool.progressMessage
+      : tool.query
+        ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
+        : tool.displayName
+
     steps.push({
       id: tool.id,
-      label: tool.query
-        ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
-        : tool.displayName,
-      status: tool.status === 'started' ? 'active' : tool.status === 'error' ? 'error' : 'completed',
+      label: toolLabel,
+      status: isToolActive ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
       detail: buildToolResultDetail(tool.result, tool.status),
-      result: tool.result
+      result: tool.result,
+      sources: tool.academicSources
     })
   }
 

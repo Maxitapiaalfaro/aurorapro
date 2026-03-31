@@ -583,12 +583,28 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                       }
                     }
                   }
-                  // For completed/error: find the first matching tool still in 'started' state
+                  if (tool.status === 'in_progress') {
+                    // Update progress message on the matching started tool
+                    const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
+                      if (t.toolName === tool.toolName && (t.status === 'started' || t.status === 'in_progress')) {
+                        return { ...t, status: 'in_progress' as const, progressMessage: tool.progressMessage }
+                      }
+                      return t
+                    })
+                    return {
+                      ...prev,
+                      processingStatus: {
+                        ...prev.processingStatus,
+                        toolExecutions: updatedExecutions
+                      }
+                    }
+                  }
+                  // For completed/error: find the first matching tool still in 'started' or 'in_progress' state
                   let matched = false
                   const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
-                    if (!matched && t.toolName === tool.toolName && t.status === 'started') {
+                    if (!matched && t.toolName === tool.toolName && (t.status === 'started' || t.status === 'in_progress')) {
                       matched = true
-                      return { ...t, status: tool.status, result: tool.result } as ToolExecutionEvent
+                      return { ...t, status: tool.status, result: tool.result, academicSources: tool.academicSources } as ToolExecutionEvent
                     }
                     return t
                   })
