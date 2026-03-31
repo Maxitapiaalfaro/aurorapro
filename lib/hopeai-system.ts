@@ -490,7 +490,8 @@ export class HopeAISystem {
     suggestedAgent?: string,
     sessionMeta?: PatientSessionMeta,
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
-    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void
+    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
+    clientFileReferences?: string[]
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -539,8 +540,29 @@ export class HopeAISystem {
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
-    // Fallback: if no pending files, reuse most recently referenced processed files from history
+    // Fallback chain for resolving session files:
+    // 1. getPendingFilesForSession (server storage)
+    // 2. Client-provided fileReferences (survives serverless cold starts)
+    // 3. Most recent message with fileReferences from history
     let resolvedSessionFiles = sessionFiles || []
+
+    if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
+      // Fallback: use file IDs sent from the client (reliable across serverless invocations)
+      try {
+        let clientFiles = await this.getFilesByIds(clientFileReferences)
+        if (clientFiles && clientFiles.length > 0) {
+          try {
+            const { clinicalFileManager } = await import('./clinical-file-manager')
+            clientFiles = await Promise.all(clientFiles.map(f => clinicalFileManager.buildLightweightIndex(f)))
+          } catch {}
+          resolvedSessionFiles = clientFiles
+          console.log(`📎 [HopeAI] Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
+        }
+      } catch (e) {
+        console.warn('⚠️ [HopeAI] Could not resolve client file references:', e)
+      }
+    }
+
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && currentState?.history?.length) {
       try {
         const lastMsgWithFiles = [...currentState.history].reverse().find((m: any) => m.fileReferences && m.fileReferences.length > 0)
@@ -698,46 +720,13 @@ export class HopeAISystem {
         patientReference
       );
 
-      // 🚨 EDGE CASE PRE-CHECK: Detectar contenido sensible ANTES de orchestration
-      // Si detectamos contenido sensible, forzamos routing estándar con override al clínico
-      const hasSensitiveContent = this.detectSensitiveContent(message, operationalMetadata);
-
-      // 🚨 RISK STATE PERSISTENCE: Verificar si la sesión ya está marcada como de riesgo
-      const isExistingRiskSession = currentState.riskState?.isRiskSession || false;
-      const consecutiveSafeTurns = currentState.riskState?.consecutiveSafeTurns || 0;
-
-      // Decidir si forzar routing estándar:
-      // 1. Si detectamos contenido sensible en este turno
-      // 2. Si la sesión ya está marcada como de riesgo Y no ha habido suficientes turnos seguros
-      const SAFE_TURNS_THRESHOLD = 3; // Número de turnos seguros para desescalar
-      const forceStandardRouting = hasSensitiveContent ||
-                                   (isExistingRiskSession && consecutiveSafeTurns < SAFE_TURNS_THRESHOLD);
-
-      if (hasSensitiveContent) {
-        console.log(`🚨 [HopeAI] SENSITIVE CONTENT DETECTED - Forcing standard routing with edge case detection`);
-
-        // Actualizar estado de riesgo en la sesión
-        currentState.riskState = {
-          isRiskSession: true,
-          riskLevel: operationalMetadata.risk_level,
-          detectedAt: currentState.riskState?.detectedAt || new Date(),
-          riskType: 'sensitive_content',
-          lastRiskCheck: new Date(),
-          consecutiveSafeTurns: 0 // Reset contador
-        };
-      } else if (isExistingRiskSession) {
-        console.log(`⚠️ [HopeAI] RISK SESSION ACTIVE - Maintaining standard routing (safe turns: ${consecutiveSafeTurns}/${SAFE_TURNS_THRESHOLD})`);
-
-        // Incrementar contador de turnos seguros
-        currentState.riskState!.consecutiveSafeTurns = consecutiveSafeTurns + 1;
-        currentState.riskState!.lastRiskCheck = new Date();
-
-        // Si alcanzamos el umbral, desescalar
-        if (currentState.riskState!.consecutiveSafeTurns >= SAFE_TURNS_THRESHOLD) {
-          console.log(`✅ [HopeAI] RISK SESSION DEESCALATED - Returning to normal orchestration`);
-          currentState.riskState!.isRiskSession = false;
-        }
-      }
+      // 🚨 SENSITIVE CONTENT PRE-CHECK: DISABLED
+      // Sensitive content detection was forcing all messages with clinical keywords
+      // (e.g. "diagnóstico diferencial", "crisis", "abuso") to bypass the advanced
+      // orchestrator and route directly to clinico. This prevented the intent router
+      // from properly discriminating based on the full context of the user input.
+      // The intent router's own classification is now trusted to handle routing.
+      const forceStandardRouting = false;
 
       // Determinar si usar orquestación avanzada o routing directo
       let routingResult: { enrichedContext: any; targetAgent: any; routingDecision?: any };
@@ -1086,13 +1075,14 @@ export class HopeAISystem {
         const streamingResponse = response
         
         // Add routing info as a property on the async generator
+        const routingInfo = {
+          detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
+          targetAgent: routingResult.targetAgent,
+          confidence: routingResult.enrichedContext?.confidence || 0,
+          extractedEntities: routingResult.enrichedContext?.extractedEntities || []
+        }
         if (streamingResponse && typeof streamingResponse[Symbol.asyncIterator] === 'function') {
-          (streamingResponse as any).routingInfo = {
-            detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
-            targetAgent: routingResult.targetAgent,
-            confidence: routingResult.enrichedContext?.confidence || 0,
-            extractedEntities: routingResult.enrichedContext?.extractedEntities || []
-          }
+          (streamingResponse as any).routingInfo = routingInfo
         }
         
         // 📊 METRICS TRACKING for streaming
@@ -1102,8 +1092,50 @@ export class HopeAISystem {
         
         console.log(`🎉 [SessionMetrics] Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
         
+        // Wrap the async generator to save the assistant response to history
+        // when the stream is fully consumed by the API route
+        const self = this
+        const wrappedStream = (async function* () {
+          let accumulatedText = ''
+          try {
+            for await (const chunk of streamingResponse as AsyncIterable<any>) {
+              if (chunk.text) {
+                accumulatedText += chunk.text
+              }
+              yield chunk
+            }
+          } finally {
+            // Stream fully consumed (or aborted) — persist the assistant response
+            if (accumulatedText) {
+              const aiMessage: ChatMessage = {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                content: accumulatedText,
+                role: "model",
+                agent: currentState.activeAgent,
+                timestamp: new Date(),
+              }
+              currentState.history.push(aiMessage)
+              currentState.metadata.lastUpdated = new Date()
+              currentState.metadata.totalTokens += self.estimateTokens(message + accumulatedText)
+              try {
+                await self.saveChatSessionBoth(currentState)
+                console.log('💾 [HopeAI] Streaming response saved to history:', {
+                  sessionId,
+                  historyLength: currentState.history.length,
+                  responseLength: accumulatedText.length
+                })
+              } catch (saveError) {
+                console.error('❌ [HopeAI] Failed to save streaming response to history:', saveError)
+              }
+            }
+          }
+        })();
+        
+        // Preserve routing info on the wrapped stream
+        (wrappedStream as any).routingInfo = routingInfo
+        
         return { 
-          response: streamingResponse, 
+          response: wrappedStream, 
           updatedState: currentState,
           interactionMetrics: null // Will be captured by wrapper when stream completes
         }

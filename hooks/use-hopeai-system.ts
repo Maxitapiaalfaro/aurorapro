@@ -91,6 +91,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
   const lastSessionIdRef = useRef<string | null>(null)
+  // Ref to access the latest history in callbacks without adding it to dependency arrays
+  const historyRef = useRef<ChatMessage[]>(systemState.history)
+  historyRef.current = systemState.history
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
@@ -392,7 +395,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       // 💾 Persistencia inmediata en IndexedDB para no perder el mensaje del usuario en un reload
       try {
-        const existingState = await hopeAISystem.current.getChatState(sessionIdToUse!)
+        // Use loadChatSession (returns null) instead of getChatState (throws) so new sessions
+        // that only exist on the server can be created in IndexedDB with defaults
+        const existingState = await hopeAISystem.current.storageAdapter.loadChatSession(sessionIdToUse!)
         const updatedState: ChatState = {
           ...(existingState || {
             sessionId: sessionIdToUse!,
@@ -418,6 +423,24 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         console.log('💾 [IndexedDB] Mensaje de usuario persistido inmediatamente:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
       } catch (persistError) {
         console.error('❌ [IndexedDB] Error al persistir el mensaje del usuario:', persistError)
+      }
+
+      // 💾 Also persist to localStorage via ClientContextPersistence for cross-reload restoration
+      try {
+        const persistence = ClientContextPersistence.getInstance()
+        const currentHistory = [...historyRef.current, userMessage]
+        await persistence.saveOptimizedContext(
+          sessionIdToUse!,
+          systemState.activeAgent,
+          currentHistory,
+          {
+            usageMetadata: { totalMessages: currentHistory.length, averageResponseTime: 0, compressionRatio: 1.0, modalityUsage: {} },
+            modalityDetails: { textTokens: 0, audioTokens: 0, videoTokens: 0 }
+          }
+        )
+        console.log('💾 [localStorage] Mensaje de usuario persistido en ClientContextPersistence')
+      } catch (localStorageError) {
+        console.warn('⚠️ [localStorage] No se pudo persistir mensaje de usuario:', localStorageError)
       }
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
@@ -502,7 +525,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               useStreaming,
               userId: systemState.userId || 'demo_user',
               suggestedAgent: undefined,
-              sessionMeta: sessionMetaToUse
+              sessionMeta: sessionMetaToUse,
+              fileReferences: attachedFiles?.map(file => file.id) || []
             },
             {
               onBullet: handleBulletUpdate,
@@ -677,61 +701,79 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       return
     }
 
+    // Crear el mensaje AI
+    const aiMessage: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      content: responseContent,
+      role: "model",
+      agent: agent,
+      timestamp: new Date(),
+      groundingUrls: groundingUrls || [],
+      reasoningBullets: undefined
+    }
+
+    // Asociar bullets si existen
+    const bulletsToAttach = (reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0)
+      ? reasoningBulletsForThisResponse
+      : currentMessageBullets
+
+    if (bulletsToAttach.length > 0) {
+      aiMessage.reasoningBullets = [...bulletsToAttach]
+      console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
+    }
+
+    console.log('🔄 [addStreamingResponseToHistory] Agregando mensaje del modelo al historial local:', {
+      currentHistoryLength: historyRef.current.length,
+      aiMessageId: aiMessage.id,
+      aiMessageContent: aiMessage.content.substring(0, 50)
+    })
+
+    // 🔧 CRITICAL: Update React state FIRST so the AI message appears in the UI immediately.
+    // Persistence to IndexedDB/localStorage is best-effort and must not block the UI update.
+    setSystemState(prev => ({
+      ...prev,
+      history: [...prev.history, aiMessage],
+      activeAgent: agent,
+      isLoading: false
+    }))
+
+    // Limpiar bullets temporales después de asociarlos
+    setCurrentMessageBullets([])
+
+    console.log('✅ Respuesta de streaming agregada al historial')
+    console.log('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
+
+    // 💾 Persist to IndexedDB (best-effort, non-blocking for UI)
     try {
       await hopeAISystem.current.addStreamingResponseToHistory(
         targetSessionId,
         responseContent,
         agent,
         groundingUrls,
-        reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0
-          ? reasoningBulletsForThisResponse
-          : currentMessageBullets
+        bulletsToAttach.length > 0 ? bulletsToAttach : undefined
       )
+      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB')
+    } catch (persistError) {
+      console.warn('⚠️ [IndexedDB] No se pudo persistir respuesta AI:', persistError)
+    }
 
-      // 🔧 FIX: NO cargar desde DB (cliente y servidor tienen DBs separadas)
-      // En su lugar, agregar el mensaje del modelo al historial local existente
-
-      const aiMessage: ChatMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        content: responseContent,
-        role: "model",
-        agent: agent,
-        timestamp: new Date(),
-        groundingUrls: groundingUrls || [],
-        reasoningBullets: undefined // Los bullets se agregan después si existen
-      }
-
-      // Asociar bullets si existen
-      const bulletsToAttach = (reasoningBulletsForThisResponse && reasoningBulletsForThisResponse.length > 0)
-        ? reasoningBulletsForThisResponse
-        : currentMessageBullets
-
-      if (bulletsToAttach.length > 0) {
-        aiMessage.reasoningBullets = [...bulletsToAttach]
-        console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
-      }
-
-      console.log('🔄 [addStreamingResponseToHistory] Agregando mensaje del modelo al historial local:', {
-        currentHistoryLength: systemState.history.length,
-        aiMessageId: aiMessage.id,
-        aiMessageContent: aiMessage.content.substring(0, 50)
-      })
-
-      setSystemState(prev => ({
-        ...prev,
-        history: [...prev.history, aiMessage],
-        activeAgent: agent,
-        isLoading: false
-      }))
-
-      // Limpiar bullets temporales después de asociarlos
-      setCurrentMessageBullets([])
-
-      console.log('✅ Respuesta de streaming agregada al historial')
-      console.log('📊 Historial actualizado con', systemState.history.length + 1, 'mensajes')
-    } catch (error) {
-      console.error('❌ Error agregando respuesta al historial:', error)
-      throw error
+    // 💾 Persist to localStorage via ClientContextPersistence for cross-reload restoration
+    try {
+      const persistence = ClientContextPersistence.getInstance()
+      // Use historyRef for the latest history value, then append the new AI message
+      const updatedHistory = [...historyRef.current, aiMessage]
+      await persistence.saveOptimizedContext(
+        targetSessionId,
+        agent,
+        updatedHistory,
+        {
+          usageMetadata: { totalMessages: updatedHistory.length, averageResponseTime: 0, compressionRatio: 1.0, modalityUsage: {} },
+          modalityDetails: { textTokens: 0, audioTokens: 0, videoTokens: 0 }
+        }
+      )
+      console.log('💾 [localStorage] Historial persistido en ClientContextPersistence')
+    } catch (localStorageError) {
+      console.warn('⚠️ [localStorage] No se pudo persistir historial:', localStorageError)
     }
   }, [systemState.sessionId, currentMessageBullets])
 

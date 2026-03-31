@@ -7,6 +7,9 @@ import type { AgentType, ReasoningBullet } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
+// Allow sufficient time for AI streaming responses (Gemini API + orchestration)
+export const maxDuration = 60
+
 /**
  * SSE Event Types
  */
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta } = requestBody
+    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta, fileReferences } = requestBody
 
     console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
@@ -45,7 +48,8 @@ export async function POST(request: NextRequest) {
       useStreaming,
       userId,
       suggestedAgent,
-      patientReference: sessionMeta?.patient?.reference || 'None'
+      patientReference: sessionMeta?.patient?.reference || 'None',
+      fileReferences: fileReferences?.length || 0
     })
 
     // Crear stream SSE con auto-flush
@@ -64,6 +68,9 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(':\n\n'))
         }
 
+        // 🛡️ Guard flag for fire-and-forget bullets arriving after controller closes
+        let controllerClosed = false
+
         try {
           // 🔥 CRÍTICO: Enviar evento inicial inmediatamente para establecer conexión SSE
           // Esto previene buffering y confirma que el stream está activo
@@ -75,13 +82,19 @@ export async function POST(request: NextRequest) {
           const systemInitTime = Date.now() - systemStartTime
           console.log(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
 
-          // Callback para bullets progresivos
+          // Callback para bullets progresivos (con guardia contra controller cerrado)
           const onBulletUpdate = (bullet: ReasoningBullet) => {
-            console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
-            sendSSE({
-              type: 'bullet',
-              bullet
-            })
+            if (controllerClosed) return // Guard: bullets may arrive after stream closes
+            try {
+              console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
+              sendSSE({
+                type: 'bullet',
+                bullet
+              })
+            } catch (err) {
+              console.warn('[SSE] Failed to send bullet (controller likely closed):', err)
+              controllerClosed = true // Mark as closed to avoid further attempts
+            }
           }
 
           // Callback para selección de agente
@@ -101,7 +114,8 @@ export async function POST(request: NextRequest) {
             suggestedAgent,
             sessionMeta,
             onBulletUpdate,    // ← Callback para bullets
-            onAgentSelected    // ← Callback para agente
+            onAgentSelected,   // ← Callback para agente
+            fileReferences     // ← File IDs from client
           )
 
           console.log('🎯 [API /send-message] Orquestación completada:', {
@@ -226,6 +240,7 @@ export async function POST(request: NextRequest) {
             }
           })
         } finally {
+          controllerClosed = true
           controller.close()
         }
       }

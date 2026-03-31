@@ -46,78 +46,11 @@ const CONSOLE_LOG_LEVELS: Record<string, LogLevel[]> = {
   test: ['error']
 }
 
-// 🔒 BLOQUEO GLOBAL DE CONSOLE EN PRODUCCIÓN
-// Esto se ejecuta inmediatamente al importar el módulo
+// Console configuration
 if (isProduction && !FORCE_ENABLE_LOGS) {
   const noop = () => {};
 
-  // Servidor (Node.js)
-  if (typeof window === 'undefined' && typeof global !== 'undefined') {
-    const originalLog = console.log;
-    const originalError = console.error;
-
-    // Función para determinar si un log debe permitirse
-    const shouldAllowLog = (args: any[]): boolean => {
-      const message = args.join(' ');
-
-      // Permitir logs del sistema Next.js
-      if (message.includes('▲ Next.js') ||
-          message.includes('Compiled') ||
-          message.includes('Ready in') ||
-          message.includes('Local:') ||
-          message.includes('Network:') ||
-          message.includes('✓') ||
-          message.includes('○') ||
-          message.includes('ƒ')) {
-        return true;
-      }
-
-      // Permitir logs de seguridad
-      if (message.includes('🔒 SECURITY') ||
-          message.includes('VERIFICACIÓN DE SEGURIDAD') ||
-          message.includes('Environment validation')) {
-        return true;
-      }
-
-      // Bloquear todo lo demás
-      return false;
-    };
-
-    // Reemplazar console.log
-    console.log = (...args: any[]) => {
-      if (shouldAllowLog(args)) {
-        originalLog(...args);
-      }
-    };
-
-    console.info = noop;
-    console.debug = noop;
-    console.warn = noop;
-    console.trace = noop;
-    console.table = noop;
-    console.dir = noop;
-
-    // Sanitizar errores
-    console.error = (...args: any[]) => {
-      const sanitized = args.map(arg => {
-        if (typeof arg === 'string') {
-          let s = arg;
-          // Remover rutas de archivos
-          s = s.replace(/[a-zA-Z]:\\[^\s]+/g, '[PATH]');
-          s = s.replace(/\/[a-zA-Z0-9_\-./]+\.(ts|tsx|js|jsx)/g, '[FILE]');
-          // Remover nombres propietarios
-          PROPRIETARY_KEYWORDS.forEach(keyword => {
-            s = s.replace(new RegExp(keyword, 'gi'), '[SYSTEM]');
-          });
-          return s;
-        }
-        return arg;
-      });
-      originalError(...sanitized);
-    };
-  }
-
-  // Cliente (navegador)
+  // Cliente (navegador) — suppress logs in the browser only
   if (typeof window !== 'undefined') {
     const originalError = console.error;
 
@@ -494,78 +427,7 @@ export function legacyLog(message: string, ...args: any[]): void {
 }
 
 /**
- * 🔒 SEGURIDAD CRÍTICA: Sobrescribir console.* en producción
- * Previene exposición accidental de arquitectura propietaria
- */
-if (isProduction && typeof window === 'undefined') {
-  // 🔒 BLOQUEO TOTAL DE LOGS EN SERVIDOR EN PRODUCCIÓN
-
-  // Guardar referencias originales (por si se necesitan internamente)
-  const originalConsoleLog = console.log
-  const originalConsoleInfo = console.info
-  const originalConsoleDebug = console.debug
-  const originalConsoleWarn = console.warn
-  const originalConsoleError = console.error
-
-  // 🔒 BLOQUEAR console.log completamente
-  console.log = (...args: any[]) => {
-    // BLOQUEADO: No hacer nada en producción
-    // Esto previene que cualquier console.log accidental exponga información
-  }
-
-  // 🔒 BLOQUEAR console.info completamente
-  console.info = (...args: any[]) => {
-    // BLOQUEADO: No hacer nada en producción
-  }
-
-  // 🔒 BLOQUEAR console.debug completamente
-  console.debug = (...args: any[]) => {
-    // BLOQUEADO: No hacer nada en producción
-  }
-
-  // 🔒 BLOQUEAR console.warn - solo enviar a Sentry sin mostrar
-  console.warn = (...args: any[]) => {
-    // NO mostrar en consola en producción
-    // Solo enviar a Sentry con información sanitizada
-    const sanitizedMessage = sanitizeString(args.join(' '))
-    Sentry.captureMessage(sanitizedMessage, {
-      level: 'warning',
-      tags: {
-        source: 'console.warn',
-        environment: 'production'
-      }
-    })
-  }
-
-  // 🔒 console.error - sanitizar antes de mostrar y enviar a Sentry
-  console.error = (...args: any[]) => {
-    // Sanitizar mensaje antes de mostrar
-    const sanitizedArgs = args.map(arg =>
-      typeof arg === 'string' ? sanitizeString(arg) : '[DATA]'
-    )
-
-    // Mostrar versión sanitizada
-    originalConsoleError(...sanitizedArgs)
-
-    // Enviar a Sentry con información sanitizada
-    const sanitizedMessage = sanitizeString(args.join(' '))
-    Sentry.captureMessage(sanitizedMessage, {
-      level: 'error',
-      tags: {
-        source: 'console.error',
-        environment: 'production'
-      }
-    })
-  }
-
-  // 🔒 Advertencia en consola al iniciar (solo una vez)
-  originalConsoleWarn(
-    '🔒 SECURITY: Console logging is disabled in production to protect proprietary architecture.'
-  )
-}
-
-/**
- * 🔒 SEGURIDAD: Sobrescribir console.* en cliente en producción
+ * Sobrescribir console.* en cliente en producción
  */
 if (isProduction && typeof window !== 'undefined') {
   // 🔒 BLOQUEO TOTAL DE LOGS EN CLIENTE EN PRODUCCIÓN

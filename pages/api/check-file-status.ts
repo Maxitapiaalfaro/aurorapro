@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { ai } from '@/lib/google-genai-config'
+import { aiFiles } from '@/lib/google-genai-config'
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,8 +16,8 @@ export default async function handler(
       return res.status(400).json({ error: 'geminiFileId is required' })
     }
 
-    // Verificar el estado del archivo con el cliente compartido (Vertex/Gemini según entorno)
-    const fileInfo = await ai.files.get({ name: geminiFileId })
+    // Use the API-key based Files client (Vertex AI does not support files.get)
+    const fileInfo = await aiFiles.files.get({ name: geminiFileId })
     
     return res.status(200).json({
       state: fileInfo.state,

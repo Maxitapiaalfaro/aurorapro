@@ -359,118 +359,21 @@ export class IntelligentIntentRouter {
       }
 
       // Paso 0.5: METADATA-INFORMED ROUTING - Detección de casos límite
+      // 🚨 EDGE CASE FORCED ROUTING: DISABLED
+      // Edge case detection was routing all messages containing sensitive keywords
+      // (risk, stress, sensitive content) directly to clinico before the intent
+      // classifier could analyze the full context. This caused clinical supervision
+      // requests (e.g. "diagnóstico diferencial") to be misrouted to the documentalist.
+      // The intent router's classification step now handles routing for all messages,
+      // allowing proper context-based discrimination.
       if (operationalMetadata) {
-        // 🚨 PRIORITY CHECK: Sesión de riesgo activa (persistencia de estado)
-        const isRiskSessionActive = operationalMetadata.session_risk_state?.isRiskSession || false;
-
-        if (isRiskSessionActive) {
-          const safeTurns = operationalMetadata.session_risk_state!.consecutiveSafeTurns;
-          const riskType = operationalMetadata.session_risk_state!.riskType || 'unknown';
-
-          console.log(`🚨 [IntentRouter] RISK SESSION ACTIVE - Maintaining clinico routing (safe turns: ${safeTurns})`);
-
-          // Extracción básica de entidades para contexto
-          const entityExtractionResult = await this.entityExtractor.extractEntities(
-            userInput,
-            enrichedSessionContext
-          );
-
-          const routingDecision: RoutingDecision = {
-            agent: 'clinico',
-            confidence: 1.0,
-            reason: RoutingReason.SENSITIVE_CONTENT_OVERRIDE,
-            metadata_factors: [
-              'risk_session_active',
-              `risk_type_${riskType}`,
-              `safe_turns_${safeTurns}`
-            ],
-            is_edge_case: true,
-            edge_case_type: operationalMetadata.session_risk_state!.riskType
-          };
-
-          const enrichedContext = this.createEnrichedContext(
-            userInput,
-            'activar_modo_clinico',
-            entityExtractionResult.entities,
-            entityExtractionResult,
-            optimizedContext,
-            currentAgent,
-            `RISK SESSION ACTIVE: Maintaining clinico routing (safe turns: ${safeTurns}/3)`,
-            1.0,
-            false
-          );
-
-          return {
-            success: true,
-            targetAgent: 'clinico',
-            enrichedContext,
-            requiresUserClarification: false,
-            routingDecision
-          };
-        }
-
-        // Detectar casos límite ANTES de clasificación
+        // Log edge case signals for observability, but do NOT override routing
         const edgeCaseRisk = this.isEdgeCaseRisk(operationalMetadata);
         const edgeCaseStress = this.isEdgeCaseStress(operationalMetadata);
         const edgeCaseSensitive = this.isEdgeCaseSensitiveContent(userInput, operationalMetadata);
 
         if (edgeCaseRisk || edgeCaseStress || edgeCaseSensitive) {
-          console.log('🚨 [IntentRouter] EDGE CASE DETECTED - Routing to clinico (robust agent)');
-
-          // Extracción básica de entidades para contexto
-          const entityExtractionResult = await this.entityExtractor.extractEntities(
-            userInput,
-            enrichedSessionContext
-          );
-
-          let edgeCaseType: 'risk' | 'stress' | 'sensitive_content' = 'risk';
-          let reason = RoutingReason.CRITICAL_RISK_OVERRIDE;
-
-          if (edgeCaseRisk) {
-            edgeCaseType = 'risk';
-            reason = operationalMetadata.risk_level === 'critical'
-              ? RoutingReason.CRITICAL_RISK_OVERRIDE
-              : RoutingReason.HIGH_RISK_OVERRIDE;
-          } else if (edgeCaseStress) {
-            edgeCaseType = 'stress';
-            reason = RoutingReason.STRESS_OVERRIDE;
-          } else if (edgeCaseSensitive) {
-            edgeCaseType = 'sensitive_content';
-            reason = RoutingReason.SENSITIVE_CONTENT_OVERRIDE;
-          }
-
-          const routingDecision: RoutingDecision = {
-            agent: 'clinico',
-            confidence: 1.0,
-            reason,
-            metadata_factors: [
-              `edge_case_${edgeCaseType}`,
-              `risk_level_${operationalMetadata.risk_level}`,
-              ...operationalMetadata.risk_flags_active.map(flag => `risk_flag_${flag}`)
-            ],
-            is_edge_case: true,
-            edge_case_type: edgeCaseType
-          };
-
-          const enrichedContext = this.createEnrichedContext(
-            userInput,
-            'activar_modo_clinico',
-            entityExtractionResult.entities,
-            entityExtractionResult,
-            optimizedContext,
-            currentAgent,
-            `EDGE CASE OVERRIDE: ${edgeCaseType} detected → Routing to robust agent (clinico)`,
-            1.0,
-            false
-          );
-
-          return {
-            success: true,
-            targetAgent: 'clinico',
-            enrichedContext,
-            requiresUserClarification: false,
-            routingDecision
-          };
+          console.log(`ℹ️ [IntentRouter] Edge case signals detected (risk=${edgeCaseRisk}, stress=${edgeCaseStress}, sensitive=${edgeCaseSensitive}) - proceeding with standard classification`);
         }
       }
 

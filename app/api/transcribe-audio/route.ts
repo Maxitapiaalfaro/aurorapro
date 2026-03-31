@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     
     // Transcribir el audio usando Gemini (Google AI Studio client)
     const response = await aiFiles.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-3.1-flash-lite-preview',
       contents: [
         {
           role: 'user',
