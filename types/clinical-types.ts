@@ -25,6 +25,29 @@ export interface ChatMessage {
   // ELIMINADO: attachments duplicados - usar solo fileReferences por ID
   // NUEVA FUNCIONALIDAD: Bullets de razonamiento específicos por mensaje
   reasoningBullets?: ReasoningBullet[]
+  // Persistent execution timeline: hierarchical log of the AI's process for this turn
+  executionTimeline?: ExecutionTimeline
+}
+
+// Persistent, hierarchical log of the agent execution pipeline for a single message
+export interface ExecutionTimeline {
+  agentKey: AgentType
+  agentDisplayName: string
+  steps: ExecutionStep[]
+  durationMs?: number
+}
+
+// A single step in the agent execution pipeline
+export interface ExecutionStep {
+  id: string
+  label: string
+  status: 'completed' | 'error'
+  toolName?: string
+  query?: string
+  result?: {
+    sourcesFound?: number
+    sourcesValidated?: number
+  }
 }
 
 // Tipos para bullets progresivos de razonamiento

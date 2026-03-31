@@ -33,6 +33,8 @@ import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
 import { CognitiveTransparencyPanel } from "@/components/cognitive-transparency-panel"
+import { ExecutionTimeline } from "@/components/execution-timeline"
+import { generateDynamicStatus, snapshotExecutionTimeline } from "@/lib/dynamic-status"
 
 interface ChatInterfaceProps {
   activeAgent: AgentType
@@ -45,7 +47,8 @@ interface ChatInterfaceProps {
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
-    reasoningBulletsForThisResponse?: ReasoningBullet[]
+    reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimeline?: import('@/types/clinical-types').ExecutionTimeline
   ) => Promise<void>
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
@@ -686,7 +689,11 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   const responseAgent = response?.routingInfo?.targetAgent || activeAgent
                   // 📚 Combinar groundingUrls y referencias académicas
                   const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current)
+                  // 📊 Snapshot execution timeline for persistent storage on the message
+                  const timeline = processingStatus
+                    ? snapshotExecutionTimeline(processingStatus, responseAgent, streamingDuration)
+                    : undefined
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, bulletsSnapshotRef.current, timeline)
                 } catch (historyError) {
                   console.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
@@ -1067,6 +1074,15 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       />
                     </div>
                   )}
+                  {/* Persistent execution timeline for historical messages */}
+                  {message.role === 'model' && message.executionTimeline && (
+                    <div className="px-3 md:px-4 pb-1 pt-1">
+                      <ExecutionTimeline
+                        timeline={message.executionTimeline}
+                        defaultCollapsed={true}
+                      />
+                    </div>
+                  )}
                   <div className="p-3 md:p-4 min-w-0 overflow-hidden">
                     <MarkdownRenderer
                       content={message.content}
@@ -1315,38 +1331,20 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {!streamingResponse && (() => {
                   // Determinar el agente que REALMENTE está respondiendo
                   const respondingAgent = routingInfo?.targetAgent || activeAgent
-                  const respondingConfig = getAgentVisualConfig(respondingAgent)
                   
-                  // Mensajes contextuales según la fase real del proceso
-                  let statusMessage = ''
-                  let statusKey = ''
-                  
-                  if (transitionState === 'thinking' || transitionState === 'selecting_agent') {
-                    statusMessage = 'Evaluando consulta y determinando modalidad de análisis...'
-                    statusKey = 'selecting'
-                  } else if (transitionState === 'specialist_responding') {
-                    // Use processingStatus for more granular messages when available
-                    if (processingStatus && processingStatus.phase === 'executing_tools') {
-                      const activeTool = processingStatus.toolExecutions.find(t => t.status === 'started')
-                      if (activeTool?.query) {
-                        statusMessage = `${activeTool.displayName}: "${activeTool.query}"...`
-                      } else if (activeTool) {
-                        statusMessage = `${activeTool.displayName}...`
-                      } else {
-                        statusMessage = 'Ejecutando herramientas de análisis...'
-                      }
-                      statusKey = 'executing-tools'
-                    } else if (processingStatus && processingStatus.phase === 'synthesizing') {
-                      statusMessage = 'Sintetizando resultados del análisis...'
-                      statusKey = 'synthesizing'
-                    } else {
-                      statusMessage = `${respondingConfig.name} procesando análisis...`
-                      statusKey = `${respondingAgent}-responding`
-                    }
-                  } else {
-                    statusMessage = 'Inicializando sistema...'
-                    statusKey = 'idle'
-                  }
+                  // Dynamic status generation — no hardcoded dictionaries
+                  const dynamicStatus = generateDynamicStatus(
+                    processingStatus,
+                    activeAgent,
+                    respondingAgent
+                  )
+                  // Override with basic phase when still in initial routing
+                  const statusMessage = (transitionState === 'thinking' || transitionState === 'selecting_agent')
+                    ? 'Evaluando consulta y determinando modalidad de análisis...'
+                    : dynamicStatus.message
+                  const statusKey = (transitionState === 'thinking' || transitionState === 'selecting_agent')
+                    ? 'selecting'
+                    : dynamicStatus.key
                   
                   return (
                     <div className="space-y-0">

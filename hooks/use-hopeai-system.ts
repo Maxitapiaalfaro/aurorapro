@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 import { getSSEClient } from '@/lib/sse-client'
+import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
 const MAX_HISTORICAL_BULLETS = 15
@@ -60,7 +61,8 @@ interface UseHopeAISystemReturn {
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
-    reasoningBulletsForThisResponse?: ReasoningBullet[]
+    reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimeline?: ExecutionTimeline
   ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
   
@@ -105,6 +107,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Ref to access the latest history in callbacks without adding it to dependency arrays
   const historyRef = useRef<ChatMessage[]>(systemState.history)
   historyRef.current = systemState.history
+  // Ref to access the latest processingStatus in callbacks without re-renders
+  const processingStatusRef = useRef<MessageProcessingStatus>(systemState.processingStatus)
+  processingStatusRef.current = systemState.processingStatus
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
@@ -764,6 +769,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
+    executionTimelineForThisResponse?: ExecutionTimeline,
     sessionIdOverride?: string
   ): Promise<void> => {
     if (!hopeAISystem.current) {
@@ -795,7 +801,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       agent: agent,
       timestamp: new Date(),
       groundingUrls: groundingUrls || [],
-      reasoningBullets: undefined
+      reasoningBullets: undefined,
+      executionTimeline: executionTimelineForThisResponse
     }
 
     // Asociar bullets si existen
