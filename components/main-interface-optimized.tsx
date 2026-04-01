@@ -252,10 +252,19 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           
           // Actualizar actividad del usuario
           updateActivity()
-          
+
           // CRITICAL: Capturar archivos antes de envío para mostrar inmediatamente en historial
           const attachedFilesForMessage = [...pendingFiles]
-          
+
+          console.log('📁 [MainInterface.handleSendMessage] pendingFiles state:', {
+            count: pendingFiles.length,
+            files: pendingFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
+          })
+          console.log('📁 [MainInterface.handleSendMessage] attachedFilesForMessage:', {
+            count: attachedFilesForMessage.length,
+            files: attachedFilesForMessage.map(f => ({ id: f.id, name: f.name, status: f.status }))
+          })
+
           // CRÍTICO: Pasar el sessionMeta para que el backend pueda cargar la ficha clínica del paciente
           const response = await sendMessage(message, useStreaming, attachedFilesForMessage, systemState.sessionMeta)
           
@@ -435,10 +444,18 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const { uploadedFile } = await response.json()
 
       // Agregar archivo con estado inicial de procesamiento
-      setPendingFiles(prev => [...prev, {
-        ...uploadedFile,
-        processingStatus: uploadedFile.status === 'processed' ? 'active' : 'processing'
-      }])
+      setPendingFiles(prev => {
+        const newFiles = [...prev, {
+          ...uploadedFile,
+          processingStatus: uploadedFile.status === 'processed' ? 'active' : 'processing'
+        }]
+        console.log('📁 [MainInterface.handleUploadDocument] File added to pendingFiles:', {
+          fileId: uploadedFile.id,
+          fileName: uploadedFile.name,
+          totalPendingFiles: newFiles.length
+        })
+        return newFiles
+      })
 
       // Si el archivo aún está procesando, iniciar polling para verificar estado
       if (uploadedFile.status !== 'processed') {
