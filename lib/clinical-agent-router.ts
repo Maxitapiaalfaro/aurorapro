@@ -1678,11 +1678,11 @@ Basado en esta evidencia, opciones razonadas:
           fileNames: enrichedContext.sessionFiles.map((f: any) => f.name)
         })
 
-        // Heurística: adjuntar solo los archivos más recientes o con índice
-        const files = (enrichedContext.sessionFiles as any[])
-          .slice(-2) // preferir los últimos 2
-          .sort((a, b) => (b.keywords?.length || 0) - (a.keywords?.length || 0)) // ligera priorización si tienen índice
-          .slice(0, 2)
+        // 🔧 FIX: Include ALL sessionFiles, not just the last 2
+        // Previous heuristic limited to 2 files to prevent token bloat, but this caused
+        // files to be lost when users attached 3+ files in the same message.
+        // The Gemini Files API handles large files efficiently, so we should include all.
+        const files = enrichedContext.sessionFiles as any[]
 
         // 🔧 FIX CRÍTICO: Usar Map dedicado para detectar si es primer turno
         // filesFullySentMap rastrea qué archivos ya fueron enviados completos en esta sesión
