@@ -11,6 +11,8 @@
 
 AuroraPro is a clinical AI assistant application for mental health professionals delivering evidence-based therapeutic support through three specialized agents (Clinical Supervisor, Documentation Specialist, Academic Researcher). The system provides multi-source academic research integration, encrypted patient record management via IndexedDB, voice transcription, and cognitive transparency with real-time visualization of AI reasoning. Built with Next.js 15/React 19, it combines Chilean clinical vocabulary support with HIPAA-compliant storage and serves as a contextually-aware clinical decision support tool.
 
+**Beta Target**: Independent psychologists in Chile, Argentina, and Brasil. Single-user scoped experience (no multi-user collaboration). Clinics and enterprise clients deferred post-beta.
+
 ---
 
 ## Architecture Reference
@@ -18,6 +20,10 @@ AuroraPro is a clinical AI assistant application for mental health professionals
 **@import [ARCHITECTURE.md](./ARCHITECTURE.md)**
 
 **This is the sole source of truth for the system's design.** All architectural decisions, technical specifications, data layer structures, and module relationships are documented there. If you encounter contradictions between code and architecture documentation, flag them for architectural review.
+
+**@import [STRATEGIC_PRIORITIES.md](./STRATEGIC_PRIORITIES.md)**
+
+**Beta launch strategy and priorities.** Contains critical bug fixes, feature priorities, roadmap, and strategic decisions for beta readiness. Review this document for current product direction and implementation priorities.
 
 ---
 
@@ -142,8 +148,11 @@ npm run test:orchestration
 - Current agents: Supervisor Clínico (socratico), Especialista en Documentación (clinico), Investigador Académico (academico)
 
 **2. Storage Must Be Environment-Aware**
-- Local/VM: `HIPAACompliantStorage` (SQLite + AES-256-GCM encryption)
-- Vercel/Serverless: `MemoryServerStorage` (ephemeral, no persistence)
+- **MIGRATION IN PROGRESS**: Moving from SQLite/Memory to Firestore
+- **Beta Target**: IndexedDB (client) + Firebase Firestore (server) with bidirectional sync
+- **Local/VM (Legacy)**: `HIPAACompliantStorage` (SQLite + AES-256-GCM encryption)
+- **Vercel (Current)**: `MemoryServerStorage` (ephemeral, no persistence)
+- **Vercel (Beta)**: Firestore with HIPAA BAA for compliant cloud persistence
 - Selection via `ServerStorageAdapter` based on `VERCEL` env var
 - Never instantiate storage backends directly; use `ServerStorageAdapter`
 
@@ -291,7 +300,7 @@ ADMIN_API_TOKEN=<hex_string_32_chars_minimum>
 NEXT_PUBLIC_FORCE_PRODUCTION_MODE=true
 NEXT_PUBLIC_ENABLE_PRODUCTION_LOGS=false
 SENTRY_DSN=https://...
-AURORA_ENCRYPTION_KEY=<base64_32_bytes>  # For HIPAA storage
+AURORA_ENCRYPTION_KEY=<base64_32_bytes>  # For HIPAA storage (being replaced by Firestore)
 ```
 
 ### Security Pre-Deployment
@@ -301,10 +310,18 @@ npm run build:production       # Includes security checks
 ```
 
 ### Known Production Limitations
-- **Vercel deployments**: No persistent storage (MemoryServerStorage mode)
-- **SQLite not available on Vercel**: Use external DB or accept ephemeral sessions
-- **Audit logs**: Not persistent in memory mode (lost on function restart)
+- **Vercel deployments**: Transitioning to Firestore for persistent storage (IndexedDB + Firestore sync)
+- **SQLite/MemoryStorage**: Being replaced by Firebase Firestore with HIPAA BAA
+- **Audit logs**: Will be persistent in Firestore with proper retention policies
 - **Source maps**: Hidden from client bundle (harder to debug production issues)
+
+### Critical Beta Blockers (See STRATEGIC_PRIORITIES.md)
+- ⚠️ **File processing not working**: Files fail to upload or process correctly
+- ⚠️ **Patient context loss**: Context lost after first conversation turn
+- ⚠️ **Ficha updates failing**: Updates fail when previous state is lost
+- ⚠️ **MCP not implemented**: Gmail, Calendar, persistent memory not integrated
+- ⚠️ **No message editing/retry**: Users cannot edit or retry messages
+- ⚠️ **No i18n**: Spanish (Argentina/Chile) and Portuguese (Brasil) needed for beta
 
 ---
 
@@ -481,6 +498,7 @@ npm run metrics:orchestration
 **"OpenSSL legacy provider" errors:**
 - Already handled in `npm run dev` and `npm start` scripts
 - If error persists: Set `NODE_OPTIONS=--openssl-legacy-provider` manually
+- **Beta TODO**: Identify and update dependency requiring legacy provider
 
 **"RESOURCE_EXHAUSTED" from Gemini API:**
 - Check file references in messages (should be IDs, not objects)
@@ -492,10 +510,10 @@ npm run metrics:orchestration
 - Clean up old sessions via `clinical-context-storage.ts` cleanup methods
 - Advise users to export/backup patient data
 
-**Vercel deployment fails with SQLite error:**
-- Expected: SQLite not available on Vercel
-- Solution: Storage adapter automatically switches to MemoryServerStorage
-- Confirm `VERCEL=1` env var is set (automatic on Vercel)
+**Vercel deployment with storage issues:**
+- **Current**: MemoryStorage (ephemeral, not production-ready)
+- **Beta**: Firestore integration required for persistent storage
+- Confirm Firebase project configured with HIPAA BAA
 
 **Sentry not capturing errors:**
 - Check `SENTRY_DSN` is set
@@ -506,6 +524,27 @@ npm run metrics:orchestration
 - Check intent classification confidence (threshold: 0.8)
 - Review `IntelligentIntentRouter` prompts for clarity
 - Test with explicit agent keywords ("necesito investigar" → academico)
+- **Beta Evaluation**: Determine if intent routing adds value or complexity
+
+**File processing failures (CRITICAL BUG):**
+- Files not uploading or processing correctly
+- Check `lib/clinical-file-manager.ts` and Gemini Files API integration
+- Verify file references persist in IndexedDB `clinical_files` store
+- Test with PDF, DOCX, PNG, JPG formats
+- **Status**: Known bug, fix in progress (see STRATEGIC_PRIORITIES.md)
+
+**Patient context lost after first turn (CRITICAL BUG):**
+- Context retrieves on first message but lost on subsequent turns
+- Check `buildPatientContext()` in `patient-summary-builder.ts`
+- Verify `updateSession()` called after each message
+- Ensure patient ID propagates through conversation
+- **Status**: Known bug, fix in progress (see STRATEGIC_PRIORITIES.md)
+
+**Ficha Clínica updates failing (CRITICAL BUG):**
+- Updates fail when previous state is lost (cascading from context loss)
+- Check `ClinicalTaskOrchestrator.generateFichaClinica()`
+- Verify Ficha retrieval before updates
+- **Status**: Known bug, dependent on patient context fix
 
 ---
 
