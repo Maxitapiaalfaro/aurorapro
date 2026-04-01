@@ -923,9 +923,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         responseContent,
         agent,
         groundingUrls,
-        bulletsToAttach.length > 0 ? bulletsToAttach : undefined
+        bulletsToAttach.length > 0 ? bulletsToAttach : undefined,
+        executionTimelineForThisResponse  // 🔧 FIX: Pass executionTimeline to persist reasoning transparency
       )
-      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB')
+      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB con executionTimeline')
     } catch (persistError) {
       console.warn('⚠️ [IndexedDB] No se pudo persistir respuesta AI:', persistError)
     }

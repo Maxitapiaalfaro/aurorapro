@@ -1314,7 +1314,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     responseContent: string,
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
-    reasoningBullets?: ReasoningBullet[]
+    reasoningBullets?: ReasoningBullet[],
+    executionTimeline?: ExecutionTimeline  // 🔧 FIX: Accept executionTimeline to persist reasoning transparency
   ): Promise<void> {
     if (!this._initialized) await this.initialize()
 
@@ -1359,6 +1360,12 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         }
       }
 
+      // 🔧 FIX: Attach executionTimeline if not already present
+      if (executionTimeline && !(lastMessage as any).executionTimeline) {
+        (lastMessage as any).executionTimeline = executionTimeline
+        console.log('🔧 ExecutionTimeline attached to existing message')
+      }
+
       // Update metadata and save without adding tokens again
       currentState.metadata.lastUpdated = new Date()
       await this.saveChatSessionBoth(currentState)
@@ -1373,7 +1380,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       agent: agent,
       timestamp: new Date(),
       groundingUrls: groundingUrls || [],
-      reasoningBullets: reasoningBullets && reasoningBullets.length > 0 ? [...reasoningBullets] : undefined
+      reasoningBullets: reasoningBullets && reasoningBullets.length > 0 ? [...reasoningBullets] : undefined,
+      executionTimeline: executionTimeline  // 🔧 FIX: Persist executionTimeline for reasoning transparency
     }
 
     currentState.history.push(aiMessage)

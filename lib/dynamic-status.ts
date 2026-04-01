@@ -177,26 +177,29 @@ export function snapshotExecutionTimeline(
 
   // Step from routing
   if (processingStatus.routingInfo) {
+    const fullReasoning = processingStatus.routingInfo.reasoning || `Especialista seleccionado: ${agentConfig.name}`
     steps.push({
       id: 'routing',
-      label: processingStatus.routingInfo.reasoning
-        ? truncate(processingStatus.routingInfo.reasoning, 120)
-        : `Especialista seleccionado: ${agentConfig.name}`,
-      status: 'completed'
+      label: truncate(fullReasoning, 120),
+      status: 'completed',
+      detail: fullReasoning.length > 120 ? fullReasoning : undefined  // 🔧 FIX: Store full text for expandable accordion
     })
   }
 
   // Steps from tool executions
   for (const tool of processingStatus.toolExecutions) {
+    const fullQuery = tool.query || tool.displayName
+    const truncatedLabel = tool.query
+      ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
+      : tool.displayName
+
     steps.push({
       id: tool.id,
-      label: tool.query
-        ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
-        : tool.displayName,
+      label: truncatedLabel,
       status: tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: buildToolResultDetail(tool.result, tool.status),
+      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),  // 🔧 FIX: Full query as detail for expandable accordion
       result: tool.result,
       sources: tool.academicSources
     })
@@ -270,12 +273,12 @@ export function buildLiveTimeline(
   // 2. Routing / agent selection
   if (processingStatus.routingInfo) {
     const isActive = processingStatus.phase === 'routing_agent' || processingStatus.phase === 'agent_selected'
+    const fullReasoning = processingStatus.routingInfo.reasoning || `Especialista seleccionado: ${agentConfig.name}`
     steps.push({
       id: 'routing',
-      label: processingStatus.routingInfo.reasoning
-        ? truncate(processingStatus.routingInfo.reasoning, 120)
-        : `Especialista seleccionado: ${agentConfig.name}`,
-      status: isActive ? 'active' : 'completed'
+      label: truncate(fullReasoning, 120),
+      status: isActive ? 'active' : 'completed',
+      detail: fullReasoning.length > 120 ? fullReasoning : undefined  // 🔧 FIX: Store full text for expandable accordion
     })
   } else if (processingStatus.phase === 'routing_agent') {
     steps.push({
@@ -295,13 +298,15 @@ export function buildLiveTimeline(
         ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
         : tool.displayName
 
+    const fullQuery = tool.query || tool.displayName
+
     steps.push({
       id: tool.id,
       label: toolLabel,
       status: isToolActive ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: buildToolResultDetail(tool.result, tool.status),
+      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),  // 🔧 FIX: Full query as detail for expandable accordion
       result: tool.result,
       sources: tool.academicSources
     })
