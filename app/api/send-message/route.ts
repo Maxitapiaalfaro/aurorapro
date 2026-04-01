@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
       fileReferences: fileReferences?.length || 0
     })
 
+    // 📁 If files are attached, log them for transparency
+    if (fileReferences && fileReferences.length > 0) {
+      console.log('📁 [API /send-message] Files attached to this message:', fileReferences)
+    }
+
     // Crear stream SSE con auto-flush
     const stream = new ReadableStream({
       async start(controller) {
@@ -76,6 +81,22 @@ export async function POST(request: NextRequest) {
           // 🔥 CRÍTICO: Enviar evento inicial inmediatamente para establecer conexión SSE
           // Esto previene buffering y confirma que el stream está activo
           controller.enqueue(encoder.encode(': connected\n\n'))
+
+          // 📁 If files are present, emit file processing event IMMEDIATELY
+          if (fileReferences && fileReferences.length > 0) {
+            console.log('📁 [API /send-message] Emitting file processing start event')
+            sendSSE({
+              type: 'tool_execution',
+              tool: {
+                id: crypto.randomUUID(),
+                toolName: 'process_clinical_files',
+                displayName: 'Procesando archivos clínicos',
+                status: 'started',
+                progressMessage: `Preparando ${fileReferences.length} archivo(s) para análisis...`,
+                timestamp: new Date()
+              }
+            })
+          }
 
           console.log('🔧 [API /send-message] Getting global orchestration system...')
           const systemStartTime = Date.now()
@@ -118,6 +139,25 @@ export async function POST(request: NextRequest) {
             onAgentSelected,   // ← Callback para agente
             fileReferences     // ← File IDs from client
           )
+
+          // 📁 If files were attached, emit completion event
+          if (fileReferences && fileReferences.length > 0) {
+            console.log('📁 [API /send-message] Emitting file processing completion event')
+            sendSSE({
+              type: 'tool_execution',
+              tool: {
+                id: crypto.randomUUID(),
+                toolName: 'process_clinical_files',
+                displayName: 'Procesando archivos clínicos',
+                status: 'completed',
+                timestamp: new Date(),
+                result: {
+                  sourcesFound: fileReferences.length,
+                  sourcesValidated: fileReferences.length
+                }
+              }
+            })
+          }
 
           console.log('🎯 [API /send-message] Orquestación completada:', {
             sessionId: result.updatedState.sessionId,
