@@ -89,7 +89,7 @@ export class ClinicalTaskOrchestrator {
       // When file parts are attached, use the API-key client (aiFiles) because
       // files are uploaded via the API-key Files API and their URIs are not
       // accessible from the Vertex AI endpoint.
-      const hasFileParts = messageParts.some((p: any) => p.fileData)
+      const hasFileParts = messageParts.some((p: Part) => 'fileData' in p)
       const client = hasFileParts ? aiFiles : ai
       const content: Content = { role: 'user', parts: messageParts as unknown as any }
       const result = await client.models.generateContent({
