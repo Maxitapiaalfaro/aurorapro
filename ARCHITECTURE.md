@@ -42,6 +42,23 @@ AuroraPro addresses the need for **evidence-based, contextually-aware clinical s
 **Storage Strategy**: IndexedDB (client) + Firebase Firestore (server) with bidirectional sync
 **HIPAA Compliance**: Firestore + Google Cloud Platform with Business Associate Agreement
 
+**Pricing Model (Freemium)**:
+1. **Free Tier**: 50,000 tokens/day, no MCP access, basic features
+2. **Pro Tier ($20/month)**: 3M tokens/month, MCP access, Gemini Pro 3.X (branded as "Aurora Pro")
+3. **Ultra Tier ($50/month)**: 15M tokens/month (virtually unlimited), advanced models (branded as "Aurora Ultra")
+
+**Beta Targets**:
+- Maximum 50 users (10 paying, 40 freemium)
+- Target 10 paying users for GA graduation
+- 95% uptime, <1% error rate required for GA
+
+**Firestore Budget**:
+- Spark Plan (free): 50K reads/day, 20K writes/day, 20K deletes/day, 1 GiB storage
+- Blaze Plan (overage): $0.06/100K reads, $0.18/100K writes, $0.02/100K deletes
+- Free tier consumed first, then pay-as-you-go billing
+
+**Data Region**: Global (optimized for Gemini latency/cost, no Brasil in-country requirement)
+
 For detailed beta priorities, roadmap, and critical bug tracking, see [STRATEGIC_PRIORITIES.md](./STRATEGIC_PRIORITIES.md).
 
 ---
@@ -682,17 +699,35 @@ The server uses a **dynamic storage adapter** that automatically selects between
 **Pattern**: Singleton class
 
 **State Managed**:
-- Map of 7 clinical tools (Function Calling declarations)
+- Map of clinical tools (Function Calling declarations)
 - Tool metadata (categories, priorities, keywords, domains)
 
-**Tools Registered**:
-1. `formulate_clarifying_question` (priority 9)
-2. `identify_core_emotion` (priority 8)
-3. `detect_pattern` (priority 8)
-4. `generate_validating_statement` (priority 7)
-5. `reframe_perspective` (priority 7)
-6. `propose_behavioral_experiment` (priority 6)
-7. `google_search` (academic web search, priority 5)
+**Current Tools** (Beta Rationalization in Progress):
+1. `formulate_clarifying_question` (priority 9) - **REMOVE per 80/20 rule**
+2. `identify_core_emotion` (priority 8) - **REMOVE per 80/20 rule**
+3. `detect_pattern` (priority 8) - **REMOVE per 80/20 rule**
+4. `generate_validating_statement` (priority 7) - **REMOVE per 80/20 rule**
+5. `reframe_perspective` (priority 7) - **REMOVE per 80/20 rule**
+6. `propose_behavioral_experiment` (priority 6) - **KEEP if produces structured output**
+7. `google_search` (academic web search, priority 5) - **KEEP (universal, all agents)**
+
+**Beta Tool Strategy (from Leadership Decision 2026-04-01)**:
+- **80/20 Rule**: Remove 80% of semantic/template tools, keep 20% with concrete value
+- **Agent Limit**: Maximum 10 tools per agent
+- **Web Search**: Universal for all agents (academico uses Parallel AI variant)
+
+**New Tools to Implement (Document Generation)**:
+1. `create_treatment_plan` - Clinical document
+2. `generate_progress_note` - Structured session note
+3. `create_safety_plan` - Safety protocol document
+4. `generate_referral_letter` - Inter-professional communication
+5. `create_psychoeducation_material` - Patient handouts
+
+**MCP Tools to Add** (Weeks 5-6):
+1. `send_email` - Email via Gmail/Outlook
+2. `create_calendar_event` - Schedule appointments
+3. `search_memory` - Query persistent agent memory
+4. `store_memory` - Save context for future sessions
 
 **Tool Selection**:
 - Keyword matching against user input
@@ -1110,11 +1145,30 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 
 **SDK**: `@modelcontextprotocol/sdk` (latest)
 
-**Status**: **Package installed, example in `/examples/sentry-mcp-usage-example.md`**
+**Status**: **Package installed, example exists, BETA REQUIREMENT**
 
-**Purpose**: Sentry MCP integration for error monitoring
+**Purpose**: Multi-provider integrations + persistent agent memory
 
 **Setup Script**: `scripts/setup-sentry-mcp.js`
+
+**Beta Requirements (from Leadership Decision 2026-04-01)**:
+
+1. **Email Integration**:
+   - Gmail/Google Calendar (primary)
+   - Outlook, Apple Calendar (if MCP servers available)
+   - Send clinical summaries, appointment confirmations
+
+2. **Persistent Agent Memory** (CRITICAL):
+   - Cross-conversation context retention
+   - User-specific memory per agent
+   - Agents can search, create, and personalize memories
+   - Memory persists across sessions
+
+3. **MCP Access Tiers**:
+   - **Free Tier**: No MCP access
+   - **Pro/Ultra Tiers**: Full MCP integration (Gmail, Calendar, memory)
+
+**Implementation Priority**: High - Phase 3 (Weeks 5-6)
 
 ---
 

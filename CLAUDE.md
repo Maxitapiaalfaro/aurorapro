@@ -4,6 +4,7 @@
 
 *Last Updated: 2026-04-01*
 *Verified Against: ARCHITECTURE.md (2026-03-31)*
+*Strategic Updates: STRATEGIC_PRIORITIES.md (2026-04-01)*
 
 ---
 
@@ -12,6 +13,15 @@
 AuroraPro is a clinical AI assistant application for mental health professionals delivering evidence-based therapeutic support through three specialized agents (Clinical Supervisor, Documentation Specialist, Academic Researcher). The system provides multi-source academic research integration, encrypted patient record management via IndexedDB, voice transcription, and cognitive transparency with real-time visualization of AI reasoning. Built with Next.js 15/React 19, it combines Chilean clinical vocabulary support with HIPAA-compliant storage and serves as a contextually-aware clinical decision support tool.
 
 **Beta Target**: Independent psychologists in Chile, Argentina, and Brasil. Single-user scoped experience (no multi-user collaboration). Clinics and enterprise clients deferred post-beta.
+
+**Pricing Model (Freemium)**:
+1. **Free Tier**: 50,000 tokens/day, no MCP access, basic features only
+2. **Pro Tier ($20/month)**: 3M tokens/month, MCP access (Gmail, Calendar, memory), Gemini Pro 3.X
+3. **Ultra Tier ($50/month)**: 15M tokens/month (virtually unlimited), all Pro features, advanced models
+
+**Beta Targets**: Maximum 50 users (10 paying, 40 freemium). Need 10 paying users + 95% uptime + <1% error rate for GA graduation.
+
+**Pioneer Circle**: First 10 users who complete their first paid subscription (Pro or Ultra).
 
 ---
 
@@ -146,6 +156,7 @@ npm run test:orchestration
 - Agent selection confidence threshold: 0.8 (fallback to "socratico")
 - Never hardcode agent selection; always defer to intelligent-intent-router.ts
 - Current agents: Supervisor Clínico (socratico), Especialista en Documentación (clinico), Investigador Académico (academico)
+- **Beta Evaluation**: Entity extraction to be evaluated Week 7 - keep only if improves speed/accuracy without latency
 
 **2. Storage Must Be Environment-Aware**
 - **MIGRATION IN PROGRESS**: Moving from SQLite/Memory to Firestore
@@ -153,6 +164,8 @@ npm run test:orchestration
 - **Local/VM (Legacy)**: `HIPAACompliantStorage` (SQLite + AES-256-GCM encryption)
 - **Vercel (Current)**: `MemoryServerStorage` (ephemeral, no persistence)
 - **Vercel (Beta)**: Firestore with HIPAA BAA for compliant cloud persistence
+- **Firestore Pricing**: Spark (free) 50K reads/day, then Blaze pay-as-you-go ($0.06/100K reads, $0.18/100K writes)
+- **Data Region**: Global (optimized for Gemini latency/cost, no Brasil in-country requirement)
 - Selection via `ServerStorageAdapter` based on `VERCEL` env var
 - Never instantiate storage backends directly; use `ServerStorageAdapter`
 
@@ -174,6 +187,21 @@ npm run test:orchestration
 - Max context: 128K tokens (Gemini 2.5 Flash limit)
 - Use `ContextWindowManager` for token optimization
 - Prioritize recent messages + clinical context over full history
+
+**6. Tool Rationalization (80/20 Rule) - Leadership Decision 2026-04-01**
+- **Remove**: 80% of semantic/conversational tools (formulate_clarifying_question, identify_core_emotion, detect_pattern, generate_validating_statement, reframe_perspective)
+- **Keep**: 20% with concrete value (propose_behavioral_experiment if structured, google_search universal)
+- **Add**: Document generation tools (treatment plans, progress notes, safety plans, referral letters, psychoeducation)
+- **Agent Limit**: Maximum 10 tools per agent for beta
+- **Web Search**: Available to ALL agents (only academico uses Parallel AI)
+- **Priority**: Document generation > MCP integrations > Academic research > File processing
+
+**7. MCP Integration Requirements - CRITICAL for Pro/Ultra Tiers**
+- **Email/Calendar**: Gmail/Google Calendar (primary), Outlook/Apple (if MCP servers available)
+- **Persistent Memory**: Cross-conversation context retention (agents search, create, personalize memories)
+- **Access Tiers**: Free = no MCP, Pro/Ultra = full MCP access
+- **Implementation**: Phase 3 (Weeks 5-6), high priority
+- MCP tools: send_email, create_calendar_event, search_memory, store_memory
 
 ---
 
@@ -254,6 +282,18 @@ npm run test:orchestration
    - Wrong: `dangerouslySetInnerHTML={{ __html: userInput }}`
    - Right: Use `markdown-sanitize-schema.ts` + rehype-sanitize
 
+9. **Prefer document generation tools over semantic conversation tools**
+   - Wrong: Keep `formulate_clarifying_question`, `identify_core_emotion` (being removed per 80/20 rule)
+   - Right: Implement `create_treatment_plan`, `generate_progress_note`, `create_safety_plan`
+
+10. **Prefer MCP integrations over custom implementations**
+    - Wrong: Build custom email/calendar integrations from scratch
+    - Right: Use MCP servers for Gmail, Outlook, Calendar with standardized interface
+
+11. **Prefer Firestore for server persistence over SQLite/Memory**
+    - Wrong: Continue using SQLite (local only) or MemoryStorage (ephemeral)
+    - Right: Migrate to Firestore with IndexedDB sync for beta deployment
+
 ---
 
 ## Legacy Code & Stale Documentation
@@ -319,9 +359,16 @@ npm run build:production       # Includes security checks
 - ⚠️ **File processing not working**: Files fail to upload or process correctly
 - ⚠️ **Patient context loss**: Context lost after first conversation turn
 - ⚠️ **Ficha updates failing**: Updates fail when previous state is lost
-- ⚠️ **MCP not implemented**: Gmail, Calendar, persistent memory not integrated
+- ⚠️ **MCP not implemented**: Gmail, Calendar, persistent memory not integrated (REQUIRED for Pro/Ultra tiers)
 - ⚠️ **No message editing/retry**: Users cannot edit or retry messages
 - ⚠️ **No i18n**: Spanish (Argentina/Chile) and Portuguese (Brasil) needed for beta
+- ⚠️ **Tool rationalization needed**: Apply 80/20 rule - remove semantic tools, add document generation
+- ⚠️ **Pricing/token limits**: Implement freemium tiers (Free: 50K/day, Pro: 3M/month, Ultra: 15M/month)
+
+**GA Graduation Criteria**:
+- 10 paying users (Pro or Ultra)
+- 95% uptime
+- <1% error rate
 
 ---
 
