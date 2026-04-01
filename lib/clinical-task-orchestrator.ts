@@ -1,7 +1,7 @@
-import { ai } from "./google-genai-config"
+import { ai, aiFiles } from "./google-genai-config"
 import { createContextWindowManager } from "./context-window-manager"
 import type { FichaClinicaState, ChatState } from "@/types/clinical-types"
-import { createPartFromUri } from "@google/genai"
+import { createPartFromUri } from "./clinical-file-manager"
 import type { Content, Part } from "@google/genai"
 
 // ============================================================================
@@ -86,8 +86,13 @@ export class ClinicalTaskOrchestrator {
       )
 
       // 2) Llamada stateless al modelo con systemInstruction estricta
+      // When file parts are attached, use the API-key client (aiFiles) because
+      // files are uploaded via the API-key Files API and their URIs are not
+      // accessible from the Vertex AI endpoint.
+      const hasFileParts = messageParts.some((p: any) => p.fileData)
+      const client = hasFileParts ? aiFiles : ai
       const content: Content = { role: 'user', parts: messageParts as unknown as any }
-      const result = await ai.models.generateContent({
+      const result = await client.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [content as any],
         config: {
