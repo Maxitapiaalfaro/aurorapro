@@ -548,27 +548,55 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       } else {
         // 🔄 FALLBACK: If attachedFiles is empty, try loading from IndexedDB directly
         console.log('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
+
+        // First, check if we have file IDs from the user message's fileReferences
+        const fileIdsToLoad: string[] = []
+
+        // Get file IDs from the most recent user message's fileReferences if available
+        if (systemState.history.length > 0) {
+          const lastUserMessage = [...systemState.history].reverse().find(m => m.role === 'user')
+          if (lastUserMessage?.fileReferences && lastUserMessage.fileReferences.length > 0) {
+            fileIdsToLoad.push(...lastUserMessage.fileReferences)
+            console.log('📁 [Client] Found file IDs from last user message:', fileIdsToLoad)
+          }
+        }
+
         try {
           const { ClinicalContextStorage } = await import('@/lib/clinical-context-storage')
           const storage = ClinicalContextStorage.getInstance()
-          const sessionFiles = await storage.getClinicalFiles(sessionIdToUse!)
+          await storage.initialize()
 
-          console.log('📁 [Client] IndexedDB fallback loaded files:', {
-            count: sessionFiles.length,
-            files: sessionFiles.map(f => ({
-              id: f.id,
-              name: f.name,
-              status: f.status,
-              geminiFileUri: f.geminiFileUri
-            }))
-          })
+          let loadedFiles: any[] = []
 
-          if (sessionFiles.length > 0) {
+          // Try loading by specific file IDs first (most reliable)
+          if (fileIdsToLoad.length > 0) {
+            console.log('📁 [Client] Loading files by ID:', fileIdsToLoad)
+            const filePromises = fileIdsToLoad.map(id => storage.getClinicalFileById(id))
+            const filesResults = await Promise.all(filePromises)
+            loadedFiles = filesResults.filter(f => f !== null)
+            console.log('📁 [Client] Loaded by ID:', {
+              requested: fileIdsToLoad.length,
+              loaded: loadedFiles.length,
+              files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
+            })
+          }
+
+          // If no files loaded by ID, fallback to loading all files for session
+          if (loadedFiles.length === 0 && sessionIdToUse) {
+            console.log('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
+            loadedFiles = await storage.getClinicalFiles(sessionIdToUse)
+            console.log('📁 [Client] Loaded by sessionId:', {
+              count: loadedFiles.length,
+              files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
+            })
+          }
+
+          if (loadedFiles.length > 0) {
             // Filter for processed files only
-            const processedFiles = sessionFiles.filter(f => f.status === 'processed')
+            const processedFiles = loadedFiles.filter(f => f.status === 'processed')
             console.log('📁 [Client] Filtered to processed files:', {
               processedCount: processedFiles.length,
-              totalCount: sessionFiles.length
+              totalCount: loadedFiles.length
             })
 
             if (processedFiles.length > 0) {
@@ -588,7 +616,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               console.log('⚠️ [Client] IndexedDB fallback found files but none are processed')
             }
           } else {
-            console.log('⚠️ [Client] IndexedDB fallback found no files for session:', sessionIdToUse)
+            console.log('⚠️ [Client] IndexedDB fallback found no files')
           }
         } catch (idbError) {
           console.error('❌ [Client] IndexedDB fallback failed:', idbError)
