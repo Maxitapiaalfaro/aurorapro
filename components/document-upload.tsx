@@ -93,13 +93,13 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
         <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <div className="space-y-2">
           <p className="text-lg font-medium text-foreground">Arrastra archivos aquí o haz clic para seleccionar</p>
-          <p className="text-sm text-gray-500">Soporta PDF, Word, imágenes (máx. 10MB por archivo)</p>
+          <p className="text-sm text-gray-500">Soporta PDF, Word, Excel, imágenes, audio, video y más (máx. 20MB por archivo)</p>
         </div>
 
         <input
           type="file"
           multiple
-          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.html,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.mp3,.wav,.flac,.ogg,.mp4,.mov,.webm"
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           aria-label="Seleccionar archivos clínicos"
@@ -111,7 +111,7 @@ export function DocumentUpload({ onUpload, onClose }: DocumentUploadProps) {
           <h4 className="font-medium text-foreground">Archivos seleccionados:</h4>
           {selectedFiles.map((file, index) => {
             const FileIcon = getFileIcon(file.type)
-            const isLarge = file.size > 10 * 1024 * 1024 // 10MB
+            const isLarge = file.size > 20 * 1024 * 1024 // 20MB
 
             return (
               <div
