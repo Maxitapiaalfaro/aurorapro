@@ -167,6 +167,7 @@ export class SSEClient {
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,
+          fileMetadata: params.fileMetadata, // Pass full file metadata to bypass serverless storage
         }),
         signal: this.abortController.signal,
       })

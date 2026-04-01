@@ -1059,7 +1059,9 @@ export class HopeAISystem {
             clinicalAgentRouter.closeChatSession(sessionId)
             
             // Create new chat session with new agent - mark as transition to maintain flow
-            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history, true)
+            // CRITICAL FIX: Exclude the current user message to avoid consecutive user turns
+            const historyForSwitch = currentState.history.slice(0, -1)
+            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, historyForSwitch, true)
           }
         )
         
@@ -1101,7 +1103,15 @@ export class HopeAISystem {
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
         try {
-          await clinicalAgentRouter.createChatSession(sessionId, currentState.activeAgent, currentState.history)
+          // CRITICAL FIX: Exclude the current user message (just pushed above) from the
+          // history passed to createChatSession. The SDK concatenates getHistory()
+          // with the new sendMessage() content, so including the current message in
+          // the initial history produces consecutive user turns (user→user) in the
+          // Gemini API `contents` array. The model may then ignore the second user
+          // turn — which carries the file parts — causing the "files sent but agent
+          // can't see them" bug.
+          const historyForSession = currentState.history.slice(0, -1)
+          await clinicalAgentRouter.createChatSession(sessionId, currentState.activeAgent, historyForSession)
         } catch (chatSessionError) {
           const msg = chatSessionError instanceof Error ? chatSessionError.message : String(chatSessionError)
           throw new Error(`Error al inicializar la sesión de chat: ${msg}`)
