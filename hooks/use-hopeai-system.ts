@@ -581,7 +581,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             })
           }
 
-          // If no files loaded by ID, fallback to loading all files for session
+          // If no files loaded by ID, try loading by sessionId
           if (loadedFiles.length === 0 && sessionIdToUse) {
             console.log('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
             loadedFiles = await storage.getClinicalFiles(sessionIdToUse)
@@ -589,6 +589,30 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               count: loadedFiles.length,
               files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
             })
+          }
+
+          // Last resort: load ALL recent processed files and filter by recency
+          if (loadedFiles.length === 0) {
+            console.log('📁 [Client] No files found by ID or sessionId, loading all recent files...')
+            const allFiles = await storage.getClinicalFiles()
+            // Get files uploaded in the last 5 minutes that are processed
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+            const recentFiles = allFiles.filter(f =>
+              f.status === 'processed' &&
+              new Date(f.uploadDate) > fiveMinutesAgo
+            )
+            // Sort by upload date descending and take the most recent one
+            recentFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+            if (recentFiles.length > 0) {
+              loadedFiles = [recentFiles[0]] // Take only the most recent file
+              console.log('📁 [Client] Found recent file:', {
+                id: loadedFiles[0].id,
+                name: loadedFiles[0].name,
+                uploadDate: loadedFiles[0].uploadDate
+              })
+            } else {
+              console.log('⚠️ [Client] No recent processed files found in IndexedDB')
+            }
           }
 
           if (loadedFiles.length > 0) {
