@@ -998,7 +998,9 @@ export class HopeAISystem {
       console.log('📝 [HopeAI] Mensaje del usuario agregado al historial:', {
         historyLength: currentState.history.length,
         userMessageId: userMessage.id,
-        userMessageContent: userMessage.content.substring(0, 50)
+        userMessageContent: userMessage.content.substring(0, 50),
+        fileReferences: userMessage.fileReferences || [],
+        fileCount: userMessage.fileReferences?.length || 0
       })
 
       // Si se detectó un cambio de agente (routing automático), actualizar la sesión
@@ -1051,6 +1053,16 @@ export class HopeAISystem {
       }
 
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
+      console.log(`📁 [HopeAI] Files in enrichedAgentContext.sessionFiles:`, {
+        count: resolvedSessionFiles?.length || 0,
+        files: resolvedSessionFiles?.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          geminiFileUri: f.geminiFileUri,
+          geminiFileId: f.geminiFileId,
+          status: f.status
+        })) || []
+      })
 
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
