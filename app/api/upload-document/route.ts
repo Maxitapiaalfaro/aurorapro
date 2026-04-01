@@ -30,19 +30,15 @@ export async function POST(request: NextRequest) {
         {
           error: 'Tipo de archivo o tamaño inválido',
           details: {
-            allowedTypes: [
-              'application/pdf',
-              'application/msword',
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              'application/rtf',
-              'text/plain',
-              'text/markdown',
-              'image/jpeg',
-              'image/png',
-              'image/gif',
+            allowedCategories: [
+              'Documents (PDF, Word, Excel, PowerPoint, RTF, TXT, Markdown, HTML, JSON, XML, CSV)',
+              'Images (JPEG, PNG, GIF, WebP, BMP, SVG, TIFF)',
+              'Audio (MP3, WAV, AAC, FLAC, OGG, M4A)',
+              'Video (MP4, MOV, AVI, WebM, 3GP)'
             ],
             maxSizeMB,
             received: { mimeType: file.type, sizeBytes: file.size },
+            note: 'Full list of supported MIME types matches Gemini 3.X Files API specifications'
           }
         },
         { status: 400 }

@@ -110,20 +110,10 @@ export async function POST(request: NextRequest) {
           const systemInitTime = Date.now() - systemStartTime
           console.log(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
 
-          // Callback para bullets progresivos (con guardia contra controller cerrado)
-          const onBulletUpdate = (bullet: ReasoningBullet) => {
-            if (controllerClosed) return // Guard: bullets may arrive after stream closes
-            try {
-              console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
-              sendSSE({
-                type: 'bullet',
-                bullet
-              })
-            } catch (err) {
-              console.warn('[SSE] Failed to send bullet (controller likely closed):', err)
-              controllerClosed = true // Mark as closed to avoid further attempts
-            }
-          }
+          // 🚫 BULLETS DISABLED: No longer passing onBulletUpdate callback to prevent unnecessary LLM calls
+          // Reasoning bullets were intentionally disabled but were still being generated because
+          // the callback was being passed. Removing the callback completely disables the generation.
+          // Previous code: const onBulletUpdate = (bullet: ReasoningBullet) => { ... }
 
           // Callback para selección de agente
           const onAgentSelected = (info: { targetAgent: string; confidence: number; reasoning: string }) => {
@@ -141,7 +131,7 @@ export async function POST(request: NextRequest) {
             useStreaming,
             suggestedAgent,
             sessionMeta,
-            onBulletUpdate,    // ← Callback para bullets
+            undefined,         // ← onBulletUpdate: DISABLED (was causing unnecessary LLM calls)
             onAgentSelected,   // ← Callback para agente
             fileReferences,    // ← File IDs from client
             fileMetadata       // ← File metadata from client (bypass storage)

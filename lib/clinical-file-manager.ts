@@ -193,16 +193,60 @@ export class ClinicalFileManager {
   }
 
   isValidClinicalFile(file: File): boolean {
+    // Gemini 3.X Files API supported formats
+    // Source: https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=node#supported_file_formats
     const allowedTypes = [
+      // Documents
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
       "application/rtf",
       "text/plain",
+      "text/html",
+      "text/css",
+      "text/javascript",
       "text/markdown",
+      "text/csv",
+      "application/json",
+      "application/xml",
+      "text/xml",
+
+      // Images (all formats)
       "image/jpeg",
       "image/png",
       "image/gif",
+      "image/webp",
+      "image/bmp",
+      "image/svg+xml",
+      "image/tiff",
+
+      // Audio
+      "audio/mpeg",
+      "audio/mp3",
+      "audio/wav",
+      "audio/wave",
+      "audio/x-wav",
+      "audio/aac",
+      "audio/flac",
+      "audio/ogg",
+      "audio/webm",
+      "audio/mp4",
+      "audio/m4a",
+
+      // Video
+      "video/mp4",
+      "video/mpeg",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/webm",
+      "video/x-flv",
+      "video/3gpp",
+      "video/3gpp2",
+      "video/mov",
     ]
 
     const maxSize = 10 * 1024 * 1024 // 10MB
