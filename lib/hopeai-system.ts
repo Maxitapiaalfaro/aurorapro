@@ -522,7 +522,9 @@ export class HopeAISystem {
           patientId: sessionMeta?.patient?.reference,
           sessionType: 'general',
           confidentialityLevel: sessionMeta?.patient?.confidentialityLevel || "high"
-        }
+        },
+        // 🏥 FIX: Persist full sessionMeta to ensure patient context survives reloads
+        sessionMeta: sessionMeta
       }
       // Save the new session
       await this.saveChatSessionBoth(currentState)
@@ -534,6 +536,13 @@ export class HopeAISystem {
         patientId: sessionMeta.patient.reference,
         confidentialityLevel: sessionMeta.patient.confidentialityLevel || currentState.clinicalContext?.confidentialityLevel || "high"
       }
+      // 🏥 FIX: Also update sessionMeta in storage
+      currentState.sessionMeta = sessionMeta
+      await this.saveChatSessionBoth(currentState)
+    } else if (sessionMeta && !currentState.sessionMeta) {
+      // 🏥 FIX: If sessionMeta is provided but not yet saved, save it now
+      console.log(`🏥 [HopeAI] Adding sessionMeta to existing session: ${sessionId}`)
+      currentState.sessionMeta = sessionMeta
       await this.saveChatSessionBoth(currentState)
     }
 

@@ -188,6 +188,9 @@ export interface ChatState {
     lastRiskCheck: Date;              // Última vez que se verificó el riesgo
     consecutiveSafeTurns: number;     // Turnos consecutivos sin contenido de riesgo
   }
+  // 🏥 PATIENT SESSION META: Full patient context metadata persisted to storage
+  // This ensures patient context survives page reloads and session recovery
+  sessionMeta?: PatientSessionMeta
 }
 
 export interface FichaClinicaState {
