@@ -31,8 +31,42 @@ Open browser developer console (F12) and look for these log entries:
    ✅ [MemoryStorage] Saved clinical file: <file-id>
    📁 [API /send-message] Files attached to this message: [<file-id>]
 
-2. File Resolution in HopeAI System:
-   📎 [HopeAI] Resolved files from client fileReferences: <file-name>
+2. File Resolution Fallback Chain:
+   📁 [HopeAI] File resolution fallback chain: {
+     sessionFiles: 0,
+     clientFileReferences: 1,
+     clientFileReferencesIds: [ 'file_1775074247989_wv9qlgc87' ],
+     historyMessagesWithFiles: 0
+   }
+
+3. Client File References Resolution:
+   📁 [HopeAI] Attempting to resolve client file references... [ 'file_1775074247989_wv9qlgc87' ]
+   📁 [HopeAI.getFilesByIds] Called with IDs: [ 'file_1775074247989_wv9qlgc87' ]
+
+4. Storage Lookup:
+   📁 [MemoryStorage.getClinicalFileById] Lookup for file_1775074247989_wv9qlgc87: {
+     found: true,
+     status: 'processed',
+     name: 'document.pdf',
+     totalFilesInStorage: 1,
+     allFileIds: [ 'file_1775074247989_wv9qlgc87' ]
+   }
+
+5. File Status Check:
+   📁 [HopeAI.getFilesByIds] File file_1775074247989_wv9qlgc87: {
+     found: true,
+     status: 'processed',
+     name: 'document.pdf',
+     willInclude: true
+   }
+   📁 [HopeAI.getFilesByIds] Returning 1 files out of 1 requested
+   📁 [HopeAI] getFilesByIds returned: {
+     count: 1,
+     files: [{ id: '...', name: 'document.pdf' }]
+   }
+
+6. Files Resolved Successfully:
+   📎 [HopeAI] Resolved files from client fileReferences: document.pdf
    📁 [HopeAI] Files in enrichedAgentContext.sessionFiles: {
      count: 1,
      files: [{
@@ -43,7 +77,7 @@ Open browser developer console (F12) and look for these log entries:
      }]
    }
 
-3. File Attachment in Clinical Router:
+7. File Attachment in Clinical Router:
    📁 [ClinicalRouter] Checking for file attachments: {
      hasFileAttachments: true,
      sessionFilesLength: 1,
@@ -68,7 +102,7 @@ Open browser developer console (F12) and look for these log entries:
 
    🔵 [ClinicalRouter] First turn detected: Attaching FULL files (1) via URI
 
-4. File Processing Event:
+8. File Processing Events:
    📁 [API /send-message] Emitting file processing start event
    📁 [API /send-message] Emitting file processing completion event
 ```
@@ -79,7 +113,49 @@ Open browser developer console (F12) and look for these log entries:
 
 Based on the logs, answer these questions:
 
-### Q1: Are files being resolved?
+### Q0: Is clientFileReferences being passed to sendMessage?
+**Look for**: `📁 [HopeAI] File resolution fallback chain`
+
+- [ ] **YES** - Log shows `clientFileReferences: N` with N > 0
+- [ ] **NO** - Log shows `clientFileReferences: 0`
+
+**If NO**: Files are not being passed from API to HopeAI system. Check:
+- `/app/api/send-message/route.ts` passes `fileReferences` parameter
+- `hopeai.sendMessage()` called with correct parameters
+
+### Q1: Are files stored in MemoryStorage?
+**Look for**: `📁 [MemoryStorage.getClinicalFileById] Lookup`
+
+- [ ] **YES** - Log shows `found: true` with `totalFilesInStorage: N` where N > 0
+- [ ] **NO** - Log shows `found: false` or `totalFilesInStorage: 0`
+
+**If NO**: Files never reached storage. Check:
+- File upload endpoint (`/api/upload-document/route.ts`)
+- `storage.saveClinicalFile()` is being called
+- Storage adapter is initialized
+
+### Q2: Does the file have correct status?
+**Look for**: `📁 [HopeAI.getFilesByIds] File <id>`
+
+- [ ] **YES** - Log shows `status: 'processed'` and `willInclude: true`
+- [ ] **NO** - Log shows different status or `willInclude: false`
+
+**If NO**: File exists but wrong status. Check:
+- Upload endpoint sets status to 'processed' after Gemini upload
+- File status field in storage
+- Status may be 'uploading', 'processing', or 'error'
+
+### Q3: Are files being resolved from clientFileReferences?
+**Look for**: `📁 [HopeAI] getFilesByIds returned`
+
+- [ ] **YES** - Log shows `count: N` with N > 0
+- [ ] **NO** - Log shows `count: 0`
+
+**If NO but Q1=YES and Q2=YES**: getFilesByIds is filtering files. Check:
+- Status filter in `getFilesByIds` (line 1547)
+- Files may not be 'processed' yet
+
+### Q4: Are files being resolved?
 **Look for**: `📁 [HopeAI] Files in enrichedAgentContext.sessionFiles`
 
 - [ ] **YES** - Log shows `count: N` with N > 0
@@ -90,7 +166,9 @@ Based on the logs, answer these questions:
 - `fileReferences` array populated in user message
 - Storage adapter returning files correctly
 
-### Q2: Are files being detected for attachment?
+**If NO**: Files are not being resolved from storage. Check Q0, Q1, Q2, Q3 first.
+
+### Q5: Are files being detected for attachment?
 **Look for**: `📁 [ClinicalRouter] Checking for file attachments`
 
 - [ ] **YES** - Log shows `hasFileAttachments: true`
@@ -101,7 +179,9 @@ Based on the logs, answer these questions:
 - `sessionFiles` is an array
 - `sessionFiles.length > 0`
 
-### Q3: Are files being attached to message parts?
+**If NO**: Files are not reaching the agent router. Check Q4 first.
+
+### Q6: Are files being attached to message parts?
 **Look for**: `🔵 [ClinicalRouter] First turn detected: Attaching FULL files`
 
 - [ ] **YES** - Log appears with file count
@@ -112,13 +192,15 @@ Based on the logs, answer these questions:
 - Files have valid `geminiFileUri` or `geminiFileId`
 - File status is "processed" or "active"
 
-### Q4: Does agent acknowledge the file?
+**If NO**: Files detected but not being attached. Check Q5 first.
+
+### Q7: Does agent acknowledge the file?
 **Agent response should mention**:
 - [ ] File content
 - [ ] File name
 - [ ] Information from the file
 
-**If NO but all logs above show YES**:
+**If NO but all logs Q0-Q6 show YES**:
 - Issue is with Gemini API file interpretation
 - Check if `geminiFileUri` format is correct
 - Verify file is ACTIVE in Gemini Files API
@@ -128,7 +210,38 @@ Based on the logs, answer these questions:
 
 ## Common Issues & Solutions
 
-### Issue 1: `count: 0` in enrichedAgentContext
+### Issue 0: clientFileReferences not passed (NEW - Most Likely)
+**Symptom**: `clientFileReferences: 0` in fallback chain log
+
+**Root Cause**: API endpoint not passing fileReferences parameter to hopeai.sendMessage()
+
+**Solution**:
+1. Check `/app/api/send-message/route.ts` line where hopeai.sendMessage() is called
+2. Verify `fileReferences` from requestBody is passed as `clientFileReferences` parameter
+3. Ensure parameter order matches function signature
+
+### Issue 1a: Files not stored in MemoryStorage (NEW - Very Likely)
+**Symptom**: `found: false` or `totalFilesInStorage: 0` in storage lookup
+
+**Root Cause**: Files uploaded but not saved to server storage
+
+**Solution**:
+1. Check upload endpoint `/api/upload-document/route.ts`
+2. Verify `storage.saveClinicalFile()` is called after upload
+3. Check if storage adapter is using correct instance (singleton)
+4. Verify ServerStorageAdapter.initialize() called before save
+
+### Issue 1b: File has wrong status (NEW - Likely)
+**Symptom**: `status: 'uploading'` or `status: 'processing'` instead of `'processed'`
+
+**Root Cause**: Upload endpoint not updating status after successful Gemini upload
+
+**Solution**:
+1. Check upload endpoint sets `status: 'processed'` after Gemini upload completes
+2. Verify `waitForFileToBeActive()` succeeds before setting status
+3. Update file status in storage after Gemini processing completes
+
+### Issue 1: `count: 0` in enrichedAgentContext (LEGACY)
 **Symptom**: Files uploaded but not in context
 
 **Root Cause**: Files not being resolved from storage
