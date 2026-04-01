@@ -351,6 +351,22 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     attachedFiles?: ClinicalFile[],
     sessionMeta?: any
   ): Promise<any> => {
+    // 🔍 CRITICAL DIAGNOSTIC: Log what we receive at entry point
+    console.log('🔍 [HOOK.sendMessage] ENTRY POINT:', {
+      messageLength: message.length,
+      useStreaming,
+      attachedFilesProvided: !!attachedFiles,
+      attachedFilesCount: attachedFiles?.length || 0,
+      attachedFilesDetails: attachedFiles?.map(f => ({
+        id: f.id,
+        name: f.name,
+        status: f.status,
+        geminiFileUri: f.geminiFileUri
+      })) || [],
+      sessionMetaProvided: !!sessionMeta,
+      timestamp: new Date().toISOString()
+    })
+
     if (!hopeAISystem.current) {
       throw new Error('Sistema no inicializado')
     }
@@ -510,6 +526,127 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
 
+      // 📁 Obtener metadata completa de archivos desde IndexedDB para bypass de serverless storage
+      let fileMetadata: any[] | undefined = undefined
+      if (attachedFiles && attachedFiles.length > 0) {
+        try {
+          fileMetadata = attachedFiles.map(file => ({
+            id: file.id,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            geminiFileUri: file.geminiFileUri,
+            geminiFileId: file.geminiFileId,
+            status: file.status,
+            uploadDate: file.uploadDate,
+            sessionId: file.sessionId
+          }))
+          console.log('📁 [Client] Passing file metadata to bypass serverless storage:', fileMetadata.map(f => f.name))
+        } catch (e) {
+          console.warn('⚠️ [Client] Could not extract file metadata:', e)
+        }
+      } else {
+        // 🔄 FALLBACK: If attachedFiles is empty, try loading from IndexedDB directly
+        console.log('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
+
+        // First, check if we have file IDs from the user message's fileReferences
+        const fileIdsToLoad: string[] = []
+
+        // Get file IDs from the most recent user message's fileReferences if available
+        if (systemState.history.length > 0) {
+          const lastUserMessage = [...systemState.history].reverse().find(m => m.role === 'user')
+          if (lastUserMessage?.fileReferences && lastUserMessage.fileReferences.length > 0) {
+            fileIdsToLoad.push(...lastUserMessage.fileReferences)
+            console.log('📁 [Client] Found file IDs from last user message:', fileIdsToLoad)
+          }
+        }
+
+        try {
+          const { ClinicalContextStorage } = await import('@/lib/clinical-context-storage')
+          const storage = ClinicalContextStorage.getInstance()
+          await storage.initialize()
+
+          let loadedFiles: any[] = []
+
+          // Try loading by specific file IDs first (most reliable)
+          if (fileIdsToLoad.length > 0) {
+            console.log('📁 [Client] Loading files by ID:', fileIdsToLoad)
+            const filePromises = fileIdsToLoad.map(id => storage.getClinicalFileById(id))
+            const filesResults = await Promise.all(filePromises)
+            loadedFiles = filesResults.filter(f => f !== null)
+            console.log('📁 [Client] Loaded by ID:', {
+              requested: fileIdsToLoad.length,
+              loaded: loadedFiles.length,
+              files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
+            })
+          }
+
+          // If no files loaded by ID, try loading by sessionId
+          if (loadedFiles.length === 0 && sessionIdToUse) {
+            console.log('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
+            loadedFiles = await storage.getClinicalFiles(sessionIdToUse)
+            console.log('📁 [Client] Loaded by sessionId:', {
+              count: loadedFiles.length,
+              files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
+            })
+          }
+
+          // Last resort: load ALL recent processed files and filter by recency
+          if (loadedFiles.length === 0) {
+            console.log('📁 [Client] No files found by ID or sessionId, loading all recent files...')
+            const allFiles = await storage.getClinicalFiles()
+            // Get files uploaded in the last 5 minutes that are processed
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+            const recentFiles = allFiles.filter(f =>
+              f.status === 'processed' &&
+              new Date(f.uploadDate) > fiveMinutesAgo
+            )
+            // Sort by upload date descending and take the most recent one
+            recentFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+            if (recentFiles.length > 0) {
+              loadedFiles = [recentFiles[0]] // Take only the most recent file
+              console.log('📁 [Client] Found recent file:', {
+                id: loadedFiles[0].id,
+                name: loadedFiles[0].name,
+                uploadDate: loadedFiles[0].uploadDate
+              })
+            } else {
+              console.log('⚠️ [Client] No recent processed files found in IndexedDB')
+            }
+          }
+
+          if (loadedFiles.length > 0) {
+            // Filter for processed files only
+            const processedFiles = loadedFiles.filter(f => f.status === 'processed')
+            console.log('📁 [Client] Filtered to processed files:', {
+              processedCount: processedFiles.length,
+              totalCount: loadedFiles.length
+            })
+
+            if (processedFiles.length > 0) {
+              fileMetadata = processedFiles.map(file => ({
+                id: file.id,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                geminiFileUri: file.geminiFileUri,
+                geminiFileId: file.geminiFileId,
+                status: file.status,
+                uploadDate: file.uploadDate,
+                sessionId: file.sessionId
+              }))
+              console.log('✅ [Client] IndexedDB fallback succeeded, passing file metadata:', fileMetadata.map(f => f.name))
+            } else {
+              console.log('⚠️ [Client] IndexedDB fallback found files but none are processed')
+            }
+          } else {
+            console.log('⚠️ [Client] IndexedDB fallback found no files')
+          }
+        } catch (idbError) {
+          console.error('❌ [Client] IndexedDB fallback failed:', idbError)
+        }
+      }
+
       // Callback para manejar bullets progresivos
       const handleBulletUpdate = (bullet: ReasoningBullet) => {
         console.log('🎯 Bullet recibido:', bullet.content)
@@ -585,6 +722,21 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
       const sseClient = getSSEClient()
 
+      // 🔍 FINAL DIAGNOSTIC: Log what we're about to send to the API
+      console.log('🔍 [HOOK.sendMessage] ABOUT TO SEND TO API:', {
+        sessionId: sessionIdToUse,
+        messagePreview: message.substring(0, 50) + '...',
+        fileReferencesCount: attachedFiles?.map(file => file.id).length || 0,
+        fileReferences: attachedFiles?.map(file => file.id) || [],
+        fileMetadataCount: fileMetadata?.length || 0,
+        fileMetadataDetails: fileMetadata?.map(f => ({
+          id: f.id,
+          name: f.name,
+          geminiFileUri: f.geminiFileUri
+        })) || [],
+        timestamp: new Date().toISOString()
+      })
+
       // Variables para acumular datos durante el streaming
       let finalRoutingInfo: any = null
 
@@ -600,7 +752,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               userId: systemState.userId || 'demo_user',
               suggestedAgent: undefined,
               sessionMeta: sessionMetaToUse,
-              fileReferences: attachedFiles?.map(file => file.id) || []
+              fileReferences: attachedFiles?.map(file => file.id) || [],
+              fileMetadata // Pasar metadata completa de archivos
             },
             {
               onBullet: handleBulletUpdate,

@@ -13,7 +13,9 @@ interface MessageFileAttachmentsProps {
 }
 
 export function MessageFileAttachments({ files, variant = 'compact', isUserMessage = false }: MessageFileAttachmentsProps) {
-  if (!files || files.length === 0 || !isUserMessage) {
+  // Always show files if they exist (not just for user messages)
+  // Files are relevant context for both user and AI messages
+  if (!files || files.length === 0) {
     return null
   }
 

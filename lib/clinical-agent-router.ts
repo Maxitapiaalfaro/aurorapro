@@ -1636,6 +1636,14 @@ Basado en esta evidencia, opciones razonadas:
 
       // 🔁 CLIENTE CORRECTO PARA ARCHIVOS: Si hay archivos adjuntos, cambiar a cliente de Google AI Studio (API key)
       const hasFileAttachments = Array.isArray(enrichedContext?.sessionFiles) && enrichedContext.sessionFiles.length > 0
+      console.log(`📁 [ClinicalRouter] Checking for file attachments:`, {
+        hasFileAttachments,
+        sessionFilesType: typeof enrichedContext?.sessionFiles,
+        sessionFilesLength: enrichedContext?.sessionFiles?.length || 0,
+        sessionFilesIsArray: Array.isArray(enrichedContext?.sessionFiles),
+        files: enrichedContext?.sessionFiles?.map((f: any) => f.name) || []
+      })
+
       if (hasFileAttachments) {
         try {
           const agentConfig = this.agents.get(agent)
@@ -1668,6 +1676,11 @@ Basado en esta evidencia, opciones razonadas:
       // 🔧 FIX: Estrategia de archivos - SOLO enviar completo en primer turno
       // Turnos posteriores: solo referencia ligera para evitar sobrecarga de tokens
       if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles) && enrichedContext.sessionFiles.length > 0) {
+        console.log(`📁 [ClinicalRouter] Processing sessionFiles for attachment:`, {
+          totalFiles: enrichedContext.sessionFiles.length,
+          fileNames: enrichedContext.sessionFiles.map((f: any) => f.name)
+        })
+
         // Heurística: adjuntar solo los archivos más recientes o con índice
         const files = (enrichedContext.sessionFiles as any[])
           .slice(-2) // preferir los últimos 2
@@ -1681,6 +1694,18 @@ Basado en esta evidencia, opciones razonadas:
 
         // Detectar si ALGUNO de estos archivos NO ha sido enviado completo aún
         const hasUnsentFiles = files.some(f => !fullySentFiles.has(f.id || f.geminiFileId || f.geminiFileUri));
+
+        console.log(`📁 [ClinicalRouter] File attachment decision:`, {
+          hasUnsentFiles,
+          filesToProcess: files.length,
+          filesAlreadySent: Array.from(fullySentFiles),
+          currentFiles: files.map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            geminiFileUri: f.geminiFileUri,
+            alreadySent: fullySentFiles.has(f.id || f.geminiFileId || f.geminiFileUri)
+          }))
+        })
 
         if (hasUnsentFiles) {
           // ✅ PRIMER TURNO: Adjuntar archivo completo vía URI

@@ -491,7 +491,8 @@ export class HopeAISystem {
     sessionMeta?: PatientSessionMeta,
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
     onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
-    clientFileReferences?: string[]
+    clientFileReferences?: string[],
+    clientFileMetadata?: any[] // Metadata completa de archivos desde el cliente
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -549,16 +550,47 @@ export class HopeAISystem {
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
+    // 📁 DEBUG: Log fallback chain parameters
+    console.log(`📁 [HopeAI] File resolution fallback chain:`, {
+      sessionFiles: sessionFiles?.length || 0,
+      clientFileReferences: clientFileReferences?.length || 0,
+      clientFileReferencesIds: clientFileReferences || [],
+      clientFileMetadata: clientFileMetadata?.length || 0,
+      historyMessagesWithFiles: currentState?.history?.filter((m: any) => m.fileReferences?.length > 0).length || 0
+    })
+
     // Fallback chain for resolving session files:
+    // 0. Client-provided fileMetadata (HIGHEST PRIORITY - bypass serverless storage)
     // 1. getPendingFilesForSession (server storage)
     // 2. Client-provided fileReferences (survives serverless cold starts)
     // 3. Most recent message with fileReferences from history
     let resolvedSessionFiles = sessionFiles || []
 
+    // 🚀 NEW: Priority bypass - use client metadata if provided (serverless-safe)
+    if (clientFileMetadata && clientFileMetadata.length > 0) {
+      try {
+        console.log(`📁 [HopeAI] Using client-provided file metadata (bypass storage):`, clientFileMetadata.map((f: any) => f.name))
+        // Convert metadata to ClinicalFile format
+        resolvedSessionFiles = clientFileMetadata.map((meta: any) => ({
+          ...meta,
+          uploadDate: new Date(meta.uploadDate) // Ensure Date object
+        }))
+        console.log(`✅ [HopeAI] Resolved ${resolvedSessionFiles.length} files from client metadata`)
+      } catch (e) {
+        console.error('❌ [HopeAI] Error parsing client file metadata:', e)
+        // Fall through to other resolution methods
+      }
+    }
+
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
       // Fallback: use file IDs sent from the client (reliable across serverless invocations)
+      console.log(`📁 [HopeAI] Attempting to resolve client file references...`, clientFileReferences)
       try {
         let clientFiles = await this.getFilesByIds(clientFileReferences)
+        console.log(`📁 [HopeAI] getFilesByIds returned:`, {
+          count: clientFiles?.length || 0,
+          files: clientFiles?.map((f: any) => ({ id: f.id, name: f.name })) || []
+        })
         if (clientFiles && clientFiles.length > 0) {
           try {
             const { clinicalFileManager } = await import('./clinical-file-manager')
@@ -566,6 +598,8 @@ export class HopeAISystem {
           } catch {}
           resolvedSessionFiles = clientFiles
           console.log(`📎 [HopeAI] Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
+        } else {
+          console.warn(`⚠️ [HopeAI] getFilesByIds returned empty array for IDs:`, clientFileReferences)
         }
       } catch (e) {
         console.warn('⚠️ [HopeAI] Could not resolve client file references:', e)
@@ -998,7 +1032,9 @@ export class HopeAISystem {
       console.log('📝 [HopeAI] Mensaje del usuario agregado al historial:', {
         historyLength: currentState.history.length,
         userMessageId: userMessage.id,
-        userMessageContent: userMessage.content.substring(0, 50)
+        userMessageContent: userMessage.content.substring(0, 50),
+        fileReferences: userMessage.fileReferences || [],
+        fileCount: userMessage.fileReferences?.length || 0
       })
 
       // Si se detectó un cambio de agente (routing automático), actualizar la sesión
@@ -1051,6 +1087,16 @@ export class HopeAISystem {
       }
 
       console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
+      console.log(`📁 [HopeAI] Files in enrichedAgentContext.sessionFiles:`, {
+        count: resolvedSessionFiles?.length || 0,
+        files: resolvedSessionFiles?.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          geminiFileUri: f.geminiFileUri,
+          geminiFileId: f.geminiFileId,
+          status: f.status
+        })) || []
+      })
 
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
@@ -1484,6 +1530,16 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       // Obtener TODOS los archivos clínicos procesados de la sesión
       const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
 
+      console.log(`📋 [HopeAI.getPendingFilesForSession] All files from storage:`, {
+        totalFiles: clinicalFiles.length,
+        files: clinicalFiles.map((f: ClinicalFile) => ({
+          id: f.id,
+          name: f.name,
+          status: f.status,
+          sessionId: f.sessionId
+        }))
+      })
+
       // Filtrar solo archivos que están procesados (listos para usar)
       const processedFiles = clinicalFiles.filter((file: ClinicalFile) =>
         file.sessionId === sessionId &&
@@ -1504,15 +1560,28 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
    */
   async getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> {
     if (!this._initialized) await this.initialize()
-    
+
+    console.log(`📁 [HopeAI.getFilesByIds] Called with IDs:`, fileIds)
+
     try {
       const files: ClinicalFile[] = []
       for (const fileId of fileIds) {
         const file = await this.storage.getClinicalFileById(fileId)
+        console.log(`📁 [HopeAI.getFilesByIds] File ${fileId}:`, {
+          found: !!file,
+          status: file?.status,
+          name: file?.name,
+          willInclude: !!(file && file.status === 'processed')
+        })
         if (file && file.status === 'processed') {
           files.push(file)
+        } else if (file && file.status !== 'processed') {
+          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} (${file.name}) has status "${file.status}", not "processed" - skipping`)
+        } else {
+          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} not found in storage`)
         }
       }
+      console.log(`📁 [HopeAI.getFilesByIds] Returning ${files.length} files out of ${fileIds.length} requested`)
       return files
     } catch (error) {
       console.error(`❌ Error getting files by IDs:`, error)

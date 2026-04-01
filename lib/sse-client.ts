@@ -35,6 +35,22 @@ export interface SSECallbacks {
 }
 
 /**
+ * Metadata mínima de archivo para pasar del cliente al servidor
+ * Evita pérdida de archivos en serverless cold starts
+ */
+export interface FileMetadata {
+  id: string
+  name: string
+  type: string
+  size: number
+  geminiFileUri?: string
+  geminiFileId?: string
+  status: 'processed' | 'processing' | 'uploading' | 'error'
+  uploadDate: Date
+  sessionId?: string
+}
+
+/**
  * Parámetros para enviar mensaje
  */
 export interface SendMessageParams {
@@ -45,6 +61,8 @@ export interface SendMessageParams {
   suggestedAgent?: string
   sessionMeta?: any
   fileReferences?: string[]
+  /** Metadata completa de archivos para bypass de storage serverless */
+  fileMetadata?: FileMetadata[]
 }
 
 /**
@@ -79,6 +97,7 @@ export class SSEClient {
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,
+          fileMetadata: params.fileMetadata, // Pasar metadata completa
         }),
         signal: this.abortController.signal,
       })
