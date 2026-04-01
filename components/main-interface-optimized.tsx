@@ -130,23 +130,25 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Eliminado: no crear sesión por defecto; se creará en el primer envío de mensaje
   // const [sessionCreationAttempted, setSessionCreationAttempted] = useState(false)
 
-  // Cargar archivos pendientes cuando cambie la sesión
-  useEffect(() => {
-    const loadPendingFiles = async () => {
-      if (systemState.sessionId) {
-        try {
-          const files = await HopeAISystemSingleton.getPendingFilesForSession(systemState.sessionId)
-          setPendingFiles(files)
-        } catch (error) {
-          console.error('❌ Error cargando archivos pendientes:', error)
-        }
-      } else {
-        setPendingFiles([])
-      }
-    }
-
-    loadPendingFiles()
-  }, [systemState.sessionId])
+  // 🔥 CRITICAL FIX: NO recargar archivos desde server storage
+  // En serverless, el storage está vacío y esto borra los archivos del cliente
+  // Los archivos ya están en IndexedDB del cliente y en pendingFiles state
+  // Solo se deben limpiar al enviar mensaje o remover explícitamente
+  // useEffect(() => {
+  //   const loadPendingFiles = async () => {
+  //     if (systemState.sessionId) {
+  //       try {
+  //         const files = await HopeAISystemSingleton.getPendingFilesForSession(systemState.sessionId)
+  //         setPendingFiles(files)  // ← ESTO BORRABA LOS ARCHIVOS EN SERVERLESS
+  //       } catch (error) {
+  //         console.error('❌ Error cargando archivos pendientes:', error)
+  //       }
+  //     } else {
+  //       setPendingFiles([])
+  //     }
+  //   }
+  //   loadPendingFiles()
+  // }, [systemState.sessionId])
   
   // Crear sesión por defecto si no existe (optimizado para evitar condiciones de carrera)
   // Eliminado: la creación automática de sesión provocaba sesiones vacías
