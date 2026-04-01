@@ -351,6 +351,22 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     attachedFiles?: ClinicalFile[],
     sessionMeta?: any
   ): Promise<any> => {
+    // 🔍 CRITICAL DIAGNOSTIC: Log what we receive at entry point
+    console.log('🔍 [HOOK.sendMessage] ENTRY POINT:', {
+      messageLength: message.length,
+      useStreaming,
+      attachedFilesProvided: !!attachedFiles,
+      attachedFilesCount: attachedFiles?.length || 0,
+      attachedFilesDetails: attachedFiles?.map(f => ({
+        id: f.id,
+        name: f.name,
+        status: f.status,
+        geminiFileUri: f.geminiFileUri
+      })) || [],
+      sessionMetaProvided: !!sessionMeta,
+      timestamp: new Date().toISOString()
+    })
+
     if (!hopeAISystem.current) {
       throw new Error('Sistema no inicializado')
     }
@@ -529,6 +545,54 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         } catch (e) {
           console.warn('⚠️ [Client] Could not extract file metadata:', e)
         }
+      } else {
+        // 🔄 FALLBACK: If attachedFiles is empty, try loading from IndexedDB directly
+        console.log('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
+        try {
+          const { ClinicalContextStorage } = await import('@/lib/clinical-context-storage')
+          const storage = ClinicalContextStorage.getInstance()
+          const sessionFiles = await storage.getClinicalFiles(sessionIdToUse!)
+
+          console.log('📁 [Client] IndexedDB fallback loaded files:', {
+            count: sessionFiles.length,
+            files: sessionFiles.map(f => ({
+              id: f.id,
+              name: f.name,
+              status: f.status,
+              geminiFileUri: f.geminiFileUri
+            }))
+          })
+
+          if (sessionFiles.length > 0) {
+            // Filter for processed files only
+            const processedFiles = sessionFiles.filter(f => f.status === 'processed')
+            console.log('📁 [Client] Filtered to processed files:', {
+              processedCount: processedFiles.length,
+              totalCount: sessionFiles.length
+            })
+
+            if (processedFiles.length > 0) {
+              fileMetadata = processedFiles.map(file => ({
+                id: file.id,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                geminiFileUri: file.geminiFileUri,
+                geminiFileId: file.geminiFileId,
+                status: file.status,
+                uploadDate: file.uploadDate,
+                sessionId: file.sessionId
+              }))
+              console.log('✅ [Client] IndexedDB fallback succeeded, passing file metadata:', fileMetadata.map(f => f.name))
+            } else {
+              console.log('⚠️ [Client] IndexedDB fallback found files but none are processed')
+            }
+          } else {
+            console.log('⚠️ [Client] IndexedDB fallback found no files for session:', sessionIdToUse)
+          }
+        } catch (idbError) {
+          console.error('❌ [Client] IndexedDB fallback failed:', idbError)
+        }
       }
 
       // Callback para manejar bullets progresivos
@@ -605,6 +669,21 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
       const sseClient = getSSEClient()
+
+      // 🔍 FINAL DIAGNOSTIC: Log what we're about to send to the API
+      console.log('🔍 [HOOK.sendMessage] ABOUT TO SEND TO API:', {
+        sessionId: sessionIdToUse,
+        messagePreview: message.substring(0, 50) + '...',
+        fileReferencesCount: attachedFiles?.map(file => file.id).length || 0,
+        fileReferences: attachedFiles?.map(file => file.id) || [],
+        fileMetadataCount: fileMetadata?.length || 0,
+        fileMetadataDetails: fileMetadata?.map(f => ({
+          id: f.id,
+          name: f.name,
+          geminiFileUri: f.geminiFileUri
+        })) || [],
+        timestamp: new Date().toISOString()
+      })
 
       // Variables para acumular datos durante el streaming
       let finalRoutingInfo: any = null
