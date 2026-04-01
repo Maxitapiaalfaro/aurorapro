@@ -64,7 +64,7 @@ function escapeXml(str: string): string {
 
 export class ClinicalAgentRouter {
   private agents: Map<AgentType, AgentConfig> = new Map()
-  private activeChatSessions: Map<string, any> = new Map()
+  private activeChatSessions: Map<string, { chat: any; agent: AgentType; usesApiKeyClient?: boolean; history?: any[] }> = new Map()
   // Session-scoped caches to avoid re-fetching and re-verifying files each turn
   private sessionFileCache: Map<string, Map<string, any>> = new Map()
   private verifiedActiveMap: Map<string, Set<string>> = new Map()
@@ -1454,8 +1454,15 @@ Basado en esta evidencia, opciones razonadas:
         geminiHistory = this.addAgentTransitionContext(geminiHistory, agent)
       }
 
+      // Detect if any message in history references files uploaded via API-key Files API.
+      // When Vertex AI is the main client, it cannot resolve file URIs from the API-key
+      // endpoint (generativelanguage.googleapis.com vs aiplatform.googleapis.com).
+      // In that case, we must use the API-key client (aiFiles) for the chat session.
+      const historyHasFiles = history?.some(m => m.fileReferences && m.fileReferences.length > 0) || false
+      const client = historyHasFiles ? aiFiles : ai
+
       // Create chat session using the correct SDK API
-      const chat = ai.chats.create({
+      const chat = client.chats.create({
         model: agentConfig.config.model || 'gemini-2.5-flash',
         config: {
           temperature: agentConfig.config.temperature,
@@ -1466,16 +1473,11 @@ Basado en esta evidencia, opciones razonadas:
           systemInstruction: agentConfig.systemInstruction,
           tools: agentConfig.tools && agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
           thinkingConfig: agentConfig.config.thinkingConfig,
-          // 🔧 FIX CAPA 3: Compresión de contexto manejada en capas previas
-          // - CAPA 1: Context Window Manager comprime historial en hopeai-system.ts (línea ~269)
-          // - CAPA 2: Archivos solo en primer turno, referencias ligeras después (línea ~1527)
-          // - Gemini 2.5 Flash maneja internamente sliding window con 1M context window
-          // Resultado: Protección triple contra sobrecarga de tokens
         },
         history: geminiHistory,
       })
 
-      this.activeChatSessions.set(sessionId, { chat, agent })
+      this.activeChatSessions.set(sessionId, { chat, agent, usesApiKeyClient: historyHasFiles })
       // Prepare caches for this session
       if (!this.sessionFileCache.has(sessionId)) this.sessionFileCache.set(sessionId, new Map())
       if (!this.verifiedActiveMap.has(sessionId)) this.verifiedActiveMap.set(sessionId, new Set())
@@ -1634,17 +1636,13 @@ Basado en esta evidencia, opciones razonadas:
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
-      // 🔁 CLIENTE CORRECTO PARA ARCHIVOS: Si hay archivos adjuntos, cambiar a cliente de Google AI Studio (API key)
+      // Switch to API-key client when files are attached and current session uses Vertex AI.
+      // Files uploaded via the API-key Files API have URIs from generativelanguage.googleapis.com
+      // which are not accessible from the Vertex AI endpoint (aiplatform.googleapis.com).
+      // Only recreate the chat if we're not already on the API-key client.
       const hasFileAttachments = Array.isArray(enrichedContext?.sessionFiles) && enrichedContext.sessionFiles.length > 0
-      console.log(`📁 [ClinicalRouter] Checking for file attachments:`, {
-        hasFileAttachments,
-        sessionFilesType: typeof enrichedContext?.sessionFiles,
-        sessionFilesLength: enrichedContext?.sessionFiles?.length || 0,
-        sessionFilesIsArray: Array.isArray(enrichedContext?.sessionFiles),
-        files: enrichedContext?.sessionFiles?.map((f: any) => f.name) || []
-      })
 
-      if (hasFileAttachments) {
+      if (hasFileAttachments && !sessionData.usesApiKeyClient) {
         try {
           const agentConfig = this.agents.get(agent)
           const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [], agent)
@@ -1662,11 +1660,10 @@ Basado en esta evidencia, opciones razonadas:
             },
             history: geminiHistory,
           })
-          this.activeChatSessions.set(sessionId, { chat: fileChat, agent })
+          this.activeChatSessions.set(sessionId, { chat: fileChat, agent, usesApiKeyClient: true })
           chat = fileChat
-          console.log('[ClinicalRouter] 🔄 Switched to Google AI Studio client for file-attached message')
         } catch (switchErr) {
-          console.warn('[ClinicalRouter] ⚠️ Could not switch to Studio client for file-attached message:', switchErr)
+          console.warn('[ClinicalRouter] ⚠️ Could not switch to API-key client for file-attached message:', switchErr)
         }
       }
 
