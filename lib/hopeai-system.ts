@@ -1511,6 +1511,16 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       // Obtener TODOS los archivos clínicos procesados de la sesión
       const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
 
+      console.log(`📋 [HopeAI.getPendingFilesForSession] All files from storage:`, {
+        totalFiles: clinicalFiles.length,
+        files: clinicalFiles.map((f: ClinicalFile) => ({
+          id: f.id,
+          name: f.name,
+          status: f.status,
+          sessionId: f.sessionId
+        }))
+      })
+
       // Filtrar solo archivos que están procesados (listos para usar)
       const processedFiles = clinicalFiles.filter((file: ClinicalFile) =>
         file.sessionId === sessionId &&
