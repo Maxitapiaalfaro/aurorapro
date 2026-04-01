@@ -4,8 +4,11 @@
 
 *Documentation generated: 2026-03-31*
 *Last verified commit: 3b90218*
+*Strategic update: 2026-04-01*
 
 This document describes the **actual current state** of the AuroraPro codebase as it exists today. All information is based on direct code inspection.
+
+**Note**: For beta launch strategy, priorities, and critical bug tracking, see [STRATEGIC_PRIORITIES.md](./STRATEGIC_PRIORITIES.md).
 
 ---
 
@@ -31,6 +34,15 @@ AuroraPro addresses the need for **evidence-based, contextually-aware clinical s
 3. Maintaining persistent, encrypted patient records with pattern detection
 4. Providing transparency into AI decision-making for clinical supervision
 5. Supporting Chilean clinical vocabulary and terminology corrections
+
+### Beta Launch Context (2026-04-01)
+
+**Target Market**: Independent psychologists in Chile, Argentina, and Brasil
+**User Model**: Single-user scoped experience (no multi-user collaboration)
+**Storage Strategy**: IndexedDB (client) + Firebase Firestore (server) with bidirectional sync
+**HIPAA Compliance**: Firestore + Google Cloud Platform with Business Associate Agreement
+
+For detailed beta priorities, roadmap, and critical bug tracking, see [STRATEGIC_PRIORITIES.md](./STRATEGIC_PRIORITIES.md).
 
 ---
 
@@ -1339,6 +1351,50 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 ---
 
 ## 13. Current Limitations and Technical Debt
+
+### Critical Bugs Blocking Beta Launch (2026-04-01)
+
+**PRIORITY 1 - File Processing Failure**
+- **Status**: NOT WORKING
+- **Impact**: Files fail to upload or process correctly via Gemini Files API
+- **Affected**: PDF, Word, PNG, JPG file uploads
+- **Investigation**: Check `lib/clinical-file-manager.ts` and file state persistence
+- **See**: STRATEGIC_PRIORITIES.md Section 2.1
+
+**PRIORITY 2 - Patient Context Loss**
+- **Status**: NOT WORKING AFTER FIRST TURN
+- **Impact**: Patient context retrieved on first message but lost on subsequent turns
+- **Cascade**: Causes Ficha Clínica update failures
+- **Investigation**: Check `buildPatientContext()` and session state persistence
+- **See**: STRATEGIC_PRIORITIES.md Section 2.2
+
+**PRIORITY 3 - Ficha Clínica Update Failures**
+- **Status**: FAILING
+- **Impact**: Cannot update Fichas when previous state is lost
+- **Dependency**: Blocked by patient context loss fix
+- **Investigation**: Check `ClinicalTaskOrchestrator.generateFichaClinica()`
+- **See**: STRATEGIC_PRIORITIES.md Section 2.3
+
+**PRIORITY 4 - MCP Integration Missing**
+- **Status**: NOT IMPLEMENTED
+- **Impact**: No Gmail, Calendar, or persistent agent memory
+- **Requirements**: MCP framework with easy-to-add integrations
+- **Investigation**: `@modelcontextprotocol/sdk` installed but unused
+- **See**: STRATEGIC_PRIORITIES.md Section 2.4
+
+**PRIORITY 5 - Manual Message Controls Missing**
+- **Status**: NOT IMPLEMENTED
+- **Impact**: Users cannot edit/retry messages or stop generation
+- **Requirements**: Edit user messages, retry agent responses, stop streaming
+- **Investigation**: UI components in `message-bubble.tsx` and `chat-interface.tsx`
+- **See**: STRATEGIC_PRIORITIES.md Section 2.5
+
+**PRIORITY 6 - No Internationalization**
+- **Status**: HARDCODED STRINGS
+- **Impact**: Cannot serve Argentina/Brasil markets
+- **Requirements**: Spanish (Chile/Argentina) and Portuguese (Brasil) support
+- **Framework**: next-intl or next-i18next for Next.js 15
+- **See**: STRATEGIC_PRIORITIES.md Section 1.3
 
 ### TODO/FIXME/HACK Comments Found
 
