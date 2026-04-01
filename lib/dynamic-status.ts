@@ -175,34 +175,49 @@ export function snapshotExecutionTimeline(
 
   const steps: ExecutionStep[] = []
 
-  // Step from routing
-  if (processingStatus.routingInfo) {
+  // 🔧 FIX: Capture ALL phases for complete audit trail
+  // Based on buildLiveTimeline logic but marking all as 'completed'
+
+  // 1. Analyzing intent phase (if it occurred)
+  if (processingStatus.phase !== 'idle') {
     steps.push({
-      id: 'routing',
-      label: processingStatus.routingInfo.reasoning
-        ? truncate(processingStatus.routingInfo.reasoning, 120)
-        : `Especialista seleccionado: ${agentConfig.name}`,
+      id: 'analyzing_intent',
+      label: `Analizando consulta del usuario`,
       status: 'completed'
     })
   }
 
-  // Steps from tool executions
+  // 2. Routing / agent selection
+  if (processingStatus.routingInfo) {
+    const fullReasoning = processingStatus.routingInfo.reasoning || `Especialista seleccionado: ${agentConfig.name}`
+    steps.push({
+      id: 'routing',
+      label: truncate(fullReasoning, 120),
+      status: 'completed',
+      detail: fullReasoning.length > 120 ? fullReasoning : undefined
+    })
+  }
+
+  // 3. Tool executions – each gets its own step
   for (const tool of processingStatus.toolExecutions) {
+    const fullQuery = tool.query || tool.displayName
+    const truncatedLabel = tool.query
+      ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
+      : tool.displayName
+
     steps.push({
       id: tool.id,
-      label: tool.query
-        ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
-        : tool.displayName,
+      label: truncatedLabel,
       status: tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: buildToolResultDetail(tool.result, tool.status),
+      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),
       result: tool.result,
       sources: tool.academicSources
     })
   }
 
-  // Synthesis step (if tools were executed)
+  // 4. Synthesis step (if tools were executed)
   if (processingStatus.toolExecutions.length > 0) {
     const completedTools = processingStatus.toolExecutions.filter(t => t.status === 'completed')
     const totalSources = completedTools.reduce((sum, t) => sum + (t.result?.sourcesValidated ?? 0), 0)
@@ -211,6 +226,16 @@ export function snapshotExecutionTimeline(
       label: totalSources > 0
         ? `${agentConfig.name} sintetizó ${totalSources} fuente${totalSources !== 1 ? 's' : ''}`
         : `${agentConfig.name} sintetizó resultados del análisis`,
+      status: 'completed'
+    })
+  }
+
+  // 5. Streaming phase (final step showing completion)
+  // Only add if we actually reached streaming (have routingInfo or completed processing)
+  if (processingStatus.routingInfo || processingStatus.toolExecutions.length > 0) {
+    steps.push({
+      id: 'streaming',
+      label: `Generando respuesta completa`,
       status: 'completed'
     })
   }
@@ -270,12 +295,12 @@ export function buildLiveTimeline(
   // 2. Routing / agent selection
   if (processingStatus.routingInfo) {
     const isActive = processingStatus.phase === 'routing_agent' || processingStatus.phase === 'agent_selected'
+    const fullReasoning = processingStatus.routingInfo.reasoning || `Especialista seleccionado: ${agentConfig.name}`
     steps.push({
       id: 'routing',
-      label: processingStatus.routingInfo.reasoning
-        ? truncate(processingStatus.routingInfo.reasoning, 120)
-        : `Especialista seleccionado: ${agentConfig.name}`,
-      status: isActive ? 'active' : 'completed'
+      label: truncate(fullReasoning, 120),
+      status: isActive ? 'active' : 'completed',
+      detail: fullReasoning.length > 120 ? fullReasoning : undefined  // 🔧 FIX: Store full text for expandable accordion
     })
   } else if (processingStatus.phase === 'routing_agent') {
     steps.push({
@@ -295,13 +320,15 @@ export function buildLiveTimeline(
         ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
         : tool.displayName
 
+    const fullQuery = tool.query || tool.displayName
+
     steps.push({
       id: tool.id,
       label: toolLabel,
       status: isToolActive ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: buildToolResultDetail(tool.result, tool.status),
+      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),  // 🔧 FIX: Full query as detail for expandable accordion
       result: tool.result,
       sources: tool.academicSources
     })

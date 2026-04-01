@@ -131,27 +131,45 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         throw new Error(`Sesión no encontrada: ${sessionId}`)
       }
 
-      // Reconstruct sessionMeta if session has patient context
-      let reconstructedSessionMeta: PatientSessionMeta | undefined = undefined
-      if (chatState.clinicalContext?.patientId) {
+      // 🏥 FIX: Try to use sessionMeta from storage first, then reconstruct if needed
+      let sessionMetaToUse: PatientSessionMeta | undefined = undefined
+
+      // Priority 1: Use sessionMeta from ChatState if available
+      if (chatState.sessionMeta) {
+        console.log(`✅ Using existing sessionMeta from ChatState for patient: ${chatState.sessionMeta.patient.reference}`)
+        sessionMetaToUse = chatState.sessionMeta
+      }
+      // Priority 2: Reconstruct sessionMeta if session has patient context but no sessionMeta
+      else if (chatState.clinicalContext?.patientId) {
         try {
           const { getPatientPersistence } = await import('@/lib/patient-persistence')
           const { PatientContextComposer } = await import('@/lib/patient-summary-builder')
-          
+          const { PatientSummaryBuilder } = await import('@/lib/patient-summary-builder')
+
           const persistence = getPatientPersistence()
           await persistence.initialize()
           const patient = await persistence.loadPatientRecord(chatState.clinicalContext.patientId)
-          
+
           if (patient) {
             console.log(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
             const composer = new PatientContextComposer()
-            reconstructedSessionMeta = composer.createSessionMetadata(patient, {
+
+            // Get full patient summary to enrich sessionMeta
+            const patientSummary = await PatientSummaryBuilder.getSummaryWithFicha(patient)
+
+            sessionMetaToUse = composer.createSessionMetadata(patient, {
               sessionId: chatState.sessionId,
               userId: chatState.userId,
               clinicalMode: chatState.clinicalContext.sessionType || 'clinical_supervision',
               activeAgent: chatState.activeAgent
-            })
-            console.log(`✅ SessionMeta reconstructed for patient: ${reconstructedSessionMeta.patient.reference}`)
+            }, patientSummary)
+
+            console.log(`✅ SessionMeta reconstructed for patient: ${sessionMetaToUse.patient.reference}`)
+
+            // 🏥 FIX: Save reconstructed sessionMeta back to storage
+            chatState.sessionMeta = sessionMetaToUse
+            await hopeAISystem.current.storageAdapter.saveChatSession(chatState)
+            console.log(`💾 Reconstructed sessionMeta saved to storage`)
           } else {
             console.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
           }
@@ -169,7 +187,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         activeAgent: chatState.activeAgent,
         history: chatState.history,
         isLoading: false,
-        sessionMeta: reconstructedSessionMeta
+        sessionMeta: sessionMetaToUse
       }))
       lastSessionIdRef.current = chatState.sessionId
 
@@ -368,10 +386,28 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         sessionMetaToUse = updatedSessionMeta
         setSystemState(prev => ({
           ...prev,
+          sessionId: newSessionId,
           sessionMeta: updatedSessionMeta
         }))
         console.log('✅ SessionMeta actualizado con sessionId:', newSessionId)
         console.log('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
+
+        // 🏥 FIX: Also persist the updated sessionMeta to server storage immediately
+        try {
+          const currentState = await hopeAISystem.current.storageAdapter.loadChatSession(newSessionId)
+          if (currentState) {
+            currentState.sessionMeta = updatedSessionMeta
+            currentState.clinicalContext = {
+              ...currentState.clinicalContext,
+              patientId: updatedSessionMeta.patient.reference,
+              confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
+            }
+            await hopeAISystem.current.storageAdapter.saveChatSession(currentState)
+            console.log('💾 SessionMeta persisted to storage after lazy session creation')
+          }
+        } catch (error) {
+          console.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
+        }
       }
     }
 
@@ -396,6 +432,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         return {
           ...prev,
           history: [...prev.history, userMessage],
+          // 🏥 FIX: Explicitly preserve sessionMeta to prevent loss during state updates
+          sessionMeta: prev.sessionMeta,
           isLoading: true,
           error: null,
           transitionState: 'thinking',
@@ -433,14 +471,18 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               sessionType: systemState.mode || 'clinical_supervision',
               confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
               patientId: systemState.sessionMeta?.patient?.reference
-            }
+            },
+            // 🏥 FIX: Persist sessionMeta in IndexedDB as well
+            sessionMeta: systemState.sessionMeta
           }),
           history: [...((existingState?.history) || []), userMessage],
           metadata: {
             ...((existingState?.metadata) || { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] }),
             lastUpdated: new Date(),
             fileReferences: Array.from(new Set([...(existingState?.metadata?.fileReferences || []), ...(userMessage.fileReferences || [])]))
-          }
+          },
+          // 🏥 FIX: Ensure sessionMeta is preserved if already exists or add if new
+          sessionMeta: existingState?.sessionMeta || systemState.sessionMeta
         }
         await hopeAISystem.current.storageAdapter.saveChatSession(updatedState)
         console.log('💾 [IndexedDB] Mensaje de usuario persistido inmediatamente:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
@@ -881,9 +923,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         responseContent,
         agent,
         groundingUrls,
-        bulletsToAttach.length > 0 ? bulletsToAttach : undefined
+        bulletsToAttach.length > 0 ? bulletsToAttach : undefined,
+        executionTimelineForThisResponse  // 🔧 FIX: Pass executionTimeline to persist reasoning transparency
       )
-      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB')
+      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB con executionTimeline')
     } catch (persistError) {
       console.warn('⚠️ [IndexedDB] No se pudo persistir respuesta AI:', persistError)
     }
