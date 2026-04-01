@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta, fileReferences } = requestBody
+    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta, fileReferences, fileMetadata } = requestBody
 
     console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
@@ -50,12 +50,18 @@ export async function POST(request: NextRequest) {
       userId,
       suggestedAgent,
       patientReference: sessionMeta?.patient?.reference || 'None',
-      fileReferences: fileReferences?.length || 0
+      fileReferences: fileReferences?.length || 0,
+      fileMetadata: fileMetadata?.length || 0
     })
 
     // 📁 If files are attached, log them for transparency
     if (fileReferences && fileReferences.length > 0) {
       console.log('📁 [API /send-message] Files attached to this message:', fileReferences)
+    }
+
+    // 📁 If file metadata provided (bypass serverless storage)
+    if (fileMetadata && fileMetadata.length > 0) {
+      console.log('📁 [API /send-message] File metadata provided by client (bypass storage):', fileMetadata.map((f: any) => f.name))
     }
 
     // Crear stream SSE con auto-flush
@@ -137,7 +143,8 @@ export async function POST(request: NextRequest) {
             sessionMeta,
             onBulletUpdate,    // ← Callback para bullets
             onAgentSelected,   // ← Callback para agente
-            fileReferences     // ← File IDs from client
+            fileReferences,    // ← File IDs from client
+            fileMetadata       // ← File metadata from client (bypass storage)
           )
 
           // 📁 If files were attached, emit completion event

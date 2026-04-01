@@ -491,7 +491,8 @@ export class HopeAISystem {
     sessionMeta?: PatientSessionMeta,
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
     onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
-    clientFileReferences?: string[]
+    clientFileReferences?: string[],
+    clientFileMetadata?: any[] // Metadata completa de archivos desde el cliente
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -554,14 +555,32 @@ export class HopeAISystem {
       sessionFiles: sessionFiles?.length || 0,
       clientFileReferences: clientFileReferences?.length || 0,
       clientFileReferencesIds: clientFileReferences || [],
+      clientFileMetadata: clientFileMetadata?.length || 0,
       historyMessagesWithFiles: currentState?.history?.filter((m: any) => m.fileReferences?.length > 0).length || 0
     })
 
     // Fallback chain for resolving session files:
+    // 0. Client-provided fileMetadata (HIGHEST PRIORITY - bypass serverless storage)
     // 1. getPendingFilesForSession (server storage)
     // 2. Client-provided fileReferences (survives serverless cold starts)
     // 3. Most recent message with fileReferences from history
     let resolvedSessionFiles = sessionFiles || []
+
+    // 🚀 NEW: Priority bypass - use client metadata if provided (serverless-safe)
+    if (clientFileMetadata && clientFileMetadata.length > 0) {
+      try {
+        console.log(`📁 [HopeAI] Using client-provided file metadata (bypass storage):`, clientFileMetadata.map((f: any) => f.name))
+        // Convert metadata to ClinicalFile format
+        resolvedSessionFiles = clientFileMetadata.map((meta: any) => ({
+          ...meta,
+          uploadDate: new Date(meta.uploadDate) // Ensure Date object
+        }))
+        console.log(`✅ [HopeAI] Resolved ${resolvedSessionFiles.length} files from client metadata`)
+      } catch (e) {
+        console.error('❌ [HopeAI] Error parsing client file metadata:', e)
+        // Fall through to other resolution methods
+      }
+    }
 
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
       // Fallback: use file IDs sent from the client (reliable across serverless invocations)

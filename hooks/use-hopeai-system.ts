@@ -510,6 +510,27 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
 
+      // 📁 Obtener metadata completa de archivos desde IndexedDB para bypass de serverless storage
+      let fileMetadata: any[] | undefined = undefined
+      if (attachedFiles && attachedFiles.length > 0) {
+        try {
+          fileMetadata = attachedFiles.map(file => ({
+            id: file.id,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            geminiFileUri: file.geminiFileUri,
+            geminiFileId: file.geminiFileId,
+            status: file.status,
+            uploadDate: file.uploadDate,
+            sessionId: file.sessionId
+          }))
+          console.log('📁 [Client] Passing file metadata to bypass serverless storage:', fileMetadata.map(f => f.name))
+        } catch (e) {
+          console.warn('⚠️ [Client] Could not extract file metadata:', e)
+        }
+      }
+
       // Callback para manejar bullets progresivos
       const handleBulletUpdate = (bullet: ReasoningBullet) => {
         console.log('🎯 Bullet recibido:', bullet.content)
@@ -600,7 +621,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               userId: systemState.userId || 'demo_user',
               suggestedAgent: undefined,
               sessionMeta: sessionMetaToUse,
-              fileReferences: attachedFiles?.map(file => file.id) || []
+              fileReferences: attachedFiles?.map(file => file.id) || [],
+              fileMetadata // Pasar metadata completa de archivos
             },
             {
               onBullet: handleBulletUpdate,
