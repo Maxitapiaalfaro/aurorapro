@@ -549,6 +549,14 @@ export class HopeAISystem {
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
+    // 📁 DEBUG: Log fallback chain parameters
+    console.log(`📁 [HopeAI] File resolution fallback chain:`, {
+      sessionFiles: sessionFiles?.length || 0,
+      clientFileReferences: clientFileReferences?.length || 0,
+      clientFileReferencesIds: clientFileReferences || [],
+      historyMessagesWithFiles: currentState?.history?.filter((m: any) => m.fileReferences?.length > 0).length || 0
+    })
+
     // Fallback chain for resolving session files:
     // 1. getPendingFilesForSession (server storage)
     // 2. Client-provided fileReferences (survives serverless cold starts)
@@ -557,8 +565,13 @@ export class HopeAISystem {
 
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
       // Fallback: use file IDs sent from the client (reliable across serverless invocations)
+      console.log(`📁 [HopeAI] Attempting to resolve client file references...`, clientFileReferences)
       try {
         let clientFiles = await this.getFilesByIds(clientFileReferences)
+        console.log(`📁 [HopeAI] getFilesByIds returned:`, {
+          count: clientFiles?.length || 0,
+          files: clientFiles?.map((f: any) => ({ id: f.id, name: f.name })) || []
+        })
         if (clientFiles && clientFiles.length > 0) {
           try {
             const { clinicalFileManager } = await import('./clinical-file-manager')
@@ -566,6 +579,8 @@ export class HopeAISystem {
           } catch {}
           resolvedSessionFiles = clientFiles
           console.log(`📎 [HopeAI] Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
+        } else {
+          console.warn(`⚠️ [HopeAI] getFilesByIds returned empty array for IDs:`, clientFileReferences)
         }
       } catch (e) {
         console.warn('⚠️ [HopeAI] Could not resolve client file references:', e)
@@ -1516,15 +1531,28 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
    */
   async getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> {
     if (!this._initialized) await this.initialize()
-    
+
+    console.log(`📁 [HopeAI.getFilesByIds] Called with IDs:`, fileIds)
+
     try {
       const files: ClinicalFile[] = []
       for (const fileId of fileIds) {
         const file = await this.storage.getClinicalFileById(fileId)
+        console.log(`📁 [HopeAI.getFilesByIds] File ${fileId}:`, {
+          found: !!file,
+          status: file?.status,
+          name: file?.name,
+          willInclude: !!(file && file.status === 'processed')
+        })
         if (file && file.status === 'processed') {
           files.push(file)
+        } else if (file && file.status !== 'processed') {
+          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} (${file.name}) has status "${file.status}", not "processed" - skipping`)
+        } else {
+          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} not found in storage`)
         }
       }
+      console.log(`📁 [HopeAI.getFilesByIds] Returning ${files.length} files out of ${fileIds.length} requested`)
       return files
     } catch (error) {
       console.error(`❌ Error getting files by IDs:`, error)

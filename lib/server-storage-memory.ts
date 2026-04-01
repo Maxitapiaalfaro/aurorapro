@@ -172,7 +172,15 @@ export class MemoryServerStorage {
 
   async getClinicalFileById(fileId: string): Promise<ClinicalFile | null> {
     if (!this.initialized) throw new Error('Storage not initialized')
-    return this.clinicalFiles.get(fileId) || null
+    const file = this.clinicalFiles.get(fileId)
+    console.log(`📁 [MemoryStorage.getClinicalFileById] Lookup for ${fileId}:`, {
+      found: !!file,
+      status: file?.status,
+      name: file?.name,
+      totalFilesInStorage: this.clinicalFiles.size,
+      allFileIds: Array.from(this.clinicalFiles.keys())
+    })
+    return file || null
   }
 
   async deleteClinicalFile(fileId: string): Promise<void> {
