@@ -49,6 +49,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const [mobileNavInitialTab, setMobileNavInitialTab] = useState<'conversations' | 'patients'>('conversations')
 
   const [pendingFiles, setPendingFiles] = useState<ClinicalFile[]>([])
+  // 📁 Accumulator: Track ALL files uploaded during this session so they persist across messages.
+  // pendingFiles is cleared after each send; sessionUploadedFiles retains them for fileMetadata.
+  const [sessionUploadedFiles, setSessionUploadedFiles] = useState<ClinicalFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [isFichaOpen, setIsFichaOpen] = useState(false)
   const [isDebugCardVisible, setIsDebugCardVisible] = useState(true)
@@ -256,17 +259,29 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           // CRITICAL: Capturar archivos antes de envío para mostrar inmediatamente en historial
           const attachedFilesForMessage = [...pendingFiles]
 
+          // 📁 Merge current pending files with ALL previously uploaded session files
+          // This ensures files from previous messages are available for the conversation
+          const allSessionFilesMap = new Map<string, ClinicalFile>()
+          for (const f of sessionUploadedFiles) {
+            allSessionFilesMap.set(f.id, f)
+          }
+          for (const f of attachedFilesForMessage) {
+            allSessionFilesMap.set(f.id, f) // Current files override if duplicate
+          }
+          const allSessionFiles = Array.from(allSessionFilesMap.values())
+
           console.log('📁 [MainInterface.handleSendMessage] pendingFiles state:', {
             count: pendingFiles.length,
             files: pendingFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
           })
-          console.log('📁 [MainInterface.handleSendMessage] attachedFilesForMessage:', {
-            count: attachedFilesForMessage.length,
-            files: attachedFilesForMessage.map(f => ({ id: f.id, name: f.name, status: f.status }))
+          console.log('📁 [MainInterface.handleSendMessage] allSessionFiles (pending + history):', {
+            count: allSessionFiles.length,
+            files: allSessionFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
           })
 
           // CRÍTICO: Pasar el sessionMeta para que el backend pueda cargar la ficha clínica del paciente
-          const response = await sendMessage(message, useStreaming, attachedFilesForMessage, systemState.sessionMeta)
+          // Pass ALL session files so previous message files are not lost
+          const response = await sendMessage(message, useStreaming, allSessionFiles, systemState.sessionMeta)
           
           // Limpiar archivos pendientes después del envío exitoso
           setPendingFiles([])
@@ -336,6 +351,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       
       // Limpiar archivos pendientes
       setPendingFiles([])
+      setSessionUploadedFiles([])
       
       // CRÍTICO: Resetear sistema para limpiar sesión anterior
       // Esto asegura que no haya sesión activa hasta que se envíe el primer mensaje
@@ -457,6 +473,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         return newFiles
       })
 
+      // 📁 Also accumulate in session-level file tracker (survives pendingFiles clear after send)
+      setSessionUploadedFiles(prev => {
+        // Avoid duplicates by ID
+        if (prev.some(f => f.id === uploadedFile.id)) return prev
+        return [...prev, uploadedFile]
+      })
+
       // Si el archivo aún está procesando, iniciar polling para verificar estado
       if (uploadedFile.status !== 'processed') {
         pollFileStatus(uploadedFile.id, uploadedFile.geminiFileId)
@@ -556,6 +579,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const handleConversationSelect = async (sessionId: string) => {
     try {
       console.log('🔄 Cargando conversación desde historial:', sessionId)
+      // Clear file state when switching sessions
+      setPendingFiles([])
+      setSessionUploadedFiles([])
       const success = await loadSession(sessionId)
       if (success) {
         console.log('✅ Conversación cargada exitosamente')
@@ -786,6 +812,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           onNewChat={() => {
             // Reset local pending UI state and HopeAI system
             setPendingFiles([])
+            setSessionUploadedFiles([])
             // Clear HopeAI state so ChatInterface shows welcome and first send lazily creates a session
             resetSystem()
           }}
@@ -818,6 +845,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             clearPatientSelectionTrigger={clearPatientSelectionTrigger}
             onNewChat={() => {
               setPendingFiles([])
+              setSessionUploadedFiles([])
               resetSystem()
             }}
             initialTab={mobileNavInitialTab}

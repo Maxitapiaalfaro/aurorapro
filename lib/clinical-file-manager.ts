@@ -194,18 +194,43 @@ export class ClinicalFileManager {
 
   isValidClinicalFile(file: File): boolean {
     const allowedTypes = [
+      // Documents
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "application/rtf",
+      // Text
       "text/plain",
       "text/markdown",
+      "text/html",
+      "text/csv",
+      "text/xml",
+      "application/xml",
+      "application/json",
+      // Images
       "image/jpeg",
       "image/png",
       "image/gif",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+      // Audio
+      "audio/mpeg",
+      "audio/wav",
+      "audio/flac",
+      "audio/ogg",
+      "audio/mp4",
+      // Video
+      "video/mp4",
+      "video/quicktime",
+      "video/webm",
     ]
 
-    const maxSize = 10 * 1024 * 1024 // 10MB
+    const maxSize = 20 * 1024 * 1024 // 20MB (increased for audio/video)
 
     return allowedTypes.includes(file.type) && file.size <= maxSize
   }

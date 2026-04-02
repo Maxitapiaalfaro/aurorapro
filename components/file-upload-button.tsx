@@ -82,7 +82,7 @@ export function FileUploadButton({
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.html,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.mp3,.wav,.flac,.ogg,.mp4,.mov,.webm"
         onChange={handleFileSelect}
         className="hidden"
         disabled={disabled || isUploading}

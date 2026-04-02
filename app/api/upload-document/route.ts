@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Early validation: type and size
     const fileManager = new ClinicalFileManager()
     if (!fileManager.isValidClinicalFile(file)) {
-      const maxSizeMB = 10
+      const maxSizeMB = 20
       return NextResponse.json(
         {
           error: 'Tipo de archivo o tamaño inválido',
@@ -34,12 +34,32 @@ export async function POST(request: NextRequest) {
               'application/pdf',
               'application/msword',
               'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.ms-excel',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/vnd.ms-powerpoint',
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',
               'application/rtf',
               'text/plain',
               'text/markdown',
+              'text/html',
+              'text/csv',
+              'text/xml',
+              'application/xml',
+              'application/json',
               'image/jpeg',
               'image/png',
               'image/gif',
+              'image/webp',
+              'image/heic',
+              'image/heif',
+              'audio/mpeg',
+              'audio/wav',
+              'audio/flac',
+              'audio/ogg',
+              'audio/mp4',
+              'video/mp4',
+              'video/quicktime',
+              'video/webm',
             ],
             maxSizeMB,
             received: { mimeType: file.type, sizeBytes: file.size },
