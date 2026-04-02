@@ -434,11 +434,11 @@ Eres una supervisora clínica experta conversando con un colega.
       config: {
         ...clinicalModelConfig,
         model: "gemini-3-flash-preview", // Pro model for Socratic supervision
-        temperature: 0.5,
+        temperature: 1.0,
         topP: 0.95,
         topK: 40,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para análisis reflexivo
+          thinkingLevel: 'high' // @google/genai: nivel de razonamiento alto para análisis reflexivo
         },
       },
     })
@@ -846,11 +846,11 @@ Usa tablas Markdown cuando documentes información que requiera comparación o e
       config: {
         ...clinicalModelConfig,
         model: "gemini-3-flash-preview", // Pro model for Clinical documentation
-        temperature: 0.1,
+        temperature: 1.0,
         topP: 1.0,
         topK: 1,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para documentación
+          thinkingLevel: 'high' // @google/genai: nivel de razonamiento medio para documentación
         },
       },
     })
@@ -1429,11 +1429,11 @@ Basado en esta evidencia, opciones razonadas:
       config: {
         ...clinicalModelConfig,
         model: "gemini-3-flash-preview", // Pro model for Academic research
-        temperature: 0.5,
+        temperature: 1.0,
         topP: 0.9,
         topK: 20,
         thinkingConfig: {
-          thinkingLevel: 'MEDIUM' // @google/genai: nivel de razonamiento medio para análisis de evidencia
+          thinkingLevel: 'high' // @google/genai: nivel de razonamiento medio para análisis de evidencia
         },
       },
     })
