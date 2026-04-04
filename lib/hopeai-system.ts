@@ -955,7 +955,9 @@ export class HopeAISystem {
           sessionId, 
           confirmationPrompt, 
           useStreaming, // Usar streaming también para confirmaciones
-          confirmationContext
+          confirmationContext,
+          undefined,  // interactionId
+          currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
         )
 
         // Manejar respuesta según si es streaming o no
@@ -1123,7 +1125,8 @@ export class HopeAISystem {
         message,
         useStreaming,
         enrichedAgentContext,
-        interactionId  // 📊 Pass interaction ID for metrics tracking
+        interactionId,  // 📊 Pass interaction ID for metrics tracking
+        currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
 
       // Save state with user message immediately (for both streaming and non-streaming)

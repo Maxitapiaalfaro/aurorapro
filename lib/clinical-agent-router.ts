@@ -6,6 +6,9 @@ import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { academicSourceValidator } from "./academic-source-validator"
 import { crossrefDOIResolver } from "./crossref-doi-resolver"
 import { vertexLinkConverter } from "./vertex-link-converter"
+// P0.1: Tool permission engine — pre-execution security validation
+import { checkToolPermission } from "./security/tool-permissions"
+import { ToolRegistry } from "./tool-registry"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
 
@@ -1600,7 +1603,8 @@ Basado en esta evidencia, opciones razonadas:
   message: string,
   useStreaming = true,
   enrichedContext?: any,
-  interactionId?: string  // 📊 Add interaction ID for metrics tracking
+  interactionId?: string,  // 📊 Add interaction ID for metrics tracking
+  psychologistId?: string  // 🔒 P0.1: Identity for tool permission checks
 ): Promise<any> {
     const sessionData = this.activeChatSessions.get(sessionId)
     if (!sessionData) {
@@ -2146,6 +2150,31 @@ Basado en esta evidencia, opciones razonadas:
           // Execute all function calls in parallel
           const functionResponses = await Promise.all(
             functionCalls.map(async (call: any) => {
+              // 🔒 P0.1: Pre-execution permission check for ALL tool calls
+              const toolRegistry = ToolRegistry.getInstance();
+              const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+              const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // fail-closed: unknown tools treated as external
+              const permissionResult = checkToolPermission(
+                call.name,
+                securityCategory,
+                call.args || {},
+                { psychologistId: psychologistId ?? null, sessionId }
+              );
+
+              if (permissionResult.decision === 'deny') {
+                console.warn(`🔒 [Security] Tool execution DENIED: ${call.name} — ${permissionResult.reason}`);
+                return {
+                  name: call.name,
+                  response: {
+                    error: "Execution denied for security reasons",
+                    reason: permissionResult.reason,
+                    security_category: securityCategory,
+                  },
+                };
+              }
+
+              console.log(`✅ [Security] Tool execution ALLOWED: ${call.name} (${securityCategory})`);
+
               if (call.name === "google_search") {
                 console.log(`[ClinicalRouter] Executing Google Search:`, call.args)
                 // Native GoogleSearch is handled automatically by the SDK
@@ -2682,7 +2711,7 @@ Como especialista en evidencia científica, puedes utilizar este material para i
 
 
 
-  private async handleNonStreamingWithTools(result: any, sessionId: string): Promise<any> {
+  private async handleNonStreamingWithTools(result: any, sessionId: string, psychologistId?: string): Promise<any> {
     const functionCalls = result.functionCalls
     let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
 
@@ -2690,6 +2719,31 @@ Como especialista en evidencia científica, puedes utilizar este material para i
       // Execute function calls
       const functionResponses = await Promise.all(
         functionCalls.map(async (call: any) => {
+          // 🔒 P0.1: Pre-execution permission check for ALL tool calls
+          const toolRegistry = ToolRegistry.getInstance();
+          const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+          const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // fail-closed
+          const permissionResult = checkToolPermission(
+            call.name,
+            securityCategory,
+            call.args || {},
+            { psychologistId: psychologistId ?? null, sessionId }
+          );
+
+          if (permissionResult.decision === 'deny') {
+            console.warn(`🔒 [Security] Tool execution DENIED (non-streaming): ${call.name} — ${permissionResult.reason}`);
+            return {
+              name: call.name,
+              response: {
+                error: "Execution denied for security reasons",
+                reason: permissionResult.reason,
+                security_category: securityCategory,
+              },
+            };
+          }
+
+          console.log(`✅ [Security] Tool execution ALLOWED (non-streaming): ${call.name} (${securityCategory})`);
+
           if (call.name === "google_search") {
             console.log(`[ClinicalRouter] Executing Google Search (non-streaming):`, call.args)
             // Native GoogleSearch is handled automatically by the SDK
