@@ -2,7 +2,7 @@
 
 > **Documento de diseño de arquitectura — Data Layer Architecture**
 > Fecha: 2026-04-04
-> Versión: 1.0
+> Versión: 1.1 — Corrección de estrategia de cifrado §3.4 (elimina cifrado client-side de ChatMessage.content)
 > Basado en: Análisis del código fuente actual de Aurora y patrones de referencia de Claude Code (`docs/architecture/claude/claude-code-main`).
 
 ---
@@ -297,25 +297,104 @@ useEffect(() => {
 
 ### 3.4 Cifrado de Campos Sensibles
 
-Firestore cifra datos en tránsito (TLS) y en reposo (Google-managed keys) por defecto. Sin embargo, para cumplimiento HIPAA estricto, se recomienda **cifrar campos clínicos sensibles** antes de escribir:
+> **⚠️ Decisión Arquitectónica Crítica — No cifrar en el cliente**
+>
+> Una versión anterior de este documento proponía cifrar `ChatMessage.content` en el
+> browser (Web Crypto API) antes de escribirlo a Firestore. Esto introduce un defecto
+> de flujo grave: el servidor (Next.js API Routes) necesita leer el historial en
+> **texto claro** para construir el payload que se envía a Gemini
+> (ver `lib/clinical-agent-router.ts` → `convertHistoryToGeminiFormat()` y
+> `lib/hopeai-system.ts` → `sendMessage()`). Si el contenido se cifra en el cliente
+> con una clave que el servidor desconoce, los agentes recibirán strings
+> criptográficos ininteligibles en lugar del texto terapéutico, rompiendo por completo
+> la generación de respuestas.
 
-**Campos a cifrar (client-side, antes de `addDoc`):**
-- `ChatMessage.content` (contenido de la conversación terapéutica)
-- `PatientRecord.notes` (notas del clínico)
-- `FichaClinica.content` (contenido de la ficha clínica)
+#### 3.4.1 Estrategia de Cifrado para Fase 1
 
-**Campos que NO se cifran (necesarios para queries):**
-- `timestamp`, `sessionId`, `patientId` (índices de consulta)
-- `role`, `agent`, `status` (campos de filtrado)
-- `metadata` de tokens/costos (no contienen PHI)
+En Fase 1, la protección de datos PHI (Protected Health Information) se delega a las
+capas nativas de Google Cloud y a los controles de acceso de la aplicación:
 
-**Reutilizar `encryption-utils.ts`** adaptado para el cliente:
-```typescript
-// Adaptar encrypt/decrypt para funcionar en el browser usando Web Crypto API
-// en lugar de Node.js crypto (que usa actualmente)
+| Capa de protección | Mecanismo | Responsable |
+|--------------------|-----------|-------------|
+| **Cifrado en reposo** | Google-managed encryption keys (AES-256) aplicado automáticamente a todos los documentos Firestore | Google Cloud (transparente) |
+| **Cifrado en tránsito** | TLS 1.2+ para todas las conexiones entre cliente ↔ Firestore y servidor ↔ Firestore | Google Cloud (transparente) |
+| **Aislamiento multi-tenant** | Security Rules: `request.auth.uid == psychologistId` (ver §2.5) | Firebase Auth + Firestore Rules |
+| **Verificación de identidad server-side** | `firebase-admin` verifica el ID Token en cada API route (ver §5.4) | `app/api/send-message/route.ts` |
+| **HIPAA BAA** | Business Associate Agreement firmado a nivel de proyecto GCP | Configuración administrativa |
+
+**¿Por qué esto es suficiente para Fase 1?**
+
+1. **Google Cloud soporta HIPAA compliance** con la configuración adecuada del proyecto
+   GCP (activar BAA, seleccionar región de datos, habilitar audit logging). Firestore
+   está incluido en los servicios cubiertos por el BAA de Google Cloud.
+2. **Las Security Rules impiden acceso cruzado:** ningún psicólogo puede leer datos de
+   otro gracias a la regla recursiva `{document=**}` anclada a `psychologistId`.
+3. **El servidor solo accede vía Admin SDK**, que bypasses Security Rules pero se ejecuta
+   en un entorno controlado (Vercel/Cloud Run) con credenciales de servicio.
+
+#### 3.4.2 Datos que NO contienen PHI (sin cifrado adicional necesario)
+
+- `timestamp`, `sessionId`, `patientId` — índices de consulta
+- `role`, `agent`, `status` — campos de filtrado
+- `metadata` de tokens/costos — métricas operativas
+
+#### 3.4.3 Cifrado Adicional Selectivo del Lado del Servidor (Fase 2 — Defense-in-Depth)
+
+Para una capa extra de defensa en profundidad en fases posteriores, se puede implementar
+**cifrado del lado del servidor** utilizando el módulo existente `lib/encryption-utils.ts`
+(AES-256-GCM, server-only, Node.js `crypto`). El cifrado se aplicaría **solo a datos
+en reposo que el servidor no necesita consultar frecuentemente**:
+
+**Candidatos para cifrado server-side (Fase 2):**
+- `FichaClinica.content` — las fichas clínicas se escriben y leen infrecuentemente
+- `PatientRecord.notes` — notas del clínico, acceso bajo demanda
+- `SessionSummary.content` — resúmenes generados al cierre de sesión
+
+**Campos que NO deben cifrarse con clave propia (ni en Fase 2):**
+- `ChatMessage.content` — el servidor necesita texto claro para construir el contexto
+  de Gemini en cada turno de conversación (ver flujo en §4.3 y la función
+  `loadPatientContext()`). Cifrar este campo requeriría un decrypt en cada request,
+  agregando latencia y complejidad sin beneficio real dado que Google ya cifra en reposo.
+
+**Flujo de cifrado server-side (Fase 2):**
+
+```
+Psicólogo cierra sesión → Trigger server-side
+  ↓
+POST /api/finalize-session/route.ts
+  ↓
+1. Generar SessionSummary con Gemini (texto claro en RAM)
+2. encrypt(summary.content) usando lib/encryption-utils.ts  ← AES-256-GCM
+3. Escribir campo cifrado a Firestore: sessions/{sid}.encryptedSummary
+4. El campo summary.content permanece en claro para uso de agentes,
+   o se elimina y se reemplaza por la versión cifrada si no se necesita
+   en queries de contexto.
+  ↓
+Lectura posterior:
+  ↓
+Admin SDK lee documento → decrypt() en servidor → texto claro disponible
+  ↓
+Nunca se envía texto claro al cliente; el cliente solo ve el resumen
+renderizado por el servidor o un indicador de que existe.
 ```
 
-**Nota:** Para un BAA (Business Associate Agreement) con Google Cloud, Firestore soporta HIPAA compliance con la configuración adecuada del proyecto GCP. El cifrado adicional de campos es una capa extra de protección (defense-in-depth).
+**Nota:** `lib/encryption-utils.ts` ya está marcado como `⚠️ SERVER-ONLY MODULE`
+(línea 4) y usa `Node.js crypto` (línea 19: `import { createCipheriv, ... } from 'crypto'`).
+No es necesario portarlo a Web Crypto API. El módulo se mantiene sin cambios
+para su uso server-side exclusivamente.
+
+#### 3.4.4 CMEK (Customer-Managed Encryption Keys) — Fase 3+
+
+Para clientes enterprise que requieran control total de las claves de cifrado,
+Google Cloud ofrece **CMEK** (Customer-Managed Encryption Keys) a través de
+Cloud KMS. Con CMEK:
+- Las claves de cifrado en reposo de Firestore son gestionadas por el cliente en
+  Cloud KMS, no por Google.
+- Es posible revocar el acceso a los datos destruyendo la clave.
+- Compatible con requisitos regulatorios estrictos (HIPAA, SOC 2, ISO 27001).
+
+Esta opción es transparente para la aplicación (no requiere cambios de código)
+y se configura a nivel de proyecto GCP.
 
 ### 3.5 Multi-Tab Sync
 
@@ -697,7 +776,7 @@ Claude Code usa un sistema de identidad diferente (OAuth con API keys) pero el p
 | `lib/clinical-context-storage.ts` | Reemplazado por Firestore persistence nativa |
 | `lib/patient-persistence.ts` | Reemplazado por subcolección Firestore |
 | `lib/client-context-persistence.ts` | Reemplazado por cache Firestore |
-| `lib/hipaa-compliant-storage.ts` | Reemplazado por Firestore + Security Rules + campo encryption |
+| `lib/hipaa-compliant-storage.ts` | Reemplazado por Firestore (cifrado en reposo nativo de Google) + Security Rules + cifrado server-side selectivo en Fase 2 (ver §3.4) |
 | `lib/server-storage-adapter.ts` | Reemplazado por `firestore-storage-adapter.ts` |
 | `@supabase/supabase-js` | Nunca se integró |
 
@@ -705,7 +784,7 @@ Claude Code usa un sistema de identidad diferente (OAuth con API keys) pero el p
 
 | Archivo | Razón |
 |---------|-------|
-| `lib/encryption-utils.ts` | Adaptado para Web Crypto API; cifra campos sensibles antes de Firestore |
+| `lib/encryption-utils.ts` | Se mantiene **sin cambios** como módulo server-only; se usará en Fase 2 para cifrado selectivo de campos infrecuentes (fichas clínicas, notas) vía Admin SDK. **No se porta a Web Crypto API** (ver §3.4) |
 | `types/clinical-types.ts` | Los tipos se mantienen, se extienden con campos Firestore |
 | `lib/hopeai-system.ts` | Se modifica para usar `psychologistId` verificado en lugar de `userId: 'demo_user'` |
 | `lib/clinical-agent-router.ts` | Se modifica para recibir `psychologistId` y construir paths Firestore |
