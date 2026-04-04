@@ -511,4 +511,84 @@ Para comprender el proyecto de forma progresiva, se sugiere leer en este orden:
 | # | Archivo | Por qué leerlo |
 |---|---|---|
 | 16 | `src/coordinator/coordinatorMode.ts` | Orquestación multiagente |
-| 17 | `src/tools/TeamCreateTool/` | Gestión de equipos de
+| 17 | `src/tools/TeamCreateTool/` | Gestión de equipos de agentes |
+| 18 | `src/tools/SendMessageTool/` | Comunicación inter-agente |
+| 19 | `src/tools/TaskCreateTool/` | Gestión de tareas entre agentes |
+| 20 | `src/services/mcp/client.ts` | Protocolo de extensibilidad |
+
+### Fase 5: Memoria y persistencia (2-3 horas)
+
+| # | Archivo | Por qué leerlo |
+|---|---|---|
+| 21 | `src/memdir/memdir.ts` | Sistema de memoria persistente |
+| 22 | `src/memdir/findRelevantMemories.ts` | Búsqueda de memorias relevantes |
+| 23 | `src/services/extractMemories/` | Extracción automática de memorias |
+| 24 | `src/services/compact/` | Compresión de contexto |
+| 25 | `src/history.ts` | Historial de sesiones |
+
+---
+
+## 6. Resumen de patrones aplicables a Aurora
+
+| Patrón de Claude Code | Aplicación en Aurora |
+|---|---|
+| **Herramientas auto-contenidas** (`buildTool()`) | Evaluaciones psicológicas, protocolos terapéuticos, formularios clínicos como herramientas modulares |
+| **Motor de consultas streaming** (`AsyncGenerator`) | Respuestas en tiempo real durante sesiones de supervisión clínica |
+| **Permisos multicapa** (hook/clasificador/usuario) | Control de acceso a datos de pacientes, protocolos de confidencialidad |
+| **Coordinador-trabajadores** | Agente coordinador que asigna a especialistas (evaluación, diagnóstico, plan de tratamiento) |
+| **Memoria persistente** (`MEMORY.md`) | Perfil de paciente, notas de sesión, historial terapéutico |
+| **Extracción automática de memorias** | Insights automáticos de cada sesión clínica |
+| **Contexto memoizado** | Historial del paciente cargado una sola vez por sesión |
+| **Registro dinámico de comandos** | Protocolos clínicos configurables por consultorio/especialidad |
+| **MCP (extensibilidad)** | Conexión con sistemas de historia clínica electrónica, bases de evaluaciones |
+| **Feature flags** | Funciones experimentales habilitables por clínica/profesional |
+| **Store inmutable** | Estado de sesión clínica predecible y trazable |
+| **Precarga paralela** | Carga de datos del paciente durante el arranque |
+
+---
+
+## 7. Glosario técnico
+
+| Término | Definición |
+|---|---|
+| **Tool** | Herramienta ejecutable por el LLM (buscar archivos, editar código, ejecutar comandos) |
+| **Command** | Comando slash (`/commit`, `/review`) ejecutado por el usuario |
+| **QueryEngine** | Motor que orquesta la interacción con el LLM de Anthropic |
+| **MCP** | Model Context Protocol — protocolo abierto para conectar herramientas externas a LLMs |
+| **LSP** | Language Server Protocol — protocolo para integración con editores de código |
+| **Ink** | Librería que permite usar React para renderizar interfaces en la terminal |
+| **Bun** | Runtime moderno de JavaScript/TypeScript, alternativa a Node.js |
+| **Zod** | Librería de validación de esquemas para TypeScript |
+| **Feature Flag** | Bandera que habilita/deshabilita funciones sin cambiar código |
+| **AsyncGenerator** | Función generadora asíncrona que produce valores bajo demanda (streaming) |
+| **DeepImmutable** | Tipo que hace todas las propiedades de un objeto de solo lectura recursivamente |
+| **Memoize** | Técnica de caché que almacena el resultado de una función para evitar recálculos |
+| **Store** | Almacén centralizado de estado con patrón de suscripción |
+| **Coordinator** | Agente principal que coordina a trabajadores en modo multiagente |
+| **Worker** | Agente trabajador que ejecuta tareas asignadas por el coordinador |
+
+---
+
+## 8. Preguntas frecuentes
+
+### ¿Por dónde empiezo?
+Lee `README.md` y luego `src/main.tsx` para entender el punto de entrada. Después sigue el orden de lectura de la Fase 1 (sección 5).
+
+### ¿Cuál es el archivo más importante?
+`src/QueryEngine.ts` — es el motor central que conecta la entrada del usuario con el LLM y las herramientas. Todo pasa por aquí.
+
+### ¿Cómo se agregan nuevas herramientas?
+Se crea un directorio en `src/tools/NuevoTool/` con un archivo que exporta `buildTool({...})`. La herramienta se registra en `src/tools.ts`.
+
+### ¿Cómo funciona la comunicación entre agentes?
+El coordinador (`src/coordinator/`) crea trabajadores via `AgentTool`, les asigna tareas con `TaskCreateTool`, y recibe mensajes con `SendMessageTool`.
+
+### ¿Cómo se manejan los permisos?
+Cada invocación de herramienta pasa por `canUseTool()` → hooks de permiso → clasificador → confirmación del usuario. Las decisiones pueden persistirse para futuras invocaciones.
+
+### ¿Este proyecto usa tests?
+El código fuente leakeado no incluye infraestructura de tests (no hay archivos de test en `src/`). Sin embargo, la validación de esquemas con Zod y el sistema de permisos proporcionan validación en tiempo de ejecución.
+
+---
+
+> **Nota**: Esta guía se basa en el análisis directo del código fuente. Todos los archivos, patrones, y líneas de código citados son verificables en el directorio `src/` del repositorio.
