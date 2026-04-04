@@ -1,19 +1,21 @@
 /**
- * Tool Orchestrator — P1.2: Concurrency Limits for Function Calls
+ * Tool Orchestrator — P1.2 + P1.3: Concurrency Limits & Input Validation
  *
  * Replaces raw Promise.all() execution with intelligent partitioning based on
  * the SecurityCategory system introduced in P0.1.
  *
- * Strategy (inspired by Claude Code's toolOrchestration.ts):
+ * Strategy (inspired by Claude Code's toolOrchestration.ts + toolExecution.ts):
  * 1. Partition tool calls by security category
  * 2. read-only + external → parallel with concurrency limit (default 3)
  * 3. write → sequential (prevents Firestore race conditions)
  * 4. Per-tool error isolation: one failure doesn't crash the batch
+ * 5. P1.3: Zod safeParse validation before execution (self-healing errors)
  *
- * @version 1.0.0 — P1.2
+ * @version 1.1.0 — P1.2 + P1.3
  */
 
 import type { SecurityCategory } from '../tool-registry';
+import { validateToolInput } from '../tool-input-schemas';
 
 // ============================================================================
 // TYPES
@@ -123,12 +125,35 @@ async function executeSequential(
 }
 
 /**
- * Execute a single tool call with error isolation.
- * If the tool throws, return a structured error response instead of
- * propagating the exception — so other tools in the batch can continue.
+ * Execute a single tool call with input validation and error isolation.
+ *
+ * P1.3: Validates call.args against the tool's Zod schema BEFORE execution.
+ * If validation fails, returns a structured error response that the LLM can
+ * read and use to self-correct — without throwing or crashing the batch.
+ *
+ * If the tool throws at runtime, the error is also caught and returned
+ * as a structured response (P1.2 error isolation).
  */
 async function executeSafely(call: PreparedToolCall): Promise<ToolCallResult> {
   try {
+    // ─── P1.3: Validate input before execution ───
+    const validation = validateToolInput(call.call.name, call.call.args);
+
+    if (!validation.success) {
+      console.warn(
+        `⚠️ [ToolOrchestrator] Input validation failed for "${call.call.name}": ${validation.errorMessage}`
+      );
+      return {
+        name: call.call.name,
+        response: {
+          error: 'Input validation failed',
+          validation_error: validation.errorMessage,
+          field_errors: validation.fieldErrors,
+          tool_name: call.call.name,
+        },
+      };
+    }
+
     return await call.execute();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
