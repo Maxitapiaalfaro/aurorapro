@@ -11,6 +11,8 @@ import { checkToolPermission } from "./security/tool-permissions"
 import { ToolRegistry } from "./tool-registry"
 // P1.1: Reactive context compaction — detect context-exhausted errors and compact history
 import { ContextWindowManager, isContextExhaustedError } from "./context-window-manager"
+// P1.2: Concurrency-limited tool orchestration — replaces raw Promise.all()
+import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "./utils/tool-orchestrator"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
 
@@ -2269,80 +2271,83 @@ Basado en esta evidencia, opciones razonadas:
           // 🎯 Almacenar referencias académicas obtenidas de ParallelAI
           let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
 
-          // Execute all function calls in parallel
-          const functionResponses = await Promise.all(
-            functionCalls.map(async (call: any) => {
-              // 🔒 P0.1: Pre-execution permission check for ALL tool calls
-              const toolRegistry = ToolRegistry.getInstance();
-              const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+          // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
+          const KNOWN_DYNAMIC_TOOLS = new Set([
+            'google_search',
+            'search_academic_literature',
+            'search_evidence_for_reflection',
+            'search_evidence_for_documentation',
+          ]);
 
-              // For tools not in the registry, deny unless they are known SDK-managed
-              // or dynamically-declared tools (e.g. academic search variants).
-              const KNOWN_DYNAMIC_TOOLS = new Set([
-                'google_search',
-                'search_academic_literature',
-                'search_evidence_for_reflection',
-                'search_evidence_for_documentation',
-              ]);
+          const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) => {
+            const toolRegistry = ToolRegistry.getInstance();
+            const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+            const securityCategory = registeredTool?.metadata.securityCategory ?? 'external';
 
-              if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
-                console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED: ${call.name}`);
-                return {
+            // ─── Security pre-check (synchronous, before orchestration) ───
+            // Unregistered + unknown → return a "denied" executor
+            if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
+              console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED: ${call.name}`);
+              return {
+                call,
+                securityCategory,
+                execute: async (): Promise<ToolCallResult> => ({
                   name: call.name,
                   response: {
                     error: "Execution denied for security reasons",
                     reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
                     security_category: 'unknown',
                   },
-                };
-              }
+                }),
+              } as PreparedToolCall;
+            }
 
-              const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // known dynamic tools default to external
-              const permissionResult = checkToolPermission(
-                call.name,
+            const permissionResult = checkToolPermission(
+              call.name,
+              securityCategory,
+              call.args || {},
+              { psychologistId: psychologistId ?? null, sessionId }
+            );
+
+            if (permissionResult.decision === 'deny') {
+              console.warn(`🔒 [Security] Tool execution DENIED: ${call.name} — ${permissionResult.reason}`);
+              return {
+                call,
                 securityCategory,
-                call.args || {},
-                { psychologistId: psychologistId ?? null, sessionId }
-              );
-
-              if (permissionResult.decision === 'deny') {
-                console.warn(`🔒 [Security] Tool execution DENIED: ${call.name} — ${permissionResult.reason}`);
-                return {
+                execute: async (): Promise<ToolCallResult> => ({
                   name: call.name,
                   response: {
                     error: "Execution denied for security reasons",
                     reason: permissionResult.reason,
                     security_category: securityCategory,
                   },
-                };
-              }
+                }),
+              } as PreparedToolCall;
+            }
 
-              console.log(`✅ [Security] Tool execution ALLOWED: ${call.name} (${securityCategory})`);
+            console.log(`✅ [Security] Tool execution ALLOWED: ${call.name} (${securityCategory})`);
 
-              if (call.name === "google_search") {
-                console.log(`[ClinicalRouter] Executing Google Search:`, call.args)
-                // Native GoogleSearch is handled automatically by the SDK
-                // No manual execution needed - the SDK handles search internally
-                return {
-                  name: call.name,
-                  response: "Search completed with automatic processing",
+            // ─── Build the actual executor function ───
+            return {
+              call,
+              securityCategory,
+              execute: async (): Promise<ToolCallResult> => {
+                if (call.name === "google_search") {
+                  console.log(`[ClinicalRouter] Executing Google Search:`, call.args)
+                  return {
+                    name: call.name,
+                    response: "Search completed with automatic processing",
+                  }
                 }
-              }
 
-              if (call.name === "search_academic_literature" ||
-                  call.name === "search_evidence_for_reflection" ||
-                  call.name === "search_evidence_for_documentation") {
-                console.log(`🔍 [ClinicalRouter] Executing Academic Search (${call.name}):`, call.args)
-                try {
+                if (call.name === "search_academic_literature" ||
+                    call.name === "search_evidence_for_reflection" ||
+                    call.name === "search_evidence_for_documentation") {
+                  console.log(`🔍 [ClinicalRouter] Executing Academic Search (${call.name}):`, call.args)
                   let searchResults: any
 
-                  // Defaults específicos por agente:
-                  // - search_academic_literature (Académico): 10 resultados (búsqueda exhaustiva)
-                  // - search_evidence_for_reflection (Supervisor): 5 resultados (complemento reflexivo)
-                  // - search_evidence_for_documentation (Documentación): 5 resultados (fundamentación)
                   const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
 
-                  // Si estamos en servidor, llamar directamente a la función (evita fetch innecesario)
                   if (typeof window === 'undefined') {
                     try {
                       const { academicMultiSourceSearch } = await import('./academic-multi-source-search');
@@ -2355,7 +2360,6 @@ Basado en esta evidencia, opciones razonadas:
                       })
                     } catch (error) {
                       console.error('❌ Error importing academicMultiSourceSearch:', error);
-                      // Fallback to API call
                       const response = await fetch('/api/academic-search', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2369,7 +2373,6 @@ Basado en esta evidencia, opciones razonadas:
                       }
                     }
                   } else {
-                    // Si estamos en cliente (no debería pasar en producción), usar fetch con ruta relativa
                     console.warn('⚠️ [Client] Academic search called from client - using API route')
                     const response = await fetch('/api/academic-search', {
                       method: 'POST',
@@ -2396,7 +2399,7 @@ Basado en esta evidencia, opciones razonadas:
                     fromParallelAI: searchResults.metadata.fromParallelAI
                   })
 
-                  // 🎯 Extraer referencias académicas para emitir al final
+                  // 🎯 Side-effect: capture academic references for UI emission
                   academicReferences = searchResults.sources.map((source: any) => ({
                     title: source.title,
                     url: source.url,
@@ -2407,10 +2410,9 @@ Basado en esta evidencia, opciones razonadas:
                   }))
                   console.log(`📚 [ClinicalRouter] Stored ${academicReferences.length} academic references from ParallelAI`)
 
-                  // Formatear resultados para el agente
                   const formattedResults = {
                     total_found: searchResults.metadata.totalFound,
-                    validated_count: searchResults.sources.length, // 🎯 Fuentes que pasaron validación
+                    validated_count: searchResults.sources.length,
                     sources: searchResults.sources.map((source: any) => ({
                       title: source.title,
                       authors: source.authors?.join(', ') || 'Unknown',
@@ -2428,22 +2430,16 @@ Basado en esta evidencia, opciones razonadas:
                     name: call.name,
                     response: formattedResults
                   }
-                } catch (error) {
-                  console.error('❌ [ClinicalRouter] Error in academic search:', error)
-                  return {
-                    name: call.name,
-                    response: {
-                      error: "No se pudo completar la búsqueda académica. Por favor, intenta reformular tu pregunta.",
-                      total_found: 0,
-                      sources: []
-                    }
-                  }
                 }
-              }
 
-              return null
-            })
-          )
+                // Unknown tool that passed security — return null-like
+                return { name: call.name, response: null }
+              },
+            } as PreparedToolCall;
+          });
+
+          // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
+          const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
 
           // Filter out null responses
           const validResponses = functionResponses.filter(response => response !== null)
@@ -2860,72 +2856,76 @@ Como especialista en evidencia científica, puedes utilizar este material para i
     let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
 
     if (functionCalls && functionCalls.length > 0) {
-      // Execute function calls
-      const functionResponses = await Promise.all(
-        functionCalls.map(async (call: any) => {
-          // 🔒 P0.1: Pre-execution permission check for ALL tool calls
-          const toolRegistry = ToolRegistry.getInstance();
-          const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+      // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
+      const KNOWN_DYNAMIC_TOOLS = new Set([
+        'google_search',
+        'search_academic_literature',
+        'search_evidence_for_reflection',
+        'search_evidence_for_documentation',
+      ]);
 
-          // For tools not in the registry, deny unless they are known SDK-managed
-          // or dynamically-declared tools (e.g. academic search variants).
-          const KNOWN_DYNAMIC_TOOLS = new Set([
-            'google_search',
-            'search_academic_literature',
-            'search_evidence_for_reflection',
-            'search_evidence_for_documentation',
-          ]);
+      const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) => {
+        const toolRegistry = ToolRegistry.getInstance();
+        const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+        const securityCategory = registeredTool?.metadata.securityCategory ?? 'external';
 
-          if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
-            console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED (non-streaming): ${call.name}`);
-            return {
+        if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
+          console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED (non-streaming): ${call.name}`);
+          return {
+            call,
+            securityCategory,
+            execute: async (): Promise<ToolCallResult> => ({
               name: call.name,
               response: {
                 error: "Execution denied for security reasons",
                 reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
                 security_category: 'unknown',
               },
-            };
-          }
+            }),
+          } as PreparedToolCall;
+        }
 
-          const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // known dynamic tools default to external
-          const permissionResult = checkToolPermission(
-            call.name,
+        const permissionResult = checkToolPermission(
+          call.name,
+          securityCategory,
+          call.args || {},
+          { psychologistId: psychologistId ?? null, sessionId }
+        );
+
+        if (permissionResult.decision === 'deny') {
+          console.warn(`🔒 [Security] Tool execution DENIED (non-streaming): ${call.name} — ${permissionResult.reason}`);
+          return {
+            call,
             securityCategory,
-            call.args || {},
-            { psychologistId: psychologistId ?? null, sessionId }
-          );
-
-          if (permissionResult.decision === 'deny') {
-            console.warn(`🔒 [Security] Tool execution DENIED (non-streaming): ${call.name} — ${permissionResult.reason}`);
-            return {
+            execute: async (): Promise<ToolCallResult> => ({
               name: call.name,
               response: {
                 error: "Execution denied for security reasons",
                 reason: permissionResult.reason,
                 security_category: securityCategory,
               },
-            };
-          }
+            }),
+          } as PreparedToolCall;
+        }
 
-          console.log(`✅ [Security] Tool execution ALLOWED (non-streaming): ${call.name} (${securityCategory})`);
+        console.log(`✅ [Security] Tool execution ALLOWED (non-streaming): ${call.name} (${securityCategory})`);
 
-          if (call.name === "google_search") {
-            console.log(`[ClinicalRouter] Executing Google Search (non-streaming):`, call.args)
-            // Native GoogleSearch is handled automatically by the SDK
-            // No manual execution needed - the SDK handles search internally
-            return {
-              name: call.name,
-              response: "Search completed with automatic processing",
+        return {
+          call,
+          securityCategory,
+          execute: async (): Promise<ToolCallResult> => {
+            if (call.name === "google_search") {
+              console.log(`[ClinicalRouter] Executing Google Search (non-streaming):`, call.args)
+              return {
+                name: call.name,
+                response: "Search completed with automatic processing",
+              }
             }
-          }
 
-          // 📚 Capturar referencias académicas de ParallelAI en non-streaming
-          if (call.name === "search_academic_literature" ||
-              call.name === "search_evidence_for_reflection" ||
-              call.name === "search_evidence_for_documentation") {
-            console.log(`🔍 [ClinicalRouter] Academic search in non-streaming mode`)
-            try {
+            if (call.name === "search_academic_literature" ||
+                call.name === "search_evidence_for_reflection" ||
+                call.name === "search_evidence_for_documentation") {
+              console.log(`🔍 [ClinicalRouter] Academic search in non-streaming mode`)
               const { academicMultiSourceSearch } = await import('./academic-multi-source-search');
               const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
               const searchResults = await academicMultiSourceSearch.search({
@@ -2935,7 +2935,6 @@ Como especialista en evidencia científica, puedes utilizar este material para i
                 minTrustScore: 60
               })
 
-              // Extraer referencias
               academicReferences = searchResults.sources.map((source: any) => ({
                 title: source.title,
                 url: source.url,
@@ -2964,22 +2963,15 @@ Como especialista en evidencia científica, puedes utilizar este material para i
                   }))
                 }
               }
-            } catch (error) {
-              console.error('❌ [ClinicalRouter] Error in academic search (non-streaming):', error)
-              return {
-                name: call.name,
-                response: {
-                  error: "No se pudo completar la búsqueda académica.",
-                  total_found: 0,
-                  sources: []
-                }
-              }
             }
-          }
 
-          return null
-        }),
-      )
+            return { name: call.name, response: null }
+          },
+        } as PreparedToolCall;
+      });
+
+      // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
+      const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
 
       // Send function results back to the model
       const sessionData = this.activeChatSessions.get(sessionId)
