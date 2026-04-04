@@ -6,6 +6,7 @@ import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, Rea
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 import { getSSEClient } from '@/lib/sse-client'
 import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
+import { useAuth } from '@/providers/auth-provider'
 
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
 const MAX_HISTORICAL_BULLETS = 15
@@ -72,6 +73,9 @@ interface UseHopeAISystemReturn {
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
+  // Firebase Auth: psychologistId reemplaza al hardcoded 'demo_user'
+  const { psychologistId } = useAuth()
+
   const initialProcessingStatus: MessageProcessingStatus = {
     phase: 'idle',
     startedAt: new Date(),
@@ -82,7 +86,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   const [systemState, setSystemState] = useState<HopeAISystemState>({
     sessionId: null,
-    userId: 'demo_user',
+    userId: psychologistId ?? 'anonymous',
     mode: 'clinical_supervision',
     activeAgent: 'socratico',
     isLoading: false,
@@ -101,6 +105,13 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     },
     processingStatus: initialProcessingStatus
   })
+
+  // Sincronizar userId cuando psychologistId cambia (login/logout)
+  useEffect(() => {
+    if (psychologistId) {
+      setSystemState(prev => ({ ...prev, userId: psychologistId }))
+    }
+  }, [psychologistId])
 
   const hopeAISystem = useRef<HopeAISystem | null>(null)
   const lastSessionIdRef = useRef<string | null>(null)
@@ -376,7 +387,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     let sessionMetaToUse = sessionMeta || systemState.sessionMeta
     
     if (!sessionIdToUse) {
-      const userId = systemState.userId || 'demo_user'
+      const userId = systemState.userId || 'anonymous'
       const mode = systemState.mode || 'clinical_supervision'
       const agent = systemState.activeAgent || 'socratico'
       
@@ -478,7 +489,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         const updatedState: ChatState = {
           ...(existingState || {
             sessionId: sessionIdToUse!,
-            userId: systemState.userId || 'demo_user',
+            userId: systemState.userId || 'anonymous',
             mode: systemState.mode || 'clinical_supervision',
             activeAgent: systemState.activeAgent,
             history: [],
@@ -749,7 +760,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               sessionId: sessionIdToUse!,
               message,
               useStreaming,
-              userId: systemState.userId || 'demo_user',
+              userId: systemState.userId || 'anonymous',
               suggestedAgent: undefined,
               sessionMeta: sessionMetaToUse,
               fileReferences: attachedFiles?.map(file => file.id) || [],
@@ -974,7 +985,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   const resetSystem = useCallback(() => {
     setSystemState({
       sessionId: null,
-      userId: 'demo_user',
+      userId: psychologistId ?? 'anonymous',
       mode: 'clinical_supervision',
       activeAgent: 'socratico',
       isLoading: false,
@@ -994,7 +1005,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       processingStatus: initialProcessingStatus
     })
     lastSessionIdRef.current = null
-  }, [systemState.isInitialized])
+  }, [systemState.isInitialized, psychologistId])
 
   // Agregar respuesta de streaming al historial
   const addStreamingResponseToHistory = useCallback(async (

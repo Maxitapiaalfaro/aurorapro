@@ -7,6 +7,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DisplayPreferencesProvider } from '@/providers/display-preferences-provider'
+import { AuthProvider } from '@/providers/auth-provider'
 import { IBM_Plex_Serif, IBM_Plex_Sans } from 'next/font/google'
 
 // Fuentes académicas profesionales para contexto clínico
@@ -41,16 +42,18 @@ export default function RootLayout({
         <link rel="preconnect" href="/api/send-message" />
       </head>
       <body className={`${ibmPlexSans.variable} ${ibmPlexSans.variable}`}>
-        <DisplayPreferencesProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-          </ThemeProvider>
-        </DisplayPreferencesProvider>
+        <AuthProvider>
+          <DisplayPreferencesProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+            </ThemeProvider>
+          </DisplayPreferencesProvider>
+        </AuthProvider>
       </body>
     </html>
   )
