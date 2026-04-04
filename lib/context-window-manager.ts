@@ -1,16 +1,21 @@
 /**
- * Context Window Manager - Implementación de SlidingWindow
+ * Context Window Manager - Reactive Context Compaction (P1.1)
  * 
- * Gestiona el contexto conversacional utilizando el SlidingWindow interface
- * del Google GenAI SDK para mantener relevancia de los últimos 3-5 intercambios
- * y optimizar la detección de solicitudes contextuales de cambio de agente.
+ * Manages the conversational context window with two strategies:
+ * 1. **Static sliding window** — preventive trimming to maxExchanges (unchanged)
+ * 2. **Reactive compaction** — on RESOURCE_EXHAUSTED / prompt-too-long errors,
+ *    the oldest messages (excluding system prompt & initial patient context)
+ *    are consolidated into a single clinical summary message. The caller then
+ *    recreates the chat session with the compacted history and retries.
  * 
- * @author Arquitecto Principal de Sistemas de IA (A-PSI)
- * @version 1.0.0
+ * Inspired by Claude Code's compactHistoryReactively / isPromptTooLongMessage
+ * pattern (docs/architecture/claude/claude-code-main/src/QueryEngine.ts).
+ * 
+ * @version 2.0.0 — P1.1 Reactive Compaction
  */
 
-import { ContextWindowCompressionConfig, SlidingWindow } from '@google/genai';
 import type { Content } from '@google/genai';
+import type { ChatMessage } from '@/types/clinical-types';
 
 /**
  * Configuración del Context Window Manager
@@ -32,8 +37,6 @@ export interface ContextWindowConfig {
 export interface ContextProcessingResult {
   /** Contexto procesado y optimizado */
   processedContext: Content[];
-  /** Configuración de compresión aplicada */
-  compressionConfig: ContextWindowCompressionConfig;
   /** Métricas del procesamiento */
   metrics: {
     originalLength: number;
@@ -41,6 +44,24 @@ export interface ContextProcessingResult {
     tokensEstimated: number;
     compressionApplied: boolean;
     contextualReferencesPreserved: number;
+  };
+}
+
+/**
+ * Result of reactive compaction — includes the compacted ChatMessage[] history
+ * ready to be fed back to createChatSession for a transparent retry.
+ */
+export interface ReactiveCompactionResult {
+  /** Compacted history ready for createChatSession */
+  compactedHistory: ChatMessage[];
+  /** The clinical summary that replaced the older messages */
+  summaryContent: string;
+  /** Metrics */
+  metrics: {
+    originalMessageCount: number;
+    compactedMessageCount: number;
+    messagesCompacted: number;
+    estimatedTokensSaved: number;
   };
 }
 
@@ -100,9 +121,8 @@ export class ContextWindowManager {
       sessionContext
     );
     
-    // 4. Estimar tokens y configurar compresión
+    // 4. Estimar tokens
     const tokensEstimated = this.estimateTokenCount(contextWithPreservedReferences);
-    const compressionConfig = this.createCompressionConfig(tokensEstimated);
     
     const processingTime = Date.now() - startTime;
     
@@ -117,7 +137,6 @@ export class ContextWindowManager {
     
     return {
       processedContext: contextWithPreservedReferences,
-      compressionConfig,
       metrics: {
         originalLength: sessionContext.length,
         processedLength: contextWithPreservedReferences.length,
@@ -325,18 +344,174 @@ export class ContextWindowManager {
     return totalTokens;
   }
 
+  // ============================================================================
+  // P1.1: REACTIVE CONTEXT COMPACTION
+  // ============================================================================
+
   /**
-   * Crea la configuración de compresión para el Google GenAI SDK
+   * Reactively compact a ChatMessage[] history when a context-exhausted error
+   * is thrown by the Gemini API. This replaces the static "cut to 50" approach.
+   *
+   * Algorithm:
+   * 1. Preserve the first message (system prompt / initial patient context)
+   * 2. Preserve the last `recentToKeep` exchanges (configurable, default 10)
+   * 3. Consolidate everything in between into a single "user" summary message
+   *    that captures the key clinical themes discussed.
+   *
+   * The caller (clinical-agent-router) will then:
+   *   a) Destroy the current chat session
+   *   b) createChatSession() with the compacted history
+   *   c) Retry the original sendMessage()
+   *
+   * @param history - Full ChatMessage[] history from the session
+   * @param recentToKeep - Number of recent messages to preserve verbatim (default 10)
+   * @returns ReactiveCompactionResult with the compacted history
    */
-  private createCompressionConfig(estimatedTokens: number): ContextWindowCompressionConfig {
-    const slidingWindow: SlidingWindow = {
-      targetTokens: this.config.targetTokens.toString()
+  compactReactively(
+    history: ChatMessage[],
+    recentToKeep = 10
+  ): ReactiveCompactionResult {
+    const originalCount = history.length;
+
+    // Nothing to compact if history is tiny
+    if (history.length <= recentToKeep + 2) {
+      return {
+        compactedHistory: history,
+        summaryContent: '',
+        metrics: {
+          originalMessageCount: originalCount,
+          compactedMessageCount: history.length,
+          messagesCompacted: 0,
+          estimatedTokensSaved: 0,
+        },
+      };
+    }
+
+    // 1. Preserve the first message (system prompt / ficha del paciente)
+    const firstMessage = history[0];
+
+    // 2. Preserve the last N messages verbatim (recent context is most valuable)
+    const recentMessages = history.slice(-recentToKeep);
+
+    // 3. The "middle" block is what we compact into a summary
+    const middleBlock = history.slice(1, history.length - recentToKeep);
+
+    if (middleBlock.length === 0) {
+      return {
+        compactedHistory: history,
+        summaryContent: '',
+        metrics: {
+          originalMessageCount: originalCount,
+          compactedMessageCount: history.length,
+          messagesCompacted: 0,
+          estimatedTokensSaved: 0,
+        },
+      };
+    }
+
+    // 4. Generate a clinical summary of the middle block
+    const summaryContent = this.generateClinicalSummary(middleBlock);
+
+    // 5. Build the compacted history
+    const summaryMessage: ChatMessage = {
+      role: 'user',
+      content: `<resumen_contexto_compactado>\n[NOTA DEL SISTEMA: Los siguientes ${middleBlock.length} mensajes anteriores fueron compactados automáticamente para optimizar la ventana de contexto. Este resumen preserva los temas clínicos clave discutidos.]\n\n${summaryContent}\n</resumen_contexto_compactado>`,
+      timestamp: new Date(),
     };
-    
+
+    const compactedHistory = [firstMessage, summaryMessage, ...recentMessages];
+
+    // Estimate tokens saved
+    const oldTokens = this.estimateTokenCountFromMessages(middleBlock);
+    const newTokens = this.estimateTokenCountFromMessages([summaryMessage]);
+    const tokensSaved = Math.max(0, oldTokens - newTokens);
+
+    if (this.config.enableLogging) {
+      console.log(`🗜️ [ContextManager] Reactive compaction completed:`);
+      console.log(`   - Original messages: ${originalCount}`);
+      console.log(`   - Compacted to: ${compactedHistory.length}`);
+      console.log(`   - Messages summarized: ${middleBlock.length}`);
+      console.log(`   - Estimated tokens saved: ~${tokensSaved}`);
+    }
+
     return {
-      slidingWindow,
-      triggerTokens: this.config.triggerTokens.toString()
+      compactedHistory,
+      summaryContent,
+      metrics: {
+        originalMessageCount: originalCount,
+        compactedMessageCount: compactedHistory.length,
+        messagesCompacted: middleBlock.length,
+        estimatedTokensSaved: tokensSaved,
+      },
     };
+  }
+
+  /**
+   * Generate a concise clinical summary of a block of ChatMessage[].
+   * This is a deterministic text extraction (no LLM call) to avoid
+   * additional API costs and latency during error recovery.
+   *
+   * In Phase 2+, this could be replaced with an LLM-based summarizer
+   * running in a forked context (like Claude Code's sessionMemory).
+   */
+  private generateClinicalSummary(messages: ChatMessage[]): string {
+    const themes: string[] = [];
+    const keyTopics = new Set<string>();
+
+    // Clinical topic detection patterns
+    const clinicalPatterns: Array<{ label: string; pattern: RegExp }> = [
+      { label: 'ansiedad', pattern: /ansiedad|anxiety|ansioso|preocupaci[oó]n/gi },
+      { label: 'depresión', pattern: /depresi[oó]n|depression|triste|melancol/gi },
+      { label: 'trauma', pattern: /trauma|PTSD|TEPT|abuso|maltrato/gi },
+      { label: 'relaciones', pattern: /relaci[oó]n|pareja|familia|v[ií]nculo/gi },
+      { label: 'autoestima', pattern: /autoestima|self.?esteem|autoimagen/gi },
+      { label: 'duelo', pattern: /duelo|grief|p[eé]rdida|fallecimiento/gi },
+      { label: 'TCC/CBT', pattern: /TCC|CBT|cognitivo.?conductual|reestructuraci[oó]n/gi },
+      { label: 'EMDR', pattern: /EMDR|desensibilizaci[oó]n|reprocesamiento/gi },
+      { label: 'mindfulness', pattern: /mindfulness|atenci[oó]n plena|meditaci[oó]n/gi },
+      { label: 'medicación', pattern: /medicaci[oó]n|f[aá]rmaco|antidepresivo|ansiol[ií]tico/gi },
+      { label: 'diagnóstico', pattern: /diagn[oó]stico|DSM|CIE|evaluaci[oó]n/gi },
+      { label: 'plan de tratamiento', pattern: /plan.?de.?tratamiento|treatment.?plan|objetivos.?terap/gi },
+    ];
+
+    // Scan messages for clinical themes
+    for (const msg of messages) {
+      for (const { label, pattern } of clinicalPatterns) {
+        if (pattern.test(msg.content)) {
+          keyTopics.add(label);
+        }
+      }
+    }
+
+    // Build summary sections
+    if (keyTopics.size > 0) {
+      themes.push(`Temas clínicos abordados: ${Array.from(keyTopics).join(', ')}.`);
+    }
+
+    // Extract key assistant conclusions (last sentences from model messages)
+    const assistantMessages = messages.filter(m => m.role === 'assistant');
+    if (assistantMessages.length > 0) {
+      // Take the last 3 assistant messages and extract first ~200 chars of each
+      const recentAssistant = assistantMessages.slice(-3);
+      const conclusions = recentAssistant.map(m => {
+        const trimmed = m.content.substring(0, 200).replace(/\n+/g, ' ').trim();
+        return trimmed.length === 200 ? `${trimmed}...` : trimmed;
+      });
+      themes.push(`Últimas conclusiones del asistente:\n${conclusions.map(c => `• ${c}`).join('\n')}`);
+    }
+
+    // Count exchanges
+    const userMsgCount = messages.filter(m => m.role === 'user').length;
+    themes.push(`Total de intercambios compactados: ${userMsgCount} mensajes del terapeuta, ${assistantMessages.length} respuestas del sistema.`);
+
+    return themes.join('\n\n');
+  }
+
+  /**
+   * Estimate token count from ChatMessage[] (as opposed to Content[])
+   */
+  private estimateTokenCountFromMessages(messages: ChatMessage[]): number {
+    return messages.reduce((sum, msg) => sum + Math.ceil(msg.content.length / 4), 0);
   }
 
   /**
@@ -392,4 +567,54 @@ export function createContextWindowManager(
   config?: Partial<ContextWindowConfig>
 ): ContextWindowManager {
   return new ContextWindowManager(config);
+}
+
+// ============================================================================
+// P1.1: ERROR DETECTION HELPERS
+// ============================================================================
+
+/**
+ * Detect whether a Gemini SDK error is a context-window-exhausted error
+ * (prompt too long / RESOURCE_EXHAUSTED due to token limits).
+ *
+ * This distinguishes context-length errors from rate-limit 429s (which are
+ * already handled with exponential backoff in the router).
+ *
+ * Google GenAI SDK throws errors with various shapes:
+ * - err.message may contain "RESOURCE_EXHAUSTED", "token", "too long", "context"
+ * - err.status may be 400 (invalid request due to size) or 429 (rate limit)
+ * - The 429 rate-limit variant does NOT contain "token" or "context" keywords
+ */
+export function isContextExhaustedError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+
+  const error = err as { message?: string; status?: number; code?: number; details?: string };
+  const msg = (error.message || '').toLowerCase();
+  const details = (error.details || '').toLowerCase();
+  const combined = `${msg} ${details}`;
+
+  // Pattern 1: Explicit "prompt too long" or context length exceeded
+  if (/prompt.*(too long|too large)/i.test(combined)) return true;
+  if (/context.*(length|window|limit).*exceeded/i.test(combined)) return true;
+
+  // Pattern 2: RESOURCE_EXHAUSTED with token/context reference (not pure rate limiting)
+  const isResourceExhausted = combined.includes('resource_exhausted') ||
+                               combined.includes('resource exhausted');
+  if (isResourceExhausted) {
+    const hasTokenRef = /token|context|prompt|input.*length/i.test(combined);
+    if (hasTokenRef) return true;
+
+    // If RESOURCE_EXHAUSTED without "quota" or "rate" keywords, treat as context error
+    // (rate-limit 429s typically mention "quota" or "rate")
+    const isRateLimit = /quota|rate.?limit|requests.*per|rpm|tpm/i.test(combined);
+    if (!isRateLimit) return true;
+  }
+
+  // Pattern 3: 400 Bad Request with token/size reference
+  if ((error.status === 400 || error.code === 400) &&
+      /token|too (long|large)|exceeds.*limit/i.test(combined)) {
+    return true;
+  }
+
+  return false;
 }

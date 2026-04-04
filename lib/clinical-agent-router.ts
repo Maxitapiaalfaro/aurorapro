@@ -9,6 +9,8 @@ import { vertexLinkConverter } from "./vertex-link-converter"
 // P0.1: Tool permission engine — pre-execution security validation
 import { checkToolPermission } from "./security/tool-permissions"
 import { ToolRegistry } from "./tool-registry"
+// P1.1: Reactive context compaction — detect context-exhausted errors and compact history
+import { ContextWindowManager, isContextExhaustedError } from "./context-window-manager"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
 
@@ -78,6 +80,9 @@ export class ClinicalAgentRouter {
   private sessionLastActivity = new Map<string, number>()
   private cleanupTimer: NodeJS.Timeout | null = null
   private readonly SESSION_TIMEOUT_MS = 30 * 60 * 1000  // 30 minutos de inactividad
+
+  // P1.1: Context window manager for reactive compaction
+  private contextWindowManager = new ContextWindowManager()
   private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000  // Verificar cada 5 minutos
 
   constructor() {
@@ -1788,18 +1793,53 @@ Basado en esta evidencia, opciones razonadas:
         message: messageParts
       }
 
-            let result;
+      let result;
+
+      // ================================================================
+      // P1.1: REACTIVE CONTEXT COMPACTION — Try-Catch with Transparent Retry
+      //
+      // Flow:
+      // 1. Attempt the API call (streaming or non-streaming)
+      // 2. If a context-exhausted error occurs (prompt too long / RESOURCE_EXHAUSTED
+      //    due to token limits), compact the history and retry ONCE
+      // 3. Rate-limit 429s are handled separately with exponential backoff (existing)
+      // 4. The compacted history is stored back into sessionData so Firestore
+      //    persistence and the UI layer stay in sync
+      // ================================================================
+
       if (useStreaming) {
         // 🔁 Retry with exponential backoff for 429 RESOURCE_EXHAUSTED errors
         const MAX_RETRIES = 3;
         let streamResult: any;
+        let contextCompacted = false;
+
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           try {
             streamResult = await chat.sendMessageStream(messageParams);
             break; // Success - exit retry loop
           } catch (err: any) {
+            // ─── P1.1: Check if this is a context-window-exhausted error ───
+            if (isContextExhaustedError(err) && !contextCompacted) {
+              console.warn(`🗜️ [ClinicalRouter] Context window exhausted on streaming attempt ${attempt}. Triggering reactive compaction...`);
+
+              const compactionResult = await this.performReactiveCompaction(sessionId, agent);
+              if (compactionResult) {
+                // Update chat reference after session recreation
+                const newSessionData = this.activeChatSessions.get(sessionId);
+                if (newSessionData) {
+                  chat = newSessionData.chat;
+                }
+                contextCompacted = true;
+                // Retry from the next iteration
+                continue;
+              }
+              // If compaction failed, fall through to throw
+              throw err;
+            }
+
+            // ─── Existing: Rate-limit 429 backoff ───
             const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED');
-            if (is429 && attempt < MAX_RETRIES) {
+            if (is429 && !isContextExhaustedError(err) && attempt < MAX_RETRIES) {
               const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
               console.warn(`⏳ [ClinicalRouter] 429 rate limit on attempt ${attempt}/${MAX_RETRIES}, retrying in ${backoffMs}ms...`);
               await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -1818,7 +1858,29 @@ Basado en esta evidencia, opciones razonadas:
           result = this.createMetricsStreamingWrapper(streamResult, interactionId, enhancedMessage)
         }
       } else {
-        result = await chat.sendMessage(messageParams)
+        // ─── Non-streaming path with P1.1 reactive compaction ───
+        try {
+          result = await chat.sendMessage(messageParams)
+        } catch (err: any) {
+          if (isContextExhaustedError(err)) {
+            console.warn(`🗜️ [ClinicalRouter] Context window exhausted on non-streaming call. Triggering reactive compaction...`);
+
+            const compactionResult = await this.performReactiveCompaction(sessionId, agent);
+            if (compactionResult) {
+              // Update chat reference after session recreation
+              const newSessionData = this.activeChatSessions.get(sessionId);
+              if (newSessionData) {
+                chat = newSessionData.chat;
+              }
+              // Retry once with compacted history
+              result = await chat.sendMessage(messageParams);
+            } else {
+              throw err;
+            }
+          } else {
+            throw err;
+          }
+        }
 
         // 📊 RECORD MODEL CALL COMPLETION for non-streaming
         if (interactionId && result?.response) {
@@ -1862,6 +1924,66 @@ Basado en esta evidencia, opciones razonadas:
     } catch (error) {
       console.error(`[ClinicalRouter] Error sending message to ${agent}:`, error)
       throw error
+    }
+  }
+
+  // ============================================================================
+  // P1.1: REACTIVE COMPACTION — Compact history and recreate chat session
+  // ============================================================================
+
+  /**
+   * Performs reactive context compaction when a context-exhausted error is detected.
+   *
+   * 1. Retrieves the current session's history
+   * 2. Uses ContextWindowManager.compactReactively() to consolidate old messages
+   *    into a clinical summary, preserving system prompt and recent messages
+   * 3. Destroys the current chat session
+   * 4. Creates a new chat session with the compacted history
+   * 5. Stores the compacted history back into sessionData for Firestore sync
+   *
+   * @returns true if compaction and session recreation succeeded, false otherwise
+   */
+  private async performReactiveCompaction(
+    sessionId: string,
+    agent: AgentType
+  ): Promise<boolean> {
+    try {
+      const sessionData = this.activeChatSessions.get(sessionId);
+      if (!sessionData || !sessionData.history || sessionData.history.length < 4) {
+        console.warn(`🗜️ [ClinicalRouter] Cannot compact: insufficient history for session ${sessionId}`);
+        return false;
+      }
+
+      const currentHistory: ChatMessage[] = sessionData.history;
+
+      // Compact using the context window manager
+      const compactionResult = this.contextWindowManager.compactReactively(currentHistory);
+
+      if (compactionResult.metrics.messagesCompacted === 0) {
+        console.warn(`🗜️ [ClinicalRouter] Compaction yielded no reduction — history too short`);
+        return false;
+      }
+
+      console.log(`🗜️ [ClinicalRouter] Compaction complete:`, {
+        before: compactionResult.metrics.originalMessageCount,
+        after: compactionResult.metrics.compactedMessageCount,
+        tokensSaved: compactionResult.metrics.estimatedTokensSaved,
+      });
+
+      // Destroy old session and recreate with compacted history
+      this.activeChatSessions.delete(sessionId);
+      await this.createChatSession(sessionId, agent, compactionResult.compactedHistory);
+
+      // Update the stored history reference so Firestore persistence stays in sync
+      const newSessionData = this.activeChatSessions.get(sessionId);
+      if (newSessionData) {
+        newSessionData.history = compactionResult.compactedHistory;
+      }
+
+      return true;
+    } catch (compactionError) {
+      console.error(`🗜️ [ClinicalRouter] Reactive compaction failed:`, compactionError);
+      return false;
     }
   }
 
