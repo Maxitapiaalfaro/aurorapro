@@ -2153,7 +2153,29 @@ Basado en esta evidencia, opciones razonadas:
               // 🔒 P0.1: Pre-execution permission check for ALL tool calls
               const toolRegistry = ToolRegistry.getInstance();
               const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
-              const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // fail-closed: unknown tools treated as external
+
+              // For tools not in the registry, deny unless they are known SDK-managed
+              // or dynamically-declared tools (e.g. academic search variants).
+              const KNOWN_DYNAMIC_TOOLS = new Set([
+                'google_search',
+                'search_academic_literature',
+                'search_evidence_for_reflection',
+                'search_evidence_for_documentation',
+              ]);
+
+              if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
+                console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED: ${call.name}`);
+                return {
+                  name: call.name,
+                  response: {
+                    error: "Execution denied for security reasons",
+                    reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
+                    security_category: 'unknown',
+                  },
+                };
+              }
+
+              const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // known dynamic tools default to external
               const permissionResult = checkToolPermission(
                 call.name,
                 securityCategory,
@@ -2722,7 +2744,29 @@ Como especialista en evidencia científica, puedes utilizar este material para i
           // 🔒 P0.1: Pre-execution permission check for ALL tool calls
           const toolRegistry = ToolRegistry.getInstance();
           const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
-          const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // fail-closed
+
+          // For tools not in the registry, deny unless they are known SDK-managed
+          // or dynamically-declared tools (e.g. academic search variants).
+          const KNOWN_DYNAMIC_TOOLS = new Set([
+            'google_search',
+            'search_academic_literature',
+            'search_evidence_for_reflection',
+            'search_evidence_for_documentation',
+          ]);
+
+          if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
+            console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED (non-streaming): ${call.name}`);
+            return {
+              name: call.name,
+              response: {
+                error: "Execution denied for security reasons",
+                reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
+                security_category: 'unknown',
+              },
+            };
+          }
+
+          const securityCategory = registeredTool?.metadata.securityCategory ?? 'external'; // known dynamic tools default to external
           const permissionResult = checkToolPermission(
             call.name,
             securityCategory,
