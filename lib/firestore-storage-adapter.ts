@@ -250,18 +250,24 @@ export class FirestoreStorageAdapter {
   async saveClinicalFile(file: ClinicalFile): Promise<void> {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
 
-    // Files don't inherently have userId — store under a generic root if needed
-    // The sessionId relationship links them back to a user's session
-    const userId = 'shared' // Files are looked up by sessionId, not userId
+    // Resolve the owning userId from the linked session when available.
+    // This preserves multi-tenant isolation under the psychologist's subtree.
+    let userId = '_unresolved'
+    if (file.sessionId) {
+      const session = await this.loadChatSession(file.sessionId)
+      if (session?.userId) userId = session.userId
+    }
+
     const ref = this.clinicalFileDocRef(userId, file.id)
 
     const docData: DocumentData = {
       ...file,
+      _ownerId: userId,
       uploadDate: new Date(file.uploadDate),
     }
 
     await ref.set(docData, { merge: true })
-    console.log(`💾 [Firestore] Saved clinical file: ${file.id}`)
+    console.log(`💾 [Firestore] Saved clinical file: ${file.id} (owner: ${userId})`)
   }
 
   async getClinicalFiles(sessionId?: string): Promise<ClinicalFile[]> {
@@ -312,18 +318,20 @@ export class FirestoreStorageAdapter {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
 
     // Fichas belong to a patient under a psychologist.
-    // We need a userId context — use a 'shared' fallback since fichas
-    // are typically queried by pacienteId
-    const userId = 'shared'
+    // The StorageAdapter interface doesn't pass userId, so we store with
+    // _unresolved until the future patient-selector feature provides
+    // psychologistId context. collectionGroup queries work regardless.
+    const userId = '_unresolved'
     const ref = this.fichaDocRef(userId, ficha.pacienteId, ficha.fichaId)
 
     const docData: DocumentData = {
       ...ficha,
+      _ownerId: userId,
       ultimaActualizacion: new Date(ficha.ultimaActualizacion),
     }
 
     await ref.set(docData, { merge: true })
-    console.log(`💾 [Firestore] Saved ficha clínica: ${ficha.fichaId}`)
+    console.log(`💾 [Firestore] Saved ficha clínica: ${ficha.fichaId} (patient: ${ficha.pacienteId})`)
   }
 
   async getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null> {

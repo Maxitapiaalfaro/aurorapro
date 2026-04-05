@@ -61,7 +61,7 @@ function resolveCredential() {
       projectId: env('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || env('FIREBASE_PROJECT_ID') || '',
       clientEmail: svcEmail,
       privateKey: svcKey.replace(/\\n/g, '\n'),
-    } as any)
+    })
   }
 
   // 3. Application Default Credentials (GCP/Cloud Run/local gcloud auth)
