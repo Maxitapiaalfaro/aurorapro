@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon } from "@phosphor-icons/react"
+import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon, SignOutIcon } from "@phosphor-icons/react"
 import { useTheme } from "next-themes"
 import type { PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
@@ -14,6 +14,7 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { DisplaySettingsPopover } from "@/components/display-settings-popover"
+import { useAuth } from "@/providers/auth-provider"
 
 interface HeaderProps {
   onHistoryToggle?: () => void
@@ -24,6 +25,7 @@ interface HeaderProps {
 
 export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, hasActiveSession = false }: HeaderProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
+  const { user, signOut } = useAuth()
   const patientId = sessionMeta?.patient?.reference
   const { patient } = usePatientRecord(patientId || null)
   
@@ -272,6 +274,17 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
             <MoonIcon className="h-5 w-5" weight="duotone" />
           )}
         </Button>
+        {user && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-mineral-gray hover:text-destructive hover:bg-destructive/10 dark:text-mineral-gray dark:hover:text-red-400 dark:hover:bg-red-900/30 transition-colors"
+            onClick={signOut}
+            title={`Cerrar sesión${user.email ? ` (${user.email})` : ''}`}
+          >
+            <SignOutIcon className="h-5 w-5" weight="duotone" />
+          </Button>
+        )}
       </div>
     </header>
   )

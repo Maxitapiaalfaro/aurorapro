@@ -15,8 +15,8 @@
  * @module providers/auth-provider
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react"
-import { onAuthStateChanged, type User } from "firebase/auth"
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
+import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth"
 import { auth } from "@/lib/firebase-config"
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -34,6 +34,8 @@ interface AuthContextType {
   psychologistId: string | null
   /** True durante la resolución inicial del estado de auth (primer onAuthStateChanged) */
   isLoading: boolean
+  /** Cierra la sesión de Firebase Auth */
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -72,13 +74,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe
   }, [])
 
+  // Función de cierre de sesión
+  const handleSignOut = useCallback(async () => {
+    try {
+      await firebaseSignOut(auth)
+      console.log('🔓 [Auth] Sesión cerrada exitosamente')
+    } catch (error) {
+      console.error('❌ [Auth] Error al cerrar sesión:', error)
+    }
+  }, [])
+
   // Memoizar el valor del contexto para evitar re-renders innecesarios
   // cuando el componente padre se re-renderiza sin cambios en auth.
   const value = useMemo<AuthContextType>(() => ({
     user,
     psychologistId: user?.uid ?? null,
     isLoading,
-  }), [user, isLoading])
+    signOut: handleSignOut,
+  }), [user, isLoading, handleSignOut])
 
   return (
     <AuthContext.Provider value={value}>
