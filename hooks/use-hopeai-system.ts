@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { HopeAISystemSingleton, HopeAISystem } from "@/lib/hopeai-system"
+import { clinicalStorage } from "@/lib/clinical-context-storage"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
 import { ClientContextPersistence } from '@/lib/client-context-persistence'
 import { getSSEClient } from '@/lib/sse-client'
@@ -113,7 +113,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }
   }, [psychologistId])
 
-  const hopeAISystem = useRef<HopeAISystem | null>(null)
   const lastSessionIdRef = useRef<string | null>(null)
   // Ref to access the latest history in callbacks without adding it to dependency arrays
   const historyRef = useRef<ChatMessage[]>(systemState.history)
@@ -127,7 +126,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
-    if (!hopeAISystem.current || (!systemState.isInitialized && !allowDuringInit)) {
+    if (!systemState.isInitialized && !allowDuringInit) {
       console.error('Sistema HopeAI no inicializado')
       return false
     }
@@ -135,8 +134,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     try {
       setSystemState(prev => ({ ...prev, isLoading: true, error: null }))
 
-      // Cargar el estado de la sesión desde el almacenamiento
-      const chatState = await hopeAISystem.current.getChatState(sessionId)
+      // Load session from client-side IndexedDB storage
+      const chatState = await clinicalStorage.loadChatSession(sessionId)
       
       if (!chatState) {
         throw new Error(`Sesión no encontrada: ${sessionId}`)
@@ -179,7 +178,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
             // 🏥 FIX: Save reconstructed sessionMeta back to storage
             chatState.sessionMeta = sessionMetaToUse
-            await hopeAISystem.current.storageAdapter.saveChatSession(chatState)
+            await clinicalStorage.saveChatSession(chatState)
             console.log(`💾 Reconstructed sessionMeta saved to storage`)
           } else {
             console.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
@@ -252,37 +251,14 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // Inicialización del sistema HopeAI (sin dependencias para evitar re-inicializaciones)
   useEffect(() => {
-    const initializeSystem = async () => {
-      try {
-        setSystemState(prev => ({ ...prev, isLoading: true }))
-        
-        // Obtener instancia singleton inicializada del sistema HopeAI
-        hopeAISystem.current = await HopeAISystemSingleton.getInitializedInstance()
-        console.log('🚀 HopeAI Singleton System inicializado con Intelligent Intent Router')
-        
-        // Automatic session restoration disabled to prevent unwanted conversation loading
-        // when users navigate to the Patients tab. Sessions should only be restored
-        // through explicit user actions (e.g., clicking on a conversation or starting a new one)
-        console.log('ℹ️ Automatic session restoration disabled - sessions load only on explicit user action')
-        
-        setSystemState(prev => ({
-          ...prev,
-          isInitialized: true,
-          isLoading: false
-        }))
-        
-      } catch (error) {
-        console.error('❌ Error inicializando HopeAI System:', error)
-        setSystemState(prev => ({
-          ...prev,
-          error: 'Error al inicializar el sistema HopeAI',
-          isLoading: false,
-          isInitialized: true
-        }))
-      }
-    }
-
-    initializeSystem()
+    // Client-side storage (clinicalStorage / IndexedDB) auto-initializes on first use.
+    // No server-side HopeAISystem needed — messages are sent via /api/send-message.
+    setSystemState(prev => ({
+      ...prev,
+      isInitialized: true,
+      isLoading: false
+    }))
+    console.log('🚀 HopeAI Client System initialized (client-side storage + SSE)')
   }, []) // Sin dependencias para evitar re-inicializaciones
 
   // Estado para prevenir creación múltiple simultánea
@@ -378,10 +354,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       timestamp: new Date().toISOString()
     })
 
-    if (!hopeAISystem.current) {
-      throw new Error('Sistema no inicializado')
-    }
-
     // Lazy-create session on first message send
     let sessionIdToUse = systemState.sessionId
     let sessionMetaToUse = sessionMeta || systemState.sessionMeta
@@ -419,9 +391,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         console.log('✅ SessionMeta actualizado con sessionId:', newSessionId)
         console.log('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
 
-        // 🏥 FIX: Also persist the updated sessionMeta to server storage immediately
+        // 🏥 FIX: Also persist the updated sessionMeta to client storage immediately
         try {
-          const currentState = await hopeAISystem.current.storageAdapter.loadChatSession(newSessionId)
+          const currentState = await clinicalStorage.loadChatSession(newSessionId)
           if (currentState) {
             currentState.sessionMeta = updatedSessionMeta
             currentState.clinicalContext = {
@@ -429,7 +401,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               patientId: updatedSessionMeta.patient.reference,
               confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
             }
-            await hopeAISystem.current.storageAdapter.saveChatSession(currentState)
+            await clinicalStorage.saveChatSession(currentState)
             console.log('💾 SessionMeta persisted to storage after lazy session creation')
           }
         } catch (error) {
@@ -485,7 +457,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       try {
         // Use loadChatSession (returns null) instead of getChatState (throws) so new sessions
         // that only exist on the server can be created in IndexedDB with defaults
-        const existingState = await hopeAISystem.current.storageAdapter.loadChatSession(sessionIdToUse!)
+        const existingState = await clinicalStorage.loadChatSession(sessionIdToUse!)
         const updatedState: ChatState = {
           ...(existingState || {
             sessionId: sessionIdToUse!,
@@ -511,7 +483,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           // 🏥 FIX: Ensure sessionMeta is preserved if already exists or add if new
           sessionMeta: existingState?.sessionMeta || systemState.sessionMeta
         }
-        await hopeAISystem.current.storageAdapter.saveChatSession(updatedState)
+        await clinicalStorage.saveChatSession(updatedState)
         console.log('💾 [IndexedDB] Mensaje de usuario persistido inmediatamente:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
       } catch (persistError) {
         console.error('❌ [IndexedDB] Error al persistir el mensaje del usuario:', persistError)
@@ -702,7 +674,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         // 💾 Persistir actualización del agente para el último mensaje de usuario en IndexedDB
         void (async () => {
           try {
-            const existingState = await hopeAISystem.current!.getChatState(sessionIdToUse!)
+            const existingState = await clinicalStorage.loadChatSession(sessionIdToUse!)
             if (existingState) {
               const updatedHistory = existingState.history.map(m =>
                 m.id === localUserMessageId ? { ...m, agent: routingInfo.targetAgent as AgentType } : m
@@ -713,7 +685,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 history: updatedHistory,
                 metadata: { ...existingState.metadata, lastUpdated: new Date() }
               }
-              await hopeAISystem.current!.storageAdapter.saveChatSession(updatedState)
+              await clinicalStorage.saveChatSession(updatedState)
               console.log('💾 [IndexedDB] Agente del mensaje de usuario actualizado en persistencia')
             }
           } catch (e) {
@@ -1016,10 +988,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     executionTimelineForThisResponse?: ExecutionTimeline,
     sessionIdOverride?: string
   ): Promise<void> => {
-    if (!hopeAISystem.current) {
-      throw new Error('Sistema no inicializado')
-    }
-
     // Resolver sessionId objetivo de forma robusta
     let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
     if (!targetSessionId) {
@@ -1082,14 +1050,26 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
     // 💾 Persist to IndexedDB (best-effort, non-blocking for UI)
     try {
-      await hopeAISystem.current.addStreamingResponseToHistory(
-        targetSessionId,
-        responseContent,
-        agent,
-        groundingUrls,
-        bulletsToAttach.length > 0 ? bulletsToAttach : undefined,
-        executionTimelineForThisResponse  // 🔧 FIX: Pass executionTimeline to persist reasoning transparency
-      )
+      const existingState = await clinicalStorage.loadChatSession(targetSessionId)
+      if (existingState) {
+        // Idempotency: check if last message already has identical content
+        const normalize = (s?: string) => (s || '').replace(/\s+/g, ' ').trim()
+        const lastMessage = existingState.history[existingState.history.length - 1]
+        if (lastMessage && lastMessage.role === 'model' && normalize(lastMessage.content) === normalize(responseContent)) {
+          // Merge extras into existing message
+          if (groundingUrls && groundingUrls.length > 0) (lastMessage as any).groundingUrls = groundingUrls
+          if (bulletsToAttach.length > 0 && !(lastMessage as any).reasoningBullets?.length) {
+            (lastMessage as any).reasoningBullets = [...bulletsToAttach]
+          }
+          if (executionTimelineForThisResponse && !(lastMessage as any).executionTimeline) {
+            (lastMessage as any).executionTimeline = executionTimelineForThisResponse
+          }
+        } else {
+          existingState.history.push(aiMessage)
+        }
+        existingState.metadata.lastUpdated = new Date()
+        await clinicalStorage.saveChatSession(existingState)
+      }
       console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB con executionTimeline')
     } catch (persistError) {
       console.warn('⚠️ [IndexedDB] No se pudo persistir respuesta AI:', persistError)

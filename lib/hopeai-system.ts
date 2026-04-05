@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { clinicalAgentRouter } from "./clinical-agent-router"
 import { createIntelligentIntentRouter, type EnrichedContext } from "./intelligent-intent-router"
 import { DynamicOrchestrator } from "./dynamic-orchestrator"
