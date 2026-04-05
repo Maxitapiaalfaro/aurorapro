@@ -39,7 +39,7 @@ POST /api/send-message → app/api/send-message/route.ts
 ├─ Inside stream.start():
 │   ├─ getGlobalOrchestrationSystem() → HopeAISystem singleton
 │   ├─ orchestrationSystem.sendMessage()
-│   │   ├─ Load/create session state from SQLite storage
+│   │   ├─ Load/create session state from Firestore (Admin SDK REST)
 │   │   ├─ Get pending files, apply Context Window Manager
 │   │   ├─ Collect operational metadata
 │   │   ├─ DynamicOrchestrator.orchestrate() → agent selection + reasoning bullets

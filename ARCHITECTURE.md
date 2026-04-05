@@ -4,7 +4,7 @@
 
 *Documentation generated: 2026-03-31*
 *Last verified commit: 3b90218*
-*Strategic update: 2026-04-01*
+*Strategic update: 2026-04-05 — Phase 2 (Backend Firestore Connection) completed*
 
 This document describes the **actual current state** of the AuroraPro codebase as it exists today. All information is based on direct code inspection.
 
@@ -24,7 +24,7 @@ AuroraPro (internally named "my-v0-project" in package.json) is a **clinical AI 
 - **Voice Transcription**: Gemini-powered audio transcription for hands-free clinical documentation
 - **Document Processing**: Upload and analyze clinical documents via Google Gemini Files API
 - **Cognitive Transparency**: Real-time visualization of AI reasoning, tool execution, and agent selection
-- **HIPAA-Compliant Storage**: Encrypted at-rest clinical data storage with audit logging
+- **Cloud-Native Clinical Storage**: Firestore (Admin SDK REST) for server-side persistence + IndexedDB offline-first on client, with HIPAA-compliant encryption at rest via Google Cloud
 
 ### Core Problem It Solves
 
@@ -39,8 +39,9 @@ AuroraPro addresses the need for **evidence-based, contextually-aware clinical s
 
 **Target Market**: Independent psychologists in Chile, Argentina, and Brasil
 **User Model**: Single-user scoped experience (no multi-user collaboration)
-**Storage Strategy**: IndexedDB (client) + Firebase Firestore (server) with bidirectional sync
+**Storage Strategy**: IndexedDB offline-first (client) + Firebase Firestore via Admin SDK REST (server). Phase 2 backend connection **completed** — sessions persist to Firestore `psychologists/{uid}/...` hierarchy.
 **HIPAA Compliance**: Firestore + Google Cloud Platform with Business Associate Agreement
+**Next Priority**: Implement Firebase Authentication (Login) to replace the `'anonymous'` fallback user and enable real multi-tenant data isolation.
 
 **Pricing Model (Freemium)**:
 1. **Free Tier**: 50,000 tokens/day, no MCP access, basic features
@@ -121,7 +122,7 @@ For detailed beta priorities, roadmap, and critical bug tracking, see [STRATEGIC
   - @google/genai 1.47.0 (Google Gemini SDK)
   - google-auth-library 10.3.0
   - gtoken 7.0.0
-- **Database**: better-sqlite3 12.4.1 (for HIPAA-compliant local storage)
+- **Database**: Firebase Firestore (via `firebase-admin` Admin SDK, REST transport) — replaced better-sqlite3
 - **Backend Services**: @supabase/supabase-js 2.76.1
 - **Monitoring**: @sentry/nextjs 9.42.0
 - **Email**: Resend 4.7.0
@@ -258,9 +259,10 @@ For detailed beta priorities, roadmap, and critical bug tracking, see [STRATEGIC
 │   ├── context-window-manager.ts  # Token optimization
 │   ├── context-optimization-manager.ts  # Token counting
 │   ├── google-genai-config.ts   # GenAI/Vertex AI initialization
-│   ├── hipaa-compliant-storage.ts  # SQLite encrypted storage
-│   ├── server-storage-adapter.ts  # Storage abstraction layer
-│   ├── server-storage-memory.ts  # In-memory storage for Vercel
+│   ├── firebase-admin-config.ts  # Firebase Admin SDK singleton (server-only)
+│   ├── firestore-storage-adapter.ts  # Firestore Admin SDK storage (REST transport, server-only)
+│   ├── server-storage-adapter.ts  # Storage abstraction layer (uses FirestoreStorageAdapter; MemoryServerStorage fallback)
+│   ├── server-storage-memory.ts  # In-memory fallback (only when firebase-admin init fails)
 │   ├── client-context-persistence.ts  # Client persistence helper
 │   ├── ui-preferences-storage.ts  # UI preferences
 │   ├── user-preferences-manager.ts  # User preference management
@@ -501,63 +503,42 @@ For detailed beta priorities, roadmap, and critical bug tracking, see [STRATEGIC
 
 The server uses a **dynamic storage adapter** that automatically selects between:
 
-1. **HIPAACompliantStorage** (local/VM environments)
-2. **MemoryServerStorage** (Vercel/serverless environments)
+1. **FirestoreStorageAdapter** (primary — Vercel/serverless and all production environments)
+2. **MemoryServerStorage** (fallback — only when `firebase-admin` initialization fails)
 
-**Selection Logic**: Checks `VERCEL` environment variable or `HOPEAI_STORAGE_MODE` config.
+**Selection Logic**: `server-storage-adapter.ts` attempts `FirestoreStorageAdapter` first; falls back to `MemoryServerStorage` if Firebase Admin SDK cannot initialize.
 
-#### Option 1: HIPAA-Compliant Storage (SQLite)
+#### Primary: Firestore Admin SDK (REST Transport)
 
-**Implementation**: `/lib/hipaa-compliant-storage.ts`
+**Implementation**: `/lib/firestore-storage-adapter.ts` + `/lib/firebase-admin-config.ts`
 
-- **Technology**: better-sqlite3 12.4.1
-- **Database File**: `./data/aurora-hipaa.db`
-- **Encryption**: AES-256-GCM at-rest encryption (via `/lib/encryption-utils.ts`)
-- **Encryption Key**: `AURORA_ENCRYPTION_KEY` environment variable (base64-encoded 32-byte key)
+- **Technology**: `firebase-admin` via Admin SDK, forced to REST protocol (`preferRest: true`) to avoid gRPC frame corruption on Vercel's serverless proxy
+- **Settings**: `ignoreUndefinedProperties: true` to handle optional nested fields (e.g., `clinicalContext.patientId`)
+- **Write Pattern**: All writes use `.set(data, { merge: true })` — never `.update()` or `.create()`
+- **Data Hierarchy**: Multi-tenant Firestore paths: `psychologists/{userId}/patients/{patientId}/sessions/{sessionId}`
+- **IAM**: Requires `Cloud Datastore User` role on the service account
+- **CollectionGroup Indexes**: Required indexes created for cross-tenant queries
+- **Bypasses client Security Rules**: Admin SDK writes directly, not subject to Firestore Rules
 
-**Configuration**:
-- Max hot cache sessions: 50
-- Cache TTL: 30 minutes (1800000ms)
-- Session timeout: 90 days
-- Cleanup interval: 5 minutes
-- SQLite mode: WAL (Write-Ahead Logging)
+**Credential Resolution** (in `firebase-admin-config.ts`):
+1. JSON env vars: `GOOGLE_APPLICATION_CREDENTIALS_JSON`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `GENAI_SERVICE_ACCOUNT_JSON`
+2. Split env vars: `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` (or `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`)
+3. ADC fallback (warns on Vercel)
 
-**Tables** (inferred from code, not explicit DDL):
-- Session storage (encrypted JSON blobs)
-- Audit logs (HIPAA §164.312(b) compliant)
-- Chat history (encrypted)
-- Clinical data (encrypted)
-
-**Read/Write Patterns**:
-- Write: Encrypt data → Store in SQLite → Update hot cache
-- Read: Check hot cache → If miss, query SQLite → Decrypt → Store in cache
-- Cleanup: Periodic background job removes expired sessions and old audit logs
+**Webpack**: `firebase-admin` MUST be in `next.config.mjs` `serverExternalPackages` to prevent bundling that breaks credential flow.
 
 **Access Locations**:
 - Initialized in `server-storage-adapter.ts`
 - Used by `hopeai-system.ts` for session management
-- Audit logging in `lib/security/audit-logger.ts`
+- Sessions logged as `[Firestore] Saved session` (not `[MemoryStorage]`)
 
-#### Option 2: Memory Storage (Serverless)
+#### Fallback: Memory Storage (Emergency Only)
 
 **Implementation**: `/lib/server-storage-memory.ts`
 
 - **Technology**: In-memory JavaScript Maps
 - **Persistence**: None (runtime-only, resets on function cold start)
-
-**Data Structures**:
-- `chatSessions`: Map<sessionId, session>
-- `userSessions`: Map<userId, sessionId[]>
-- `clinicalFiles`: Map<fileId, file>
-- `fichas`: Map<fichaId, ficha>
-- `patientRecords`: Map<patientId, patient>
-
-**Read/Write Patterns**:
-- All operations are synchronous in-memory
-- No encryption (ephemeral)
-- No persistence across deployments
-
-**Use Case**: Vercel deployments where SQLite is not available.
+- **Use Case**: Only activates if `firebase-admin` initialization fails entirely. Not expected in production.
 
 ### External Data Sources
 
@@ -802,12 +783,13 @@ The server uses a **dynamic storage adapter** that automatically selects between
 
 | File | Purpose | Key Exports | Dependencies |
 |------|---------|-------------|--------------|
-| `lib/server-storage-adapter.ts` | Storage abstraction | `ServerStorageAdapter` class | `hipaa-compliant-storage`, `server-storage-memory` |
-| `lib/hipaa-compliant-storage.ts` | SQLite encrypted storage | `HIPAACompliantStorage` class | `better-sqlite3`, `encryption-utils` |
-| `lib/server-storage-memory.ts` | In-memory storage | `MemoryServerStorage` class | None |
-| `lib/clinical-context-storage.ts` | IndexedDB management | `initDatabase()`, session/file CRUD | IndexedDB API |
-| `lib/patient-persistence.ts` | Patient records | `PatientPersistence` singleton | IndexedDB API |
-| `lib/pattern-analysis-storage.ts` | Pattern storage | Pattern CRUD | IndexedDB API |
+| `lib/firebase-admin-config.ts` | Firebase Admin SDK singleton | `getAdminApp()`, `getAdminFirestore()` | `firebase-admin` |
+| `lib/firestore-storage-adapter.ts` | Firestore Admin SDK storage (REST) | `FirestoreStorageAdapter` class | `firebase-admin/firestore`, `firebase-admin-config` |
+| `lib/server-storage-adapter.ts` | Storage abstraction | `ServerStorageAdapter` class | `firestore-storage-adapter`, `server-storage-memory` |
+| `lib/server-storage-memory.ts` | In-memory fallback storage | `MemoryServerStorage` class | None |
+| `lib/clinical-context-storage.ts` | IndexedDB management (client) | `initDatabase()`, session/file CRUD | IndexedDB API |
+| `lib/patient-persistence.ts` | Patient records (client) | `PatientPersistence` singleton | IndexedDB API |
+| `lib/pattern-analysis-storage.ts` | Pattern storage (client) | Pattern CRUD | IndexedDB API |
 | `lib/client-context-persistence.ts` | Client persistence helper | Persistence utilities | IndexedDB API |
 | `lib/ui-preferences-storage.ts` | UI preferences | Preference CRUD | IndexedDB API |
 | `lib/user-preferences-manager.ts` | User preferences | `UserPreferencesManager` class | `ui-preferences-storage` |
@@ -960,7 +942,7 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 - Limits: 20 requests per minute (default)
 - Blocked IPs: Temporary ban after excessive requests
 
-**User Authentication**: Not implemented. No login system for end users.
+**User Authentication**: Partially implemented. `providers/auth-provider.tsx` exposes `useAuth()` hook with `psychologistId` (Firebase UID), but the app falls back to `'anonymous'` when unauthenticated. No login UI exists yet. **Implementing Firebase Authentication (Login) is the next critical priority** to replace the `'anonymous'` fallback and enable real multi-tenant data isolation via `psychologists/{uid}/...` Firestore paths.
 
 ### Security Headers
 
@@ -1192,6 +1174,14 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 - `SENTRY_ORG` - Sentry organization name
 - `SENTRY_PROJECT` - Sentry project name
 
+#### Optional (Firebase Admin SDK — Vercel)
+
+- `FIREBASE_PRIVATE_KEY` - Firebase Admin service account private key (newlines escaped as `\n`)
+- `FIREBASE_CLIENT_EMAIL` - Firebase Admin service account email
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` - Full service account JSON (alternative to split vars)
+- `FIREBASE_SERVICE_ACCOUNT_JSON` - Full service account JSON (alternative)
+- `GENAI_SERVICE_ACCOUNT_JSON` - GenAI-specific service account JSON (alternative)
+
 #### Optional (Google/Vertex AI)
 
 - `GOOGLE_CLOUD_PROJECT` - Vertex AI project ID
@@ -1205,8 +1195,7 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 
 #### Optional (Other)
 
-- `AURORA_ENCRYPTION_KEY` - AES-256 encryption key (base64-encoded, 32 bytes)
-- `HOPEAI_STORAGE_MODE` - Force storage mode ("memory" for in-memory)
+- `AURORA_ENCRYPTION_KEY` - AES-256 encryption key (base64-encoded, 32 bytes) — reserved for future field-level encryption
 - `NODE_ENV` - Environment ("development" or "production")
 - `VERCEL` - Automatically set by Vercel
 - `VERCEL_ENV` - Vercel environment ("production", "preview", "development")
@@ -1283,8 +1272,8 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 - Vercel-specific optimizations in `next.config.mjs`
 
 **Storage Strategy**:
-- **Local/VM**: SQLite with HIPAA-compliant encryption
-- **Vercel**: In-memory storage (no persistence)
+- **All environments (Vercel/local)**: Firestore via Admin SDK (REST transport, `preferRest: true`)
+- **Fallback**: In-memory storage (only if `firebase-admin` fails to initialize)
 
 **Alternative Targets**: Any Node.js hosting platform that supports Next.js 15
 
@@ -1480,10 +1469,10 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 - **No circuit breakers**: External API failures can cascade
 
 #### Security
-- **No user authentication**: Only admin token authentication
+- **No user login UI**: Auth infrastructure exists (`AuthProvider`, `useAuth()`) but no login screen — falls back to `'anonymous'`. **Next critical priority.**
 - **No session management**: Client-side sessions not securely managed
 - **No CSRF protection**: Not implemented (may be needed for future forms)
-- **Audit logs not persistent**: In-memory audit logs lost on restart (memory storage mode)
+- **Audit logs**: Firestore provides built-in audit trails via Admin SDK writes
 
 #### Performance
 - **No caching layer**: API responses not cached (except PubMed 24h TTL)
@@ -1492,9 +1481,9 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 - **Large bundle size**: Not optimized (many Radix UI components)
 
 #### Data Persistence
-- **Vercel storage is ephemeral**: No persistence in serverless mode
-- **No backup strategy**: No automated backups of SQLite database
-- **No data migration strategy**: Schema changes require manual migration
+- **Firestore persistence operational**: Clinical sessions persist to Firestore via Admin SDK REST fallback (Phase 2 complete)
+- **No automated backup strategy**: Rely on Firestore's built-in point-in-time recovery (PITR) — not yet configured
+- **Data migration from IndexedDB**: Script for migrating legacy `demo_user` data to Firestore not yet written
 
 #### Accessibility
 - **No ARIA labels**: Many interactive elements lack accessibility labels
@@ -1542,10 +1531,10 @@ All API routes are defined in `/app/api/` using Next.js 15 App Router convention
 
 - **API key in client bundle**: `NEXT_PUBLIC_GOOGLE_AI_API_KEY` exposed to client (mitigated by "AIza" prefix validation)
 - **No input validation library**: No Zod/Yup validation on API routes (only in forms)
-- **No SQL injection protection**: SQLite queries may be vulnerable if not parameterized (review needed)
 - **No XSS protection in legacy code**: Markdown sanitization only in new code paths
 - **Rate limiting per IP**: Can be bypassed with IP rotation
 - **Admin token in plain text**: `ADMIN_API_TOKEN` stored as environment variable (no secrets manager)
+- **Anonymous user fallback**: Without login, all data is stored under `'anonymous'` user — no multi-tenant isolation until Firebase Auth login is implemented
 
 ---
 

@@ -2,8 +2,8 @@
 
 **AuroraPro Beta Launch Strategy & Technical Priorities**
 
-*Last Updated: 2026-04-01*
-*Status: Pre-Beta Planning*
+*Last Updated: 2026-04-05*
+*Status: Pre-Beta — Phase 2 (Backend Firestore Connection) ✅ Completed*
 *Target Market: Independent Psychologists (Chile, Argentina, Brasil)*
 
 ---
@@ -24,7 +24,8 @@ AuroraPro is preparing for beta launch targeting **independent psychologists** w
 - **Out of Scope for Beta**: Clinics, supervisors, enterprise clients
 
 **User Authentication Model:**
-- Demo users + admin tokens (enables rapid iteration)
+- Firebase Auth infrastructure deployed (`AuthProvider`, `useAuth()` hook) with `psychologistId` from Firebase UID
+- Currently falls back to `'anonymous'` when unauthenticated — **Login UI implementation is next critical priority**
 - Single-user scoped experience (no multi-user collaboration)
 - Clinic/enterprise features deferred post-beta
 
@@ -35,22 +36,26 @@ AuroraPro is preparing for beta launch targeting **independent psychologists** w
 ### 1.2 Storage & Persistence Architecture
 
 **Local-First Strategy:**
-- **Client**: IndexedDB for optimistic UI and offline capability
-- **Server**: Firebase Firestore for persistence with parallel synchronization
+- **Client**: IndexedDB for optimistic UI and offline capability (Firestore SDK `persistentLocalCache` + `persistentMultipleTabManager`)
+- **Server**: Firebase Firestore via Admin SDK REST transport (`preferRest: true`, bypasses gRPC issues on Vercel)
 - **Deployment**: Vercel (production) + Google Cloud (HIPAA compliance)
 
 **HIPAA Compliance Path:**
 - Firestore + Google Cloud Platform provide HIPAA-compliant infrastructure
 - Business Associate Agreement (BAA) required with Google Cloud
-- Replace current SQLite/MemoryStorage with Firestore integration
+- ~~Replace current SQLite/MemoryStorage with Firestore integration~~ ✅ **Completed (Phase 2)**
 
-**Migration Plan:**
-1. Keep IndexedDB for client-side optimistic updates
-2. Replace `ServerStorageAdapter` backends with Firestore client
-3. Implement bidirectional sync (IndexedDB ↔ Firestore)
-4. Enable offline-first with conflict resolution
+**Migration Status (as of 2026-04-05):**
+1. ✅ IndexedDB retained for client-side optimistic updates
+2. ✅ `ServerStorageAdapter` backends replaced with `FirestoreStorageAdapter` (Admin SDK REST)
+3. ✅ `firebase-admin` configured with `preferRest: true` and `ignoreUndefinedProperties: true`
+4. ✅ IAM permissions validated (`Cloud Datastore User` role)
+5. ✅ CollectionGroup indexes created for Firestore
+6. ✅ Clinical sessions persisting to `psychologists/{uid}/...` via Admin SDK (bypasses client Security Rules)
+7. ⏳ Bidirectional sync (IndexedDB ↔ Firestore) — deferred to Phase 3
+8. ⏳ Offline-first conflict resolution — deferred to Phase 3
 
-**Status**: Current SQLite/MemoryStorage is **not production-ready** for beta. Firestore integration is **critical path** item.
+**Status**: ~~Current SQLite/MemoryStorage is **not production-ready** for beta.~~ ✅ Firestore backend connection is **operational**. Sessions are being saved and updated in the `sessions` collection. **Next critical step**: Implement Firebase Authentication (Login) to replace `'anonymous'` fallback and enable real multi-tenant isolation.
 
 ---
 
@@ -377,12 +382,23 @@ AuroraPro is preparing for beta launch targeting **independent psychologists** w
 
 ### Phase 2: Infrastructure & i18n (Weeks 3-4)
 
-**Priority 1: Firestore Migration**
-- [ ] Set up Firebase project with HIPAA BAA
-- [ ] Replace `ServerStorageAdapter` with Firestore client
-- [ ] Implement IndexedDB ↔ Firestore sync
-- [ ] Test offline-first + conflict resolution
+**Priority 1: Firestore Migration** ✅ **COMPLETED (2026-04-05)**
+- [x] Set up Firebase project with HIPAA BAA
+- [x] Replace `ServerStorageAdapter` with Firestore Admin SDK (`FirestoreStorageAdapter`)
+- [x] Configure `preferRest: true` to solve gRPC corruption on Vercel
+- [x] Configure `ignoreUndefinedProperties: true` for flexible schemas
+- [x] Validate IAM permissions (`Cloud Datastore User` role)
+- [x] Create required CollectionGroup indexes
+- [x] Clinical sessions saving/updating in Firestore `sessions` collection
+- [ ] Implement IndexedDB ↔ Firestore bidirectional sync (deferred to Phase 3)
 - [ ] Migrate existing test data
+
+**Priority 1.5: Firebase Authentication (Login)** 🔴 **NEXT CRITICAL PRIORITY**
+- [ ] Implement login UI (email/password or Google sign-in)
+- [ ] Replace `'anonymous'` fallback with authenticated `psychologistId`
+- [ ] Add `verifyIdToken()` to API routes for server-side auth validation
+- [ ] Enable real multi-tenant data isolation via `psychologists/{uid}/...` paths
+- [ ] Test end-to-end auth flow (login → session creation → Firestore writes with real UID)
 
 **Priority 2: Internationalization**
 - [ ] Install and configure next-intl
@@ -681,7 +697,8 @@ All three criteria must be met simultaneously to graduate from beta.
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| **Firestore migration breaks existing data** | High | Medium | Comprehensive testing, gradual rollout, rollback plan |
+| ~~**Firestore migration breaks existing data**~~ | ~~High~~ | ~~Medium~~ | ✅ Completed — Admin SDK REST connection validated, sessions persisting correctly |
+| **Authentication gap (`'anonymous'` fallback)** | High | High | Next priority: Implement Firebase Auth login to replace anonymous user |
 | **HIPAA compliance gaps discovered** | High | Low | Pre-launch audit, legal review, BAA with Google |
 | **File processing remains broken** | High | Medium | Dedicated sprint, escalate to Google support if needed |
 | **Patient context loss unfixable** | High | Low | Deep debugging, architectural redesign if necessary |
@@ -836,21 +853,21 @@ All three criteria must be met simultaneously to graduate from beta.
 **This Week** (Week 0):
 1. ✅ Update CLAUDE.md with strategic clarifications
 2. ✅ Create this STRATEGIC_PRIORITIES.md document
-3. ⏳ Set up Firebase project with HIPAA BAA (DevOps/CTO)
+3. ✅ Set up Firebase project with HIPAA BAA (DevOps/CTO)
 4. ⏳ Fix patient context persistence bug (Senior Engineer)
 5. ⏳ Debug file processing pipeline (Senior Engineer)
 
 **Next Week** (Week 1):
 1. ⏳ Deploy CI/CD pipeline (DevOps)
-2. ⏳ Begin Firestore migration (Backend Team)
+2. ✅ ~~Begin Firestore migration (Backend Team)~~ — **Completed Phase 2 (2026-04-05)**
 3. ⏳ Start i18n implementation (Frontend Team)
 4. ⏳ Add E2E tests for critical flows (QA/Engineers)
 
-**Week 2**:
-1. ⏳ Complete critical bug fixes
-2. ⏳ Continue Firestore migration
-3. ⏳ Complete i18n for Spanish (Chile)
-4. ⏳ Begin MCP framework implementation
+**Week 2** (Current Priority):
+1. 🔴 **Implement Firebase Authentication Login** — Replace `'anonymous'` with real Firebase Auth UID
+2. ⏳ Continue i18n for Spanish (Chile)
+3. ⏳ Begin MCP framework implementation
+4. ⏳ Write IndexedDB→Firestore data migration script
 
 **Weeks 3-8**: Follow roadmap in Section 4.
 
@@ -862,14 +879,15 @@ AuroraPro has strong architectural foundations but requires focused execution on
 
 **Key Success Factors**:
 1. Fix patient context persistence and file processing **first** (everything else depends on these)
-2. Parallel track Firestore migration and i18n (independent work streams)
-3. Set up CI/CD **early** to prevent regressions
-4. Maintain weekly sprint reviews to adapt roadmap based on progress
+2. 🔴 **Implement Firebase Authentication (Login)** to replace `'anonymous'` fallback — this is the next critical infrastructure step after Phase 2 Firestore completion
+3. Parallel track i18n and MCP (independent work streams)
+4. Set up CI/CD **early** to prevent regressions
 5. Engage beta users early and often for feedback
 
 **Next Steps**:
-1. Review this document with leadership team
-2. Answer open questions in Section 10
+1. 🔴 Implement login UI and `verifyIdToken()` server-side validation
+2. Review this document with leadership team
+3. Answer open questions in Section 10
 3. Assign engineering resources to Phase 1 priorities
 4. Kick off Week 1 tasks immediately
 

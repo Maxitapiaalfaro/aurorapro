@@ -2,7 +2,8 @@
 
 > **Documento de diseño de arquitectura — Data Layer Architecture**
 > Fecha: 2026-04-04
-> Versión: 1.1 — Corrección de estrategia de cifrado §3.4 (elimina cifrado client-side de ChatMessage.content)
+> Actualización: 2026-04-05 — Fase 2 (Conexión Backend a Firestore) completada exitosamente
+> Versión: 1.2 — Actualización de estado de migración Fase 2
 > Basado en: Análisis del código fuente actual de Aurora y patrones de referencia de Claude Code (`docs/architecture/claude/claude-code-main`).
 
 ---
@@ -61,15 +62,15 @@ Aurora opera con una arquitectura **dual-tier** sin autenticación real:
 
 ### 1.2 Problemas Identificados
 
-| Problema | Evidencia en Código | Impacto |
-|----------|---------------------|---------|
-| **Sin autenticación** | `hooks/use-hopeai-system.ts` línea 85: `userId: 'demo_user'` | Cualquier usuario accede a todos los datos |
-| **Sin aislamiento multi-tenant** | `lib/hopeai-system.ts` línea 433: userId es un string arbitrario sin validación | Los datos de pacientes no están aislados por psicólogo |
-| **IndexedDB manual** | `lib/clinical-context-storage.ts`: gestión manual de IDB con 5 object stores | Sin sincronización offline→cloud, datos atrapados en un navegador |
-| **Dos IndexedDBs separadas** | `hopeai_clinical_db` + `HopeAI_PatientLibrary` como DBs independientes | Inconsistencia y complejidad de gestión |
-| **SQLite server efímero** | `lib/hipaa-compliant-storage.ts` línea 194: `dbPath: './data/aurora-hipaa.db'` | En Vercel/serverless el filesystem es efímero; los datos se pierden |
-| **localStorage para contexto** | `lib/client-context-persistence.ts`: prefijo `hopeai_optimized_context_` | Límite de 5MB, no sincronizable, sin estructura |
-| **Supabase instalado pero sin usar** | `package.json` línea 54: `@supabase/supabase-js@^2.76.1` | Dependencia muerta que agrega peso |
+| Problema | Evidencia en Código | Impacto | Estado |
+|----------|---------------------|---------|--------|
+| **Sin autenticación (login)** | `providers/auth-provider.tsx`: fallback a `'anonymous'` cuando no autenticado | Datos bajo usuario genérico sin aislamiento real | 🔴 **PRÓXIMA PRIORIDAD** |
+| ~~**Sin aislamiento multi-tenant**~~ | `lib/firestore-storage-adapter.ts`: paths `psychologists/{userId}/...` | Aislamiento diseñado pero requiere UID real (no `'anonymous'`) | ⚠️ Parcial — requiere login |
+| **IndexedDB manual** | `lib/clinical-context-storage.ts`: gestión manual de IDB con 5 object stores | Sin sincronización offline→cloud, datos atrapados en un navegador | ⏳ Fase 3 |
+| **Dos IndexedDBs separadas** | `hopeai_clinical_db` + `HopeAI_PatientLibrary` como DBs independientes | Inconsistencia y complejidad de gestión | ⏳ Fase 3 |
+| ~~**SQLite server efímero**~~ | ~~`lib/hipaa-compliant-storage.ts`~~ → Reemplazado por `FirestoreStorageAdapter` | ~~Datos se pierden en Vercel~~ → **Persistencia en Firestore operacional** | ✅ Resuelto |
+| **localStorage para contexto** | `lib/client-context-persistence.ts`: prefijo `hopeai_optimized_context_` | Límite de 5MB, no sincronizable, sin estructura | ⏳ Fase 3 |
+| **Supabase instalado pero sin usar** | `package.json`: `@supabase/supabase-js@^2.76.1` | Dependencia muerta que agrega peso | ⏳ Limpieza pendiente |
 
 ---
 
@@ -727,28 +728,50 @@ Claude Code usa un sistema de identidad diferente (OAuth con API keys) pero el p
 
 ## 6. Plan de Migración
 
-### Fase 1: Fundación (Semana 1-2)
+> **Estado global**: Fase 2 completada (2026-04-05). Próxima prioridad: Autenticación (Login).
+
+### Fase 1: Fundación (Semana 1-2) ✅ COMPLETADA
+
+| Paso | Acción | Estado |
+|------|--------|--------|
+| 1.1 | Instalar `firebase` y `firebase-admin` | ✅ Instalados |
+| 1.2 | Eliminar `@supabase/supabase-js` (sin uso) | ⏳ Pendiente |
+| 1.3 | Crear `lib/firebase-config.ts` (client SDK con offline persistence) | ✅ Creado (`persistentLocalCache` + `persistentMultipleTabManager`) |
+| 1.4 | Crear `lib/firebase-admin-config.ts` (server SDK) | ✅ Creado (3 credential paths, `resolveCredential()`) |
+| 1.5 | Crear `providers/auth-provider.tsx` | ✅ Creado (expone `useAuth()` con `psychologistId`) |
+| 1.6 | Implementar login UI básico (email/password) | 🔴 **PENDIENTE — PRÓXIMA PRIORIDAD** |
+| 1.7 | Modificar `hooks/use-hopeai-system.ts` para usar `useAuth().psychologistId` | ✅ Implementado (fallback a `'anonymous'`) |
+| 1.8 | Agregar verificación de ID token en API routes | 🔴 **PENDIENTE — requiere login UI primero** |
+
+### Fase 2: Conexión Backend a Firestore (Semana 2-3) ✅ COMPLETADA (2026-04-05)
+
+| Paso | Acción | Estado |
+|------|--------|--------|
+| 2.1 | Crear `lib/firestore-storage-adapter.ts` implementando `StorageAdapter` | ✅ Creado — Admin SDK REST, multi-tenant paths |
+| 2.2 | Configurar `preferRest: true` para evitar gRPC en Vercel | ✅ Resuelto — evita corrupción HTTP/2 frames |
+| 2.3 | Configurar `ignoreUndefinedProperties: true` | ✅ Resuelto — maneja campos opcionales como `clinicalContext.patientId` |
+| 2.4 | Validar permisos IAM (`Cloud Datastore User`) | ✅ Validado en Google Cloud |
+| 2.5 | Crear índices de `collectionGroup` requeridos | ✅ Índices creados |
+| 2.6 | Sesiones clínicas guardándose/actualizándose en colección `sessions` | ✅ Operacional (Admin SDK bypasses Security Rules) |
+| 2.7 | Todas las escrituras usan `.set(data, { merge: true })` | ✅ Patrón consistente |
+| 2.8 | `firebase-admin` en `serverExternalPackages` (next.config.mjs) | ✅ Configurado — evita bundling con webpack |
+
+**Hallazgos técnicos resueltos durante Fase 2:**
+- gRPC `9 FAILED_PRECONDITION` → Solucionado con `preferRest: true` (REST transport en lugar de HTTP/2 gRPC)
+- Validación estricta de campos → Solucionado con `ignoreUndefinedProperties: true`
+- Webpack bundling de `firebase-admin` → Solucionado con `serverExternalPackages`
+
+### Fase 2.5: Autenticación (Login) 🔴 PRÓXIMA PRIORIDAD CRÍTICA
 
 | Paso | Acción | Archivos Afectados |
 |------|--------|--------------------|
-| 1.1 | Instalar `firebase` y `firebase-admin` | `package.json` |
-| 1.2 | Eliminar `@supabase/supabase-js` (sin uso) | `package.json` |
-| 1.3 | Crear `lib/firebase-config.ts` (client SDK) | Nuevo archivo |
-| 1.4 | Crear `lib/firebase-admin-config.ts` (server SDK) | Nuevo archivo |
-| 1.5 | Crear `providers/auth-provider.tsx` | Nuevo archivo |
-| 1.6 | Implementar login UI básico (email/password) | `components/auth-gate.tsx` (nuevo) |
-| 1.7 | Modificar `hooks/use-hopeai-system.ts` para usar `useAuth().psychologistId` en lugar de `'demo_user'` | Modificar existente |
-| 1.8 | Agregar verificación de ID token en API routes (`app/api/send-message/route.ts`) | Modificar existente |
+| 2.5.1 | Implementar login UI (email/password o Google Sign-In) | `components/auth-gate.tsx` (nuevo) |
+| 2.5.2 | Reemplazar fallback `'anonymous'` con UID autenticado | `hooks/use-hopeai-system.ts`, `providers/auth-provider.tsx` |
+| 2.5.3 | Agregar `verifyIdToken()` en API routes del servidor | `app/api/send-message/route.ts` |
+| 2.5.4 | Habilitar aislamiento multi-tenant real: `psychologists/{uid}/...` | `lib/firestore-storage-adapter.ts` |
+| 2.5.5 | Testing E2E del flujo: login → sesión → escritura Firestore con UID real | Tests nuevos |
 
-### Fase 2: Migración de Datos (Semana 2-3)
-
-| Paso | Acción | Archivos Afectados |
-|------|--------|--------------------|
-| 2.1 | Crear `lib/firestore-storage-adapter.ts` implementando `StorageAdapter` | Nuevo archivo |
-| 2.2 | Reemplazar `clinical-context-storage.ts` (IndexedDB manual) con adapter Firestore | Modificar/reemplazar |
-| 2.3 | Migrar `patient-persistence.ts` a subcolección Firestore | Modificar/reemplazar |
-| 2.4 | Desplegar Security Rules de Firestore | `firestore.rules` (nuevo) |
-| 2.5 | Escribir script de migración `scripts/migrate-indexeddb-to-firestore.ts` para datos existentes del demo_user | Nuevo archivo |
+**Justificación**: Sin login, todos los datos se almacenan bajo el usuario `'anonymous'`, lo que invalida el aislamiento multi-tenant diseñado en la jerarquía `psychologists/{uid}/...`. Este paso es **bloqueante** para beta.
 
 ### Fase 3: Optimización Offline-First (Semana 3-4)
 
@@ -757,8 +780,8 @@ Claude Code usa un sistema de identidad diferente (OAuth con API keys) pero el p
 | 3.1 | Agregar `onSnapshot` listeners al hook de chat para actualizaciones en tiempo real | `hooks/use-hopeai-system.ts` |
 | 3.2 | Implementar indicadores de `hasPendingWrites` en la UI | `components/main-interface-optimized.tsx` |
 | 3.3 | Eliminar `client-context-persistence.ts` (localStorage) | Eliminar archivo |
-| 3.4 | Eliminar `hipaa-compliant-storage.ts` (SQLite server) | Eliminar archivo |
-| 3.5 | Configurar `persistentMultipleTabManager()` y probar multi-tab | `lib/firebase-config.ts` |
+| 3.4 | ~~Eliminar `hipaa-compliant-storage.ts` (SQLite server)~~ Ya reemplazado por `FirestoreStorageAdapter` | Limpieza de código muerto |
+| 3.5 | Configurar `persistentMultipleTabManager()` y probar multi-tab | `lib/firebase-config.ts` (ya configurado, falta testing) |
 
 ### Fase 4: Memoria de Agentes (Semana 4-5)
 
@@ -851,4 +874,6 @@ Claude Code usa un sistema de identidad diferente (OAuth con API keys) pero el p
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-> **Nota metodológica:** Todas las afirmaciones de este documento están basadas en el análisis directo del código fuente de Aurora (archivos y líneas referenciados) y los patrones de Claude Code en `docs/architecture/claude/claude-code-main/src/`. Las propuestas de Firestore están basadas en la documentación oficial del SDK y las capacidades documentadas de Firebase.
+> **Nota metodológica:** Todas las afirmaciones de este documento están basadas en el análisis directo del código fuente de Aurora (archivos y líneas referenciados) y los patrones de Claude Code en `docs/architecture/claude/claude-code-main/src/`. Las propuestas de Firestore están basadas en la documentación oficial del SDK y las capacidades documentadas de Firebase. La Fase 2 (Conexión Backend a Firestore) fue validada en producción el 2026-04-05.
+>
+> **Próximo paso crítico**: Implementar Firebase Authentication (Login) para reemplazar al usuario `'anonymous'` y habilitar el flujo multi-tenant real `psychologists/{uid}/...`.
