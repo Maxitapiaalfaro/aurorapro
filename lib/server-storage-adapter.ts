@@ -1,3 +1,5 @@
+import 'server-only'
+
 import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
 // Dynamic import para evitar que better-sqlite3 se incluya en el bundle del cliente

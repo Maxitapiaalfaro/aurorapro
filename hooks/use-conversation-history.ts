@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
-import { getStorageAdapter } from "@/lib/server-storage-adapter"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
 
 interface ConversationSummary {
@@ -103,14 +102,13 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     try {
       console.log(`🔄 Cargando conversaciones paginadas para usuario: ${userId}`)
       
-      const storage = await getStorageAdapter()
       const paginationOptions: PaginationOptions = {
         pageSize: 20, // Tamaño de página optimizado según el SDK
         sortBy: 'lastUpdated',
         sortOrder: 'desc'
       }
       
-      const result = await storage.getUserSessionsPaginated(userId, paginationOptions)
+      const result = await clinicalStorage.getUserSessionsPaginated(userId, paginationOptions)
       
       console.log(`📊 Cargada página con ${result.items.length} conversaciones de ${result.totalCount} totales`)
       
@@ -150,7 +148,6 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     try {
       console.log(`🔄 Cargando más conversaciones...`)
       
-      const storage = await getStorageAdapter()
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         pageToken: nextPageToken,
@@ -158,7 +155,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
         sortOrder: 'desc'
       }
       
-      const result = await storage.getUserSessionsPaginated(currentUserId, paginationOptions)
+      const result = await clinicalStorage.getUserSessionsPaginated(currentUserId, paginationOptions)
       
       console.log(`📊 Cargadas ${result.items.length} conversaciones adicionales`)
       
@@ -197,8 +194,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     try {
       setError(null)
       
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const chatState = await clinicalStorage.loadChatSession(sessionId)
       
       if (!chatState) {
         throw new Error(`Conversación no encontrada: ${sessionId}`)
@@ -219,8 +215,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     try {
       setError(null)
       
-      const storage = await getStorageAdapter()
-      await storage.deleteChatSession(sessionId)
+      await clinicalStorage.deleteChatSession(sessionId)
       
       // Actualizar la lista local
       const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)

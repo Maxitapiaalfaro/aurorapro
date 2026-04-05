@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * Firebase Admin SDK — Server-side Singleton
  *

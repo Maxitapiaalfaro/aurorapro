@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * Firestore Storage Adapter — Phase 2: Server-side Persistent Storage
  *

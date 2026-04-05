@@ -363,9 +363,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       // Generar resumen del paciente priorizando ficha clínica más reciente si existe
       let patientSummary: string
       try {
-        const { getStorageAdapter } = await import("@/lib/server-storage-adapter")
-        const storage = await getStorageAdapter()
-        const fichas = await storage.getFichasClinicasByPaciente(patient.id)
+        const fichas = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
         const latestFicha = fichas
           .filter((f: FichaClinicaState) => f.estado === 'completado')
           .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
