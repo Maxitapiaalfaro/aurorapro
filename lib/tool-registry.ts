@@ -17,9 +17,22 @@ import { FunctionDeclaration, Type } from '@google/genai';
 // TIPOS Y INTERFACES
 // ============================================================================
 
+/**
+ * Categoría de seguridad para control de permisos pre-ejecución (P0.1).
+ * 
+ * - read-only: Herramientas que solo analizan datos locales sin efectos secundarios.
+ *              Se aprueban automáticamente sin validación adicional.
+ * - write: Herramientas que persisten datos (diagnósticos, notas clínicas).
+ *          Requieren validación de identidad del psychologistId.
+ * - external: Herramientas que envían datos fuera del sistema (búsquedas web).
+ *             Requieren validación de que el payload no contenga PII/PHI.
+ */
+export type SecurityCategory = 'read-only' | 'write' | 'external';
+
 export interface ToolMetadata {
   id: string;
   category: ToolCategory;
+  securityCategory: SecurityCategory; // P0.1: Categoría de seguridad pre-ejecución
   priority: number; // 1-10, donde 10 es máxima prioridad
   contextKeywords: string[]; // Palabras clave que activan esta herramienta
   clinicalDomain: ClinicalDomain[];
@@ -61,6 +74,7 @@ const formulateClarifyingQuestion: ClinicalTool = {
   metadata: {
     id: 'formulate_clarifying_question',
     category: ToolCategory.EMOTIONAL_EXPLORATION,
+    securityCategory: 'read-only',
     priority: 9,
     contextKeywords: ['confuso', 'no entiendo', 'unclear', 'ambiguo', 'explicar'],
     clinicalDomain: [ClinicalDomain.GENERAL],
@@ -96,6 +110,7 @@ const identifyCoreEmotion: ClinicalTool = {
   metadata: {
     id: 'identify_core_emotion',
     category: ToolCategory.EMOTIONAL_EXPLORATION,
+    securityCategory: 'read-only',
     priority: 8,
     contextKeywords: ['siento', 'emoción', 'feeling', 'emotional', 'mood'],
     clinicalDomain: [ClinicalDomain.GENERAL, ClinicalDomain.ANXIETY, ClinicalDomain.DEPRESSION],
@@ -131,6 +146,7 @@ const generateValidatingStatement: ClinicalTool = {
   metadata: {
     id: 'generate_validating_statement',
     category: ToolCategory.VALIDATION_SUPPORT,
+    securityCategory: 'read-only',
     priority: 7,
     contextKeywords: ['dolor', 'difícil', 'struggle', 'hard', 'overwhelming'],
     clinicalDomain: [ClinicalDomain.GENERAL, ClinicalDomain.TRAUMA],
@@ -171,6 +187,7 @@ const detectPattern: ClinicalTool = {
   metadata: {
     id: 'detect_pattern',
     category: ToolCategory.PATTERN_DETECTION,
+    securityCategory: 'read-only',
     priority: 8,
     contextKeywords: ['siempre', 'nunca', 'always', 'never', 'pattern', 'repetir'],
     clinicalDomain: [ClinicalDomain.GENERAL, ClinicalDomain.ANXIETY, ClinicalDomain.DEPRESSION],
@@ -206,6 +223,7 @@ const reframePerspective: ClinicalTool = {
   metadata: {
     id: 'reframe_perspective',
     category: ToolCategory.COGNITIVE_ANALYSIS,
+    securityCategory: 'read-only',
     priority: 7,
     contextKeywords: ['terrible', 'awful', 'disaster', 'catastrophe', 'hopeless'],
     clinicalDomain: [ClinicalDomain.ANXIETY, ClinicalDomain.DEPRESSION],
@@ -245,6 +263,7 @@ const proposeBehavioralExperiment: ClinicalTool = {
   metadata: {
     id: 'propose_behavioral_experiment',
     category: ToolCategory.BEHAVIORAL_INTERVENTION,
+    securityCategory: 'read-only',
     priority: 6,
     contextKeywords: ['try', 'experiment', 'practice', 'action', 'behavior'],
     clinicalDomain: [ClinicalDomain.ANXIETY, ClinicalDomain.DEPRESSION],
@@ -288,6 +307,7 @@ const searchAcademicWeb: ClinicalTool = {
   metadata: {
     id: 'search_academic_web',
     category: ToolCategory.RESEARCH_ACADEMIC,
+    securityCategory: 'external',
     priority: 5,
     contextKeywords: ['research', 'study', 'evidence', 'investigación', 'estudios'],
     clinicalDomain: [ClinicalDomain.GENERAL],
@@ -418,6 +438,14 @@ export class ToolRegistry {
    */
   public registerTool(tool: ClinicalTool): void {
     this.tools.set(tool.metadata.id, tool);
+  }
+
+  /**
+   * Obtiene una herramienta por su nombre de declaración (el name que el LLM usa en functionCalls).
+   * Necesario para el sistema de permisos P0.1, donde el router recibe call.name del SDK.
+   */
+  public getToolByDeclarationName(declarationName: string): ClinicalTool | undefined {
+    return this.getAllTools().find(tool => tool.declaration.name === declarationName);
   }
 
   /**

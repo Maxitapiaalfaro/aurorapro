@@ -1,6 +1,6 @@
+import 'server-only'
+
 import { clinicalAgentRouter } from "./clinical-agent-router"
-import { getStorageAdapter } from "./server-storage-adapter"
-import { clinicalFileManager } from "./clinical-file-manager"
 import { createIntelligentIntentRouter, type EnrichedContext } from "./intelligent-intent-router"
 import { DynamicOrchestrator } from "./dynamic-orchestrator"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
@@ -70,6 +70,7 @@ export class HopeAISystem {
         // 1. Storage adapter
         (async () => {
           console.log('🔧 [HopeAISystem] Getting storage adapter...')
+          const { getStorageAdapter } = await import('./server-storage-adapter')
           const storageAdapter = await getStorageAdapter()
           console.log('✅ [HopeAISystem] Storage adapter obtained:', storageAdapter?.constructor?.name)
 
@@ -955,7 +956,9 @@ export class HopeAISystem {
           sessionId, 
           confirmationPrompt, 
           useStreaming, // Usar streaming también para confirmaciones
-          confirmationContext
+          confirmationContext,
+          undefined,  // interactionId
+          currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
         )
 
         // Manejar respuesta según si es streaming o no
@@ -1123,7 +1126,8 @@ export class HopeAISystem {
         message,
         useStreaming,
         enrichedAgentContext,
-        interactionId  // 📊 Pass interaction ID for metrics tracking
+        interactionId,  // 📊 Pass interaction ID for metrics tracking
+        currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
 
       // Save state with user message immediately (for both streaming and non-streaming)
@@ -1483,6 +1487,9 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     
     try {
       console.log(`📁 Uploading document: ${file.name} for session: ${sessionId}`)
+      
+      // Dynamic import to keep firebase-admin out of client bundle
+      const { clinicalFileManager } = await import('./clinical-file-manager')
       
       // Validate file before upload
       if (!clinicalFileManager.isValidClinicalFile(file)) {

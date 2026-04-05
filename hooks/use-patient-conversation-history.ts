@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
-import { getStorageAdapter } from "@/lib/server-storage-adapter"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse, PatientRecord } from "@/types/clinical-types"
 
 interface PatientConversationSummary {
@@ -139,7 +138,6 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     try {
       console.log(`🔄 Cargando conversaciones para paciente: ${patientId}`)
       
-      const storage = await getStorageAdapter()
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         sortBy: 'lastUpdated',
@@ -147,7 +145,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       }
       
       // Cargar todas las conversaciones del usuario y filtrar por paciente
-      const result = await storage.getUserSessionsPaginated(userId, paginationOptions)
+      const result = await clinicalStorage.getUserSessionsPaginated(userId, paginationOptions)
       
       console.log(`📊 Procesando ${result.items.length} conversaciones para filtrar por paciente`)
       
@@ -206,7 +204,6 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     try {
       console.log(`🔄 Cargando más conversaciones para paciente: ${currentPatientId}`)
       
-      const storage = await getStorageAdapter()
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         pageToken: nextPageToken,
@@ -214,7 +211,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         sortOrder: 'desc'
       }
       
-      const result = await storage.getUserSessionsPaginated(currentUserId, paginationOptions)
+      const result = await clinicalStorage.getUserSessionsPaginated(currentUserId, paginationOptions)
       
       // Filtrar nuevas conversaciones del paciente
       const newPatientSummaries = result.items
@@ -254,8 +251,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     
     try {
       console.log(`🔓 Abriendo conversación: ${sessionId}`)
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const chatState = await clinicalStorage.loadChatSession(sessionId)
       
       if (!chatState) {
         throw new Error('Conversación no encontrada')
@@ -277,8 +273,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     
     try {
       console.log(`🗑️ Eliminando conversación: ${sessionId}`)
-      const storage = await getStorageAdapter()
-      await storage.deleteChatSession(sessionId)
+      await clinicalStorage.deleteChatSession(sessionId)
       
       // Actualizar estado local
       const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)
@@ -305,8 +300,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       console.log(`✏️ Actualizando título de conversación: ${sessionId} -> ${newTitle}`)
       
       // Primero actualizar en el storage persistente
-      const storage = await getStorageAdapter()
-      const chatState = await storage.loadChatSession(sessionId)
+      const chatState = await clinicalStorage.loadChatSession(sessionId)
       
       if (chatState) {
         // Actualizar el título en el ChatState
@@ -316,7 +310,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         }
         
         // Guardar en storage
-        await storage.saveChatSession(updatedChatState)
+        await clinicalStorage.saveChatSession(updatedChatState)
         console.log(`💾 Título guardado en storage persistente`)
       }
       

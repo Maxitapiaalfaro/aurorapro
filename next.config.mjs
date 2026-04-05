@@ -28,6 +28,13 @@ const nextConfig = {
     unoptimized: true,
   },
 
+  // 🔧 CRITICAL: Externalize firebase-admin from webpack bundling.
+  // Without this, webpack bundles firebase-admin and corrupts the gRPC
+  // credential/authentication flow. The Admin SDK then makes unauthenticated
+  // requests to Firestore, which triggers Security Rules evaluation and
+  // returns "7 PERMISSION_DENIED: Missing or insufficient permissions."
+  serverExternalPackages: ['firebase-admin'],
+
   // 🔒 SEGURIDAD: Habilitar instrumentation hook
   experimental: {
     instrumentationHook: true,

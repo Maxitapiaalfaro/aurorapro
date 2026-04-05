@@ -21,7 +21,7 @@ import { parseMarkdown } from "@/lib/markdown-parser"
 import { toast } from "@/hooks/use-toast"
 import { FileUploadButton } from "@/components/file-upload-button"
 import { MessageFileAttachments } from "@/components/message-file-attachments"
-import { getFilesByIds } from "@/lib/hopeai-system"
+import { clinicalStorage } from "@/lib/clinical-context-storage"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
@@ -259,7 +259,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       for (const message of currentSession?.history || []) {
         if (message.fileReferences && message.fileReferences.length > 0) {
           try {
-            const files = await getFilesByIds(message.fileReferences)
+            // Client-side file retrieval using IndexedDB storage
+            const files: ClinicalFile[] = []
+            for (const fileId of message.fileReferences) {
+              const file = await clinicalStorage.getClinicalFileById(fileId)
+              if (file && file.status === 'processed') {
+                files.push(file)
+              }
+            }
             if (files.length > 0) {
               newMessageFiles[message.id] = files
             }

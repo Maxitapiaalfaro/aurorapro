@@ -4,6 +4,7 @@ import { useState, useCallback } from "react"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { PatientSummaryBuilder, PatientContextComposer } from "@/lib/patient-summary-builder"
 import { PatientPersistence } from "@/lib/patient-persistence"
+import { clinicalStorage } from "@/lib/clinical-context-storage"
 import type { PatientRecord, AgentType, ClinicalMode, PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import * as Sentry from "@sentry/nextjs"
 
@@ -82,9 +83,7 @@ export function usePatientChatSession(): UsePatientChatSessionReturn {
           
           try {
             // Cargar fichas clínicas del paciente
-            const { getStorageAdapter } = await import("@/lib/server-storage-adapter")
-            const storage = await getStorageAdapter()
-            const fichas = await storage.getFichasClinicasByPaciente(patient.id)
+            const fichas = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
             
             // Obtener la ficha más reciente completada
             const latestFicha = fichas

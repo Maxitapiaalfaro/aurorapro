@@ -1,10 +1,16 @@
 import { aiFiles } from "./google-genai-config"
-import { getStorageAdapter } from "./server-storage-adapter"
 import type { ClinicalFile } from "@/types/clinical-types"
+
+// Dynamic import: getStorageAdapter is loaded lazily to prevent firebase-admin
+// from leaking into the client bundle via transitive imports.
+async function getStorageAdapterLazy() {
+  const { getStorageAdapter } = await import('./server-storage-adapter')
+  return getStorageAdapter()
+}
 
 export class ClinicalFileManager {
   async uploadFile(file: File, sessionId: string, userId: string): Promise<ClinicalFile> {
-    const storage = await getStorageAdapter()
+    const storage = await getStorageAdapterLazy()
     const clinicalFile: ClinicalFile = {
       id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name: file.name,
@@ -74,7 +80,7 @@ export class ClinicalFileManager {
       console.error("Error uploading file:", error)
 
       // Update status to error
-      const storage = await getStorageAdapter()
+      const storage = await getStorageAdapterLazy()
       clinicalFile.status = "error"
       await storage.saveClinicalFile({
         ...clinicalFile,
@@ -118,7 +124,7 @@ export class ClinicalFileManager {
         (file.name || '').split('.')?.slice(0, -1).join('.')
       ].filter(Boolean) as string[]
 
-      const storage = await getStorageAdapter()
+      const storage = await getStorageAdapterLazy()
       const updated: ClinicalFile = { ...file, summary, outline, keywords }
       await storage.saveClinicalFile(updated)
       return updated
@@ -168,7 +174,7 @@ export class ClinicalFileManager {
 
   async deleteFile(fileId: string): Promise<void> {
     try {
-      const storage = await getStorageAdapter()
+      const storage = await getStorageAdapterLazy()
       const files = await storage.getClinicalFiles()
       const file = files.find((f: ClinicalFile) => f.id === fileId)
 
