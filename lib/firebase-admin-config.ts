@@ -8,11 +8,12 @@ import 'server-only'
  *
  * Credential resolution order:
  * 1. GOOGLE_APPLICATION_CREDENTIALS_JSON env var (JSON string — Vercel-safe)
- * 2. GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY (split vars)
+ * 2. Split env vars: GOOGLE_SERVICE_ACCOUNT_EMAIL / FIREBASE_CLIENT_EMAIL
+ *    + GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY / FIREBASE_PRIVATE_KEY
  * 3. Application Default Credentials (ADC) — works on GCP, Cloud Run, etc.
  *
  * @module lib/firebase-admin-config
- * @version 1.0.0 — Phase 2: Firestore Migration
+ * @version 1.1.0 — Fix: support FIREBASE_PRIVATE_KEY / FIREBASE_CLIENT_EMAIL env vars
  */
 
 import {
@@ -54,9 +55,13 @@ function resolveCredential() {
     }
   }
 
-  // 2. Split env vars (email + private key)
-  const svcEmail = env('GOOGLE_SERVICE_ACCOUNT_EMAIL')
-  const svcKey = env('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
+  // 2. Split env vars (email + private key) — support both naming conventions
+  const svcEmail =
+    env('GOOGLE_SERVICE_ACCOUNT_EMAIL') ||
+    env('FIREBASE_CLIENT_EMAIL')
+  const svcKey =
+    env('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY') ||
+    env('FIREBASE_PRIVATE_KEY')
   if (svcEmail && svcKey) {
     console.log('[FirebaseAdmin] Using credentials from split env vars')
     return cert({
@@ -67,6 +72,15 @@ function resolveCredential() {
   }
 
   // 3. Application Default Credentials (GCP/Cloud Run/local gcloud auth)
+  const isVercel = !!env('VERCEL') || !!env('VERCEL_ENV')
+  if (isVercel) {
+    console.warn(
+      '[FirebaseAdmin] ⚠️ No explicit credentials found on Vercel! ' +
+      'Set GOOGLE_APPLICATION_CREDENTIALS_JSON (full JSON) or ' +
+      'FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY. ' +
+      'Falling back to ADC which will likely fail with PERMISSION_DENIED.'
+    )
+  }
   console.log('[FirebaseAdmin] Using Application Default Credentials')
   return applicationDefault()
 }
