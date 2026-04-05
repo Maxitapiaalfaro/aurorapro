@@ -68,6 +68,13 @@ export class FirestoreStorageAdapter {
     if (this.initialized) return
     const adminApp = getAdminApp()
     this.db = getFirestore(adminApp)
+
+    // Force REST transport instead of gRPC.
+    // Vercel's serverless proxy corrupts the HTTP/2 frames used by @grpc/grpc-js,
+    // causing "9 FAILED_PRECONDITION" with empty details. REST over HTTP/1.1 is
+    // fully compatible with Vercel's infrastructure.
+    this.db.settings({ preferRest: true })
+
     this.initialized = true
 
     // ── Connectivity probe: verify credentials work before first real write ──
