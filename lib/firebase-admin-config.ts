@@ -92,7 +92,7 @@ function resolveCredential() {
 let _app: App
 let _db: Firestore
 
-function getAdminApp(): App {
+export function getAdminApp(): App {
   if (getApps().length > 0) {
     return getApps()[0]!
   }

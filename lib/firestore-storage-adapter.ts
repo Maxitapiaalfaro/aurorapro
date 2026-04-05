@@ -25,8 +25,8 @@ import type {
   PaginationOptions,
   PaginatedResponse,
 } from '@/types/clinical-types'
-import { getAdminFirestore } from './firebase-admin-config'
-import type { Firestore, DocumentData, Query } from 'firebase-admin/firestore'
+import { getAdminApp } from './firebase-admin-config'
+import { getFirestore, type Firestore, type DocumentData, type Query } from 'firebase-admin/firestore'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -66,9 +66,10 @@ export class FirestoreStorageAdapter {
 
   async initialize(): Promise<void> {
     if (this.initialized) return
-    this.db = getAdminFirestore()
+    const adminApp = getAdminApp()
+    this.db = getFirestore(adminApp)
     this.initialized = true
-    console.log('✅ [Firestore] Initialized — persistent cloud storage active')
+    console.log('✅ [Firestore] Initialized — Admin SDK persistent cloud storage active (bypasses security rules)')
   }
 
   async shutdown(): Promise<void> {
