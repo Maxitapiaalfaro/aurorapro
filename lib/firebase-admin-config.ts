@@ -63,9 +63,10 @@ function resolveCredential() {
     env('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY') ||
     env('FIREBASE_PRIVATE_KEY')
   if (svcEmail && svcKey) {
-    console.log('[FirebaseAdmin] Using credentials from split env vars')
+    const projectId = env('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || env('FIREBASE_PROJECT_ID') || ''
+    console.log(`[FirebaseAdmin] Using credentials from split env vars (email: ${svcEmail}, project: ${projectId || 'NOT SET'}, key length: ${svcKey.length} chars)`)
     return cert({
-      projectId: env('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || env('FIREBASE_PROJECT_ID') || '',
+      projectId,
       clientEmail: svcEmail,
       privateKey: svcKey.replace(/\\n/g, '\n'),
     })

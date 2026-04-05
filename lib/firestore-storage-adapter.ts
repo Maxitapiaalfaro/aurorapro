@@ -69,7 +69,31 @@ export class FirestoreStorageAdapter {
     const adminApp = getAdminApp()
     this.db = getFirestore(adminApp)
     this.initialized = true
-    console.log('✅ [Firestore] Initialized — Admin SDK persistent cloud storage active (bypasses security rules)')
+
+    // ── Connectivity probe: verify credentials work before first real write ──
+    // This catches PERMISSION_DENIED early with actionable guidance.
+    try {
+      // A lightweight read of a non-existent document — costs nothing but proves auth works
+      await this.db.collection('_health').doc('probe').get()
+      console.log('✅ [Firestore] Initialized — Admin SDK persistent cloud storage active (credentials verified)')
+    } catch (probeError: any) {
+      const code = probeError?.code ?? probeError?.details ?? ''
+      const msg = probeError?.message ?? ''
+      if (code === 7 || msg.includes('PERMISSION_DENIED') || msg.includes('Missing or insufficient permissions')) {
+        console.error(
+          '🚨 [Firestore] PERMISSION_DENIED during connectivity probe!\n' +
+          '   This means the Admin SDK credentials do not have Firestore access.\n' +
+          '   ➤ Ensure the service account has the "Cloud Datastore User" IAM role.\n' +
+          '   ➤ Verify FIREBASE_PROJECT_ID matches the Firestore project.\n' +
+          '   ➤ Verify FIREBASE_CLIENT_EMAIL belongs to the correct project.\n' +
+          '   ➤ Check that firebase-admin is in serverExternalPackages (next.config.mjs).\n' +
+          '   Error:', msg
+        )
+      } else {
+        // Non-permission errors (network, etc.) — log but don't block init
+        console.warn('⚠️ [Firestore] Connectivity probe failed (non-critical):', msg)
+      }
+    }
   }
 
   async shutdown(): Promise<void> {
