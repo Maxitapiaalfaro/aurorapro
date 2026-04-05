@@ -4,20 +4,18 @@ import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinica
 type HIPAAStorage = any
 
 /**
- * Adaptador de almacenamiento para el servidor con persistencia HIPAA-compliant.
+ * Adaptador de almacenamiento para el servidor con persistencia.
  *
- * MIGRACIÓN COMPLETADA:
- * - Antes: In-memory Maps (memory leak, no persistencia)
- * - Ahora: SQLite encriptado + Hot Cache (HIPAA compliant, persistente)
+ * MIGRACIÓN FASE 2:
+ * - Antes: In-memory Maps (Vercel) o SQLite (local)
+ * - Ahora: Firestore (Vercel/serverless) o SQLite (local disk)
  *
- * Características:
- * - Persistencia durable en disco con SQLite
- * - Encriptación AES-256-GCM at-rest
- * - Hot cache limitado (50 sesiones) para performance
- * - Audit logging automático
- * - Cleanup automático de cache
+ * Selección de backend:
+ * - Vercel / serverless / HOPEAI_STORAGE_MODE=memory → FirestoreStorageAdapter (cloud persistent)
+ * - Disk-capable environments → HIPAACompliantStorage (SQLite + AES-256)
+ * - Fallback if Firestore init fails → MemoryServerStorage (ephemeral)
  *
- * @version 2.0.0 - HIPAA Compliant
+ * @version 3.0.0 — Phase 2: Firestore Migration
  */
 export class ServerStorageAdapter {
   private storage: HIPAAStorage | null = null
@@ -34,10 +32,20 @@ export class ServerStorageAdapter {
       const forceMemory = process.env.HOPEAI_STORAGE_MODE === 'memory'
 
       if (isVercel || forceMemory) {
-        console.log('🔧 [ServerStorageAdapter] Using MemoryServerStorage (Vercel/serverless-safe)')
-        const { MemoryServerStorage } = await import('./server-storage-memory')
-        this.storage = new MemoryServerStorage()
-        console.log('✅ [ServerStorageAdapter] MemoryServerStorage instance created')
+        // ── Phase 2: Use Firestore instead of MemoryServerStorage ──
+        try {
+          console.log('🔧 [ServerStorageAdapter] Creating FirestoreStorageAdapter (Vercel/serverless)...')
+          const { FirestoreStorageAdapter } = await import('./firestore-storage-adapter')
+          this.storage = new FirestoreStorageAdapter()
+          console.log('✅ [ServerStorageAdapter] FirestoreStorageAdapter instance created')
+        } catch (error) {
+          // Graceful fallback: if firebase-admin fails (missing credentials, etc.)
+          // fall back to MemoryServerStorage to avoid hard crashes
+          console.warn('⚠️ [ServerStorageAdapter] FirestoreStorageAdapter failed, falling back to MemoryServerStorage:', error)
+          const { MemoryServerStorage } = await import('./server-storage-memory')
+          this.storage = new MemoryServerStorage()
+          console.log('✅ [ServerStorageAdapter] MemoryServerStorage fallback instance created')
+        }
       } else {
         console.log('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
         // Dynamic import para evitar bundling en cliente
@@ -62,7 +70,8 @@ export class ServerStorageAdapter {
     await storage.initialize()
     this.initialized = true
 
-    console.log("✅ [ServerStorageAdapter] Initialized (HIPAA-compliant with SQLite)")
+    const backendName = storage.constructor?.name || 'unknown'
+    console.log(`✅ [ServerStorageAdapter] Initialized (backend: ${backendName})`)
   }
 
   async saveChatSession(chatState: ChatState): Promise<void> {
