@@ -12,6 +12,10 @@ import {
 } from "@/lib/firestore-client-storage"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Interfaz para el estado de la sesion optimizada
 interface OptimizedSessionState {
   sessionId: string | null
@@ -105,7 +109,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
 
         if (result.items.length > 0) {
           const mostRecentSummary = result.items[0]
-          console.log('Restaurando sesion mas reciente:', mostRecentSummary.sessionId)
+          logger.info('Restaurando sesion mas reciente:', mostRecentSummary.sessionId)
 
           // Load full session with messages
           const fullSession = await loadSessionWithMessages(
@@ -140,20 +144,20 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
               ? new Date(fullSession.metadata.createdAt)
               : new Date()
 
-            console.log('Sesion restaurada exitosamente')
+            logger.info('Sesion restaurada exitosamente')
           } else {
-            console.log('No hay sesiones previas, sistema listo para nueva sesion')
+            logger.info('No hay sesiones previas, sistema listo para nueva sesion')
             setSessionState(prev => ({ ...prev, isInitialized: true, isLoading: false }))
           }
         } else {
-          console.log('No hay sesiones previas, sistema listo para nueva sesion')
+          logger.info('No hay sesiones previas, sistema listo para nueva sesion')
           setSessionState(prev => ({ ...prev, isInitialized: true, isLoading: false }))
         }
 
         // No cleanup needed — Firestore manages its own data lifecycle
 
       } catch (error) {
-        console.error('Error inicializando sistema optimizado:', error)
+        logger.error('Error inicializando sistema optimizado:', error)
         setSessionState(prev => ({
           ...prev,
           error: 'Error al inicializar el sistema optimizado',
@@ -221,10 +225,10 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
 
       await saveSessionMetadata(psychologistId, currentPatientId.current, initialSession)
 
-      console.log('Sesion optimizada creada:', sessionId)
+      logger.info('Sesion optimizada creada:', sessionId)
       return sessionId
     } catch (error) {
-      console.error('Error creando sesion optimizada:', error)
+      logger.error('Error creando sesion optimizada:', error)
       setSessionState(prev => ({
         ...prev,
         error: 'Error al crear la sesion optimizada',
@@ -272,10 +276,10 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
         ? new Date(savedSession.metadata.createdAt)
         : new Date()
 
-      console.log('Sesion cargada exitosamente:', sessionId)
+      logger.info('Sesion cargada exitosamente:', sessionId)
       return true
     } catch (error) {
-      console.error('Error cargando sesion:', error)
+      logger.error('Error cargando sesion:', error)
       setSessionState(prev => ({
         ...prev,
         error: 'Error al cargar la sesion',
@@ -350,7 +354,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
 
       await saveSessionMetadata(psychologistId, currentPatientId.current, sessionData)
 
-      console.log('Mensaje enviado y contexto guardado', {
+      logger.info('Mensaje enviado y contexto guardado', {
         responseTime,
         tokenEfficiency: updatedMetrics.tokenEfficiency,
         compressionRatio: updatedMetrics.compressionRatio
@@ -358,7 +362,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
 
       return response
     } catch (error) {
-      console.error('Error enviando mensaje:', error)
+      logger.error('Error enviando mensaje:', error)
       setSessionState(prev => ({
         ...prev,
         error: 'Error al enviar el mensaje',
@@ -415,10 +419,10 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
 
       await saveSessionMetadata(psychologistId, currentPatientId.current, sessionData)
 
-      console.log('Agente cambiado exitosamente:', newAgent)
+      logger.info('Agente cambiado exitosamente:', newAgent)
       return true
     } catch (error) {
-      console.error('Error cambiando agente:', error)
+      logger.error('Error cambiando agente:', error)
       setSessionState(prev => ({
         ...prev,
         error: 'Error al cambiar el agente',

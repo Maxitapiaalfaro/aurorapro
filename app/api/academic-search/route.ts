@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { academicMultiSourceSearch } from '@/lib/academic-multi-source-search'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 /**
  * API Route para búsqueda académica con Parallel AI
  * 
@@ -19,7 +23,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('🧪 [API Academic Search] Ejecutando búsqueda con Parallel AI...', {
+    logger.info('🧪 [API Academic Search] Ejecutando búsqueda con Parallel AI...', {
       query: query.substring(0, 50) + '...',
       maxResults,
       language,
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
       minTrustScore
     })
 
-    console.log('🧪 [API Academic Search] Búsqueda completada:', {
+    logger.info('🧪 [API Academic Search] Búsqueda completada:', {
       totalFound: searchResults.metadata.totalFound,
       fromParallelAI: searchResults.metadata.fromParallelAI,
       averageTrustScore: searchResults.metadata.averageTrustScore
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ [API Academic Search] Error:', error)
+    logger.error('❌ [API Academic Search] Error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to perform academic search',

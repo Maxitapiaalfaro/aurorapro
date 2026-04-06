@@ -10,6 +10,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Badge } from '@/components/ui/badge'
 import { VoiceStatusIndicator } from '@/components/voice-status-indicator'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Componente de Botón de Entrada de Voz para HopeAI
  * 
@@ -95,7 +99,7 @@ export function VoiceInputButton({
       try {
         await startListening()
       } catch (error) {
-        console.error('Error al iniciar grabación:', error)
+        logger.error('Error al iniciar grabación:', error)
       }
     }
   }

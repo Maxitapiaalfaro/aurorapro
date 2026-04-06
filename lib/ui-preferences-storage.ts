@@ -1,3 +1,7 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('storage')
+
 /**
  * UI Preferences Storage
  * Manages user interface preferences using IndexedDB
@@ -39,13 +43,13 @@ export class UIPreferencesStorage {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
 
       request.onerror = () => {
-        console.error("Error opening UI preferences database:", request.error)
+        logger.error("Error opening UI preferences database:", request.error)
         reject(request.error)
       }
 
       request.onsuccess = () => {
         this.db = request.result
-        console.log("✅ UI Preferences database initialized")
+        logger.info("✅ UI Preferences database initialized")
         resolve()
       }
 
@@ -57,7 +61,7 @@ export class UIPreferencesStorage {
           const store = db.createObjectStore(STORE_NAME, {
             keyPath: "userId",
           })
-          console.log("✅ UI Preferences object store created")
+          logger.info("✅ UI Preferences object store created")
         }
       }
     })
@@ -90,7 +94,7 @@ export class UIPreferencesStorage {
       }
 
       request.onerror = () => {
-        console.error("Error getting UI preferences:", request.error)
+        logger.error("Error getting UI preferences:", request.error)
         reject(request.error)
       }
     })
@@ -116,12 +120,12 @@ export class UIPreferencesStorage {
       const request = store.put(preferencesToSave)
 
       request.onsuccess = () => {
-        console.log("✅ UI preferences saved:", preferencesToSave)
+        logger.info("✅ UI preferences saved:", preferencesToSave)
         resolve()
       }
 
       request.onerror = () => {
-        console.error("Error saving UI preferences:", request.error)
+        logger.error("Error saving UI preferences:", request.error)
         reject(request.error)
       }
     })

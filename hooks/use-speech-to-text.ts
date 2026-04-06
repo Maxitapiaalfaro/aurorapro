@@ -6,6 +6,10 @@ import { useMobileDetection } from './use-mobile'
 import { useTranscriptPostProcessor } from './use-transcript-post-processor'
 import { HIGH_PRIORITY_TERMS_CL } from '@/lib/chilean-clinical-vocabulary'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Hook personalizado para Speech-to-Text integrado con HopeAI
  * 
@@ -122,10 +126,10 @@ export function useSpeechToText(
       if (hasMediaDevices && isSecureContext) {
         // Asumir que el micrófono está disponible hasta que se demuestre lo contrario
         setActualMicAvailable(true)
-        console.log('✅ Contexto seguro y API de medios disponible')
+        logger.info('✅ Contexto seguro y API de medios disponible')
       } else {
         setActualMicAvailable(false)
-        console.warn('⚠️ Contexto inseguro o API de medios no disponible')
+        logger.warn('⚠️ Contexto inseguro o API de medios no disponible')
       }
       
       setMicrophoneChecked(true)
@@ -153,7 +157,7 @@ export function useSpeechToText(
   // Manejo de eventos de error de SpeechRecognition
   useEffect(() => {
     const handleSpeechError = (event: any) => {
-      console.error('🚨 Error de SpeechRecognition:', event)
+      logger.error('🚨 Error de SpeechRecognition:', event)
       
       let errorMessage = 'Error en el reconocimiento de voz'
       
@@ -219,7 +223,7 @@ export function useSpeechToText(
     if (!listening && isProcessing) {
       // Si no está escuchando pero está procesando, resetear después de un delay
       const resetTimeout = setTimeout(() => {
-        console.log('🔄 Reseteando estado de procesamiento automáticamente')
+        logger.info('🔄 Reseteando estado de procesamiento automáticamente')
         setIsProcessing(false)
       }, 1000)
       
@@ -229,7 +233,7 @@ export function useSpeechToText(
 
   // Funciones de control
   const startListening = useCallback(async () => {
-    console.log('🎤 Iniciando grabación...', {
+    logger.info('🎤 Iniciando grabación...', {
       browserSupport: browserSupportsSpeechRecognition,
       micAvailable: isMicrophoneAvailable,
       isMobile: mobileDetection.isMobile,
@@ -247,7 +251,7 @@ export function useSpeechToText(
     
     // Si ya está escuchando, detener (toggle functionality)
     if (listening) {
-      console.log('🔄 Toggle: deteniendo grabación activa')
+      logger.info('🔄 Toggle: deteniendo grabación activa')
       stopListening()
       return
     }
@@ -284,7 +288,7 @@ export function useSpeechToText(
           }
         }
       } catch (err) {
-        console.log('No se pudo acceder a la instancia de SpeechRecognition:', err)
+        logger.info('No se pudo acceder a la instancia de SpeechRecognition:', err)
       }
       
       // Estrategia 2: Mutar temporalmente el audio del contexto web
@@ -311,7 +315,7 @@ export function useSpeechToText(
           }, 100)
         }
       } catch (audioErr) {
-        console.log('No se pudo mutar el contexto de audio:', audioErr)
+        logger.info('No se pudo mutar el contexto de audio:', audioErr)
       }
       
       // Configuración optimizada para toggle functionality con vocabulario clínico chileno
@@ -322,7 +326,7 @@ export function useSpeechToText(
         maxAlternatives: 1
       }
 
-      console.log('🎤 Iniciando grabación en modo toggle (sin sonido) con vocabulario clínico chileno:', options)
+      logger.info('🎤 Iniciando grabación en modo toggle (sin sonido) con vocabulario clínico chileno:', options)
 
       // Intentar agregar gramática clínica si el navegador lo soporta
       try {
@@ -343,11 +347,11 @@ export function useSpeechToText(
             grammarList.addFromString(grammar, 1.0)
             recognition.grammars = grammarList
 
-            console.log('✅ Gramática clínica chilena aplicada:', HIGH_PRIORITY_TERMS_CL.length, 'términos')
+            logger.info('✅ Gramática clínica chilena aplicada:', HIGH_PRIORITY_TERMS_CL.length, 'términos')
           }
         }
       } catch (grammarError) {
-        console.log('⚠️ No se pudo aplicar gramática clínica (navegador no soporta):', grammarError)
+        logger.info('⚠️ No se pudo aplicar gramática clínica (navegador no soporta):', grammarError)
         // Continuar sin gramática - no es crítico
       }
 
@@ -356,20 +360,20 @@ export function useSpeechToText(
       // Timeout de seguridad más largo para modo toggle
       const maxRecordingTime = mobileDetection.isMobile ? 300000 : 180000 // 5min móvil, 3min desktop
       processingTimeoutRef.current = setTimeout(() => {
-        console.log('⏰ Timeout de seguridad alcanzado en modo toggle')
+        logger.info('⏰ Timeout de seguridad alcanzado en modo toggle')
         stopListening()
       }, maxRecordingTime)
       
       // Timeout de seguridad para evitar bloqueo infinito
       setTimeout(() => {
         if (isProcessing && !listening) {
-          console.log('🚨 Timeout de seguridad: reseteando estado de procesamiento')
+          logger.info('🚨 Timeout de seguridad: reseteando estado de procesamiento')
           setIsProcessing(false)
         }
       }, 3000)
       
     } catch (err) {
-      console.error('Error starting speech recognition:', err)
+      logger.error('Error starting speech recognition:', err)
       
       // Manejo específico de errores de SpeechRecognition
       let errorMessage = 'Error al iniciar el reconocimiento de voz'
@@ -393,7 +397,7 @@ export function useSpeechToText(
   }, [browserSupportsSpeechRecognition, isMicrophoneAvailable, browserSupportsContinuousListening, finalConfig, mobileDetection.isMobile])
 
   const stopListening = useCallback(() => {
-    console.log('🛑 Deteniendo grabación...')
+    logger.info('🛑 Deteniendo grabación...')
     
     try {
       SpeechRecognition.stopListening()
@@ -414,14 +418,14 @@ export function useSpeechToText(
       }, 100)
       
     } catch (err) {
-      console.error('Error stopping speech recognition:', err)
+      logger.error('Error stopping speech recognition:', err)
       setError('Error al detener el reconocimiento de voz')
       setIsProcessing(false)
     }
   }, [])
 
   const resetTranscript = useCallback(() => {
-    console.log('🔄 Reseteando transcript...')
+    logger.info('🔄 Reseteando transcript...')
     resetSpeechTranscript()
     setError(null)
     setConfidence(0)

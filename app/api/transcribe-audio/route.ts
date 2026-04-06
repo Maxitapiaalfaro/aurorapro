@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { aiFiles } from '@/lib/google-genai-config'
 import * as Sentry from '@sentry/nextjs'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 /**
  * API endpoint para transcribir audio usando Gemini API
  * 
@@ -30,7 +34,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log('🎤 Transcribiendo audio:', {
+    logger.info('🎤 Transcribiendo audio:', {
       name: audioFile.name,
       type: audioFile.type,
       size: audioFile.size,
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest) {
       }
     })
     
-    console.log('✅ Archivo subido a Gemini:', uploadResult.name)
+    logger.info('✅ Archivo subido a Gemini:', uploadResult.name)
     
     // Esperar a que el archivo esté procesado con polling inteligente
     // Más frecuente al inicio (donde suele estar listo), más espaciado después
@@ -102,7 +106,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Timeout esperando que el archivo esté listo')
     }
     
-    console.log('✅ Archivo listo para transcripción')
+    logger.info('✅ Archivo listo para transcripción')
     
     // Transcribir el audio usando Gemini (Google AI Studio client)
     const response = await aiFiles.models.generateContent({
@@ -139,7 +143,7 @@ Transcripción:`
       throw new Error('No se pudo obtener transcripción del audio')
     }
     
-    console.log('✅ Transcripción completada:', {
+    logger.info('✅ Transcripción completada:', {
       length: transcript.length,
       duration: Date.now() - startTime,
     })
@@ -147,8 +151,8 @@ Transcripción:`
     // Limpiar el archivo de Gemini de forma asíncrona (no bloquear respuesta)
     if (uploadResult.name) {
       aiFiles.files.delete({ name: uploadResult.name })
-        .then(() => console.log('🗑️ Archivo temporal eliminado'))
-        .catch(err => console.warn('No se pudo eliminar archivo temporal:', err))
+        .then(() => logger.info('🗑️ Archivo temporal eliminado'))
+        .catch(err => logger.warn('No se pudo eliminar archivo temporal:', err))
     }
     
     // Tracking con Sentry
@@ -171,7 +175,7 @@ Transcripción:`
     })
     
   } catch (error) {
-    console.error('❌ Error al transcribir audio:', error)
+    logger.error('❌ Error al transcribir audio:', error)
     
     Sentry.captureException(error, {
       tags: {

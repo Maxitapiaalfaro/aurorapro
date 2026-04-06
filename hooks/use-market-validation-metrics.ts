@@ -19,6 +19,8 @@ import {
   EVENT_TYPES,
   MarketValidationData
 } from '@/lib/enhanced-metrics-types';
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
 
 interface UseMarketValidationMetricsProps {
   userId?: string;
@@ -110,7 +112,7 @@ export function useMarketValidationMetrics({
     setUserIdentity(fullIdentity);
     currentUserIdRef.current = fullIdentity.userId;
     
-    console.log('🔍 Usuario identificado para validación de mercado:', fullIdentity.userId);
+    logger.info('🔍 Usuario identificado para validación de mercado:', fullIdentity.userId);
     return fullIdentity;
   }, [userId, sessionId, userType, source]);
   
@@ -145,7 +147,7 @@ export function useMarketValidationMetrics({
       });
     }
     
-    console.log('🚀 Activación actualizada:', activationData.activationScore);
+    logger.info('🚀 Activación actualizada:', activationData.activationScore);
   }, [sessionId, userIdentity]);
   
   // ==========================================
@@ -165,7 +167,7 @@ export function useMarketValidationMetrics({
     });
     
     setEngagementMetrics(engagementData);
-    console.log('💫 Engagement actualizado:', engagementData.engagementScore);
+    logger.info('💫 Engagement actualizado:', engagementData.engagementScore);
   }, [sessionId, userIdentity]);
   
   const updateEngagementActivity = useCallback(() => {
@@ -192,7 +194,7 @@ export function useMarketValidationMetrics({
     
     // Configurar nuevo timeout (15 minutos)
     engagementTimeoutRef.current = setTimeout(() => {
-      console.log('⏰ Usuario inactivo - analizando retención');
+      logger.info('⏰ Usuario inactivo - analizando retención');
       analyzeUserRetention();
     }, 15 * 60 * 1000);
     
@@ -211,7 +213,7 @@ export function useMarketValidationMetrics({
     });
     
     setValueMetrics(valueData);
-    console.log('💎 Valor actualizado:', valueData.valueScore);
+    logger.info('💎 Valor actualizado:', valueData.valueScore);
   }, []);
   
   // ==========================================
@@ -235,7 +237,7 @@ export function useMarketValidationMetrics({
       });
     }
     
-    console.log('🔄 Retención analizada:', {
+    logger.info('🔄 Retención analizada:', {
       daysSinceLast: retentionData.daysSinceLastActivity,
       isChurned: retentionData.isChurned
     });
@@ -258,7 +260,7 @@ export function useMarketValidationMetrics({
     };
     
     enhancedMetricsTracker.trackConversionEvent(fullEvent);
-    console.log('🎯 Evento de conversión:', fullEvent.eventType);
+    logger.info('🎯 Evento de conversión:', fullEvent.eventType);
   }, [sessionId, userIdentity]);
   
   // ==========================================
@@ -271,7 +273,7 @@ export function useMarketValidationMetrics({
     const analysis = enhancedMetricsTracker.getUserAnalysis(currentUserIdRef.current);
     setUserAnalysis(analysis);
     
-    console.log('📊 Análisis actualizado para:', currentUserIdRef.current);
+    logger.info('📊 Análisis actualizado para:', currentUserIdRef.current);
   }, []);
   
   // ==========================================
@@ -334,7 +336,7 @@ export function useMarketValidationMetrics({
         metadata: { agent: currentAgent }
       });
       
-      console.log('🎬 Sesión iniciada para validación de mercado');
+      logger.info('🎬 Sesión iniciada para validación de mercado');
     }
   }, [isActive, userIdentity, currentAgent, trackConversionEventWrapper]);
   
@@ -454,7 +456,7 @@ export function useMarketValidationMetrics({
           }
         });
         
-        console.log('🏁 Sesión finalizada:', {
+        logger.info('🏁 Sesión finalizada:', {
           duration: sessionDuration,
           messages: messageCountRef.current
         });

@@ -12,6 +12,10 @@ import { getAgentVisualConfigSafe } from '@/config/agent-visual-config'
 import type { AgentType } from '@/types/clinical-types'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // DialogContent personalizado sin el botón X
 const CustomDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -83,7 +87,7 @@ export function PioneerCircleInvitation({
       onResponse(response);
       onClose();
     } catch (error) {
-      console.error('Error procesando respuesta:', error);
+      logger.error('Error procesando respuesta:', error);
     } finally {
       setIsLoading(false);
     }
@@ -115,13 +119,13 @@ export function PioneerCircleInvitation({
       }
 
       const result = await response.json();
-      console.log('✅ Pioneer Circle: Registro exitoso', result);
+      logger.info('✅ Pioneer Circle: Registro exitoso', result);
       
       // Mostrar confirmación
       setShowConfirmation(true);
       
     } catch (error) {
-      console.error('❌ Error enviando datos del Pioneer Circle:', error);
+      logger.error('❌ Error enviando datos del Pioneer Circle:', error);
       // En caso de error, mostrar confirmación de cualquier manera
       // para no romper la UX del usuario
       setShowConfirmation(true);

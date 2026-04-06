@@ -14,6 +14,10 @@ import {
 import type { PatientRecord, FichaClinicaState } from "@/types/clinical-types"
 import { PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 export interface UsePatientLibraryReturn {
   // State
   patients: PatientRecord[]
@@ -65,7 +69,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       try {
         await loadPatientsInternal()
       } catch (err) {
-        console.error("Failed to initialize patient library:", err)
+        logger.error("Failed to initialize patient library:", err)
         setError("Failed to initialize patient library")
       }
     }
@@ -86,7 +90,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       const loadedPatients = await getAllPatients(psychologistId)
       setPatients(loadedPatients)
     } catch (err) {
-      console.error("Failed to load patients:", err)
+      logger.error("Failed to load patients:", err)
       setError("Failed to load patients")
     } finally {
       setIsLoading(false)
@@ -129,7 +133,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
 
       return newPatient
     } catch (err) {
-      console.error("Failed to create patient:", err)
+      logger.error("Failed to create patient:", err)
       setError("Failed to create patient")
       throw err
     }
@@ -162,7 +166,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         setSelectedPatient(updatedPatient)
       }
     } catch (err) {
-      console.error("Failed to update patient:", err)
+      logger.error("Failed to update patient:", err)
       setError("Failed to update patient")
       throw err
     }
@@ -185,7 +189,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         setSelectedPatient(null)
       }
     } catch (err) {
-      console.error("Failed to delete patient:", err)
+      logger.error("Failed to delete patient:", err)
       setError("Failed to delete patient")
       throw err
     }
@@ -229,7 +233,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       await savePatient(psychologistId, updatedPatient)
       await loadPatientsInternal() // Refresh the list
     } catch (err) {
-      console.error("Failed to refresh patient summary:", err)
+      logger.error("Failed to refresh patient summary:", err)
       setError("Failed to refresh patient summary")
       throw err
     }
@@ -282,7 +286,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
           return Array.from(map.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
         })
       } catch (persistErr) {
-        console.warn('No se pudo persistir placeholder de ficha en Firestore:', persistErr)
+        logger.warn('No se pudo persistir placeholder de ficha en Firestore:', persistErr)
       }
       // Guardar resultado final en Firestore y estado local
       if (data.ficha) {
@@ -298,11 +302,11 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
             return Array.from(map.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
           })
         } catch (persistFinalErr) {
-          console.warn('No se pudo persistir ficha final en Firestore:', persistFinalErr)
+          logger.warn('No se pudo persistir ficha final en Firestore:', persistFinalErr)
         }
       }
     } catch (err) {
-      console.error('Failed to generate ficha clinica:', err)
+      logger.error('Failed to generate ficha clinica:', err)
       setError('Failed to generate ficha clinica')
       throw err
     }
@@ -317,7 +321,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setFichasClinicas(sorted)
       return sorted
     } catch (localErr) {
-      console.warn('No se pudieron cargar fichas:', localErr)
+      logger.warn('No se pudieron cargar fichas:', localErr)
       setError('Failed to load fichas clinicas')
       setFichasClinicas([])
       return []
@@ -438,7 +442,7 @@ export function usePatientRecord(patientId: string | null) {
         const loadedPatient = await loadPatient(psychologistId, patientId)
         setPatient(loadedPatient)
       } catch (err) {
-        console.error("Failed to load patient:", err)
+        logger.error("Failed to load patient:", err)
         setError("Failed to load patient")
       } finally {
         setIsLoading(false)

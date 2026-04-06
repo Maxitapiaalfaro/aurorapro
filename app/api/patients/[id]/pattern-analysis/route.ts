@@ -11,6 +11,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClinicalPatternAnalyzer } from '@/lib/clinical-pattern-analyzer';
 import * as Sentry from '@sentry/nextjs';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 /**
  * POST - Generate pattern analysis for a patient
  */
@@ -37,7 +41,7 @@ export async function POST(
           culturalContext = 'general'
         } = body;
 
-        console.log(`🔍 [Análisis Longitudinal API] Starting analysis for patient ${patientId}`);
+        logger.info(`🔍 [Análisis Longitudinal API] Starting analysis for patient ${patientId}`);
 
         // Validate input
         if (!sessionHistory || !Array.isArray(sessionHistory)) {
@@ -57,7 +61,7 @@ export async function POST(
         // Generate analysis ID
         const analysisId = `analysis_${patientId}_${Date.now()}`;
 
-        console.log(`🧠 [Análisis Longitudinal] Generating analysis: ${analysisId}`);
+        logger.info(`🧠 [Análisis Longitudinal] Generating analysis: ${analysisId}`);
 
         // Create analyzer with cultural context
         const analyzer = createClinicalPatternAnalyzer({
@@ -75,7 +79,7 @@ export async function POST(
           triggerReason as any
         );
 
-        console.log(`✅ [Análisis Longitudinal API] Analysis completed: ${analysisId}`);
+        logger.info(`✅ [Análisis Longitudinal API] Analysis completed: ${analysisId}`);
 
         // Return complete analysis to client
         // Client will save to IndexedDB
@@ -89,7 +93,7 @@ export async function POST(
         });
 
       } catch (error) {
-        console.error(`❌ [Análisis Longitudinal API] Error:`, error);
+        logger.error(`❌ [Análisis Longitudinal API] Error:`, error);
         Sentry.captureException(error, {
           tags: {
             component: 'pattern-mirror-api',

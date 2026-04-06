@@ -18,6 +18,10 @@
 import Parallel from 'parallel-web'
 import type { ValidatedAcademicSource } from './academic-source-validator'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 // ============================================================================
 // INTERFACES
 // ============================================================================
@@ -134,13 +138,13 @@ export class ParallelAISearch {
     if (apiKey && apiKey.length > 0) {
       try {
         this.client = new Parallel({ apiKey })
-        console.log('[ParallelAI] Cliente inicializado correctamente')
+        logger.info('[ParallelAI] Cliente inicializado correctamente')
       } catch (error) {
-        console.error('[ParallelAI] Error al inicializar cliente:', error)
+        logger.error('[ParallelAI] Error al inicializar cliente:', error)
         this.client = null
       }
     } else {
-      console.warn('[ParallelAI] No se proporcionó API key. Búsqueda deshabilitada.')
+      logger.warn('[ParallelAI] No se proporcionó API key. Búsqueda deshabilitada.')
     }
   }
 
@@ -156,7 +160,7 @@ export class ParallelAISearch {
    */
   async searchAcademic(params: ParallelSearchParams): Promise<ValidatedAcademicSource[]> {
     if (!this.client) {
-      console.warn('[ParallelAI] Cliente no disponible. Retornando array vacío.')
+      logger.warn('[ParallelAI] Cliente no disponible. Retornando array vacío.')
       return []
     }
 
@@ -173,19 +177,19 @@ export class ParallelAISearch {
     const cacheKey = JSON.stringify(params)
     const cached = this.searchCache.get(cacheKey)
     if (cached) {
-      console.log('[ParallelAI] Retornando desde caché')
+      logger.info('[ParallelAI] Retornando desde caché')
       return this.transformToAcademicSources(cached)
     }
 
     try {
-      console.log('🔍 [ParallelAI] === INICIANDO BÚSQUEDA ACADÉMICA ===')
-      console.log(`  📝 Objective: ${objective.substring(0, 100)}...`)
-      console.log(`  🔎 Queries: ${searchQueries.join(', ')}`)
-      console.log(`  ⚙️  Processor: ${processor}`)
+      logger.info('🔍 [ParallelAI] === INICIANDO BÚSQUEDA ACADÉMICA ===')
+      logger.info(`  📝 Objective: ${objective.substring(0, 100)}...`)
+      logger.info(`  🔎 Queries: ${searchQueries.join(', ')}`)
+      logger.info(`  ⚙️  Processor: ${processor}`)
 
       // 🎯 CONFIGURACIÓN DE DOMINIOS: Top 10 fuentes académicas en español
-      console.log('🎯 [ParallelAI] Usando dominios académicos en español (Top 10)')
-      console.log(`  📚 Dominios incluidos: ${CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.join(', ')}`)
+      logger.info('🎯 [ParallelAI] Usando dominios académicos en español (Top 10)')
+      logger.info(`  📚 Dominios incluidos: ${CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.join(', ')}`)
 
       // Ejecutar búsqueda con Parallel AI CON source_policy optimizado
       const search = await this.client.beta.search({
@@ -201,7 +205,7 @@ export class ParallelAISearch {
         }
       })
 
-      console.log(`[ParallelAI] Encontrados ${search.results?.length || 0} resultados`)
+      logger.info(`[ParallelAI] Encontrados ${search.results?.length || 0} resultados`)
 
       // Guardar en caché
       if (search.results && search.results.length > 0) {
@@ -217,13 +221,13 @@ export class ParallelAISearch {
       return this.transformToAcademicSources(search.results || [])
 
     } catch (error) {
-      console.error('[ParallelAI] Error en búsqueda:', error)
+      logger.error('[ParallelAI] Error en búsqueda:', error)
       if (error instanceof Error) {
-        console.error('[ParallelAI] Error message:', error.message)
-        console.error('[ParallelAI] Error stack:', error.stack)
+        logger.error('[ParallelAI] Error message:', error.message)
+        logger.error('[ParallelAI] Error stack:', error.stack)
       }
       // Log del objeto completo para debugging
-      console.error('[ParallelAI] Error object:', JSON.stringify(error, null, 2))
+      logger.error('[ParallelAI] Error object:', JSON.stringify(error, null, 2))
       return []
     }
   }

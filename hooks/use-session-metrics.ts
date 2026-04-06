@@ -12,6 +12,10 @@ import { useEffect, useRef, useCallback } from 'react';
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker';
 import type { AgentType } from '@/types/clinical-types';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface UseSessionMetricsProps {
   userId: string;
   sessionId: string;
@@ -50,7 +54,7 @@ export function useSessionMetrics({
       sessionStartedRef.current = true;
       lastActivityRef.current = new Date();
       
-      console.log('📊 Sesión iniciada:', {
+      logger.info('📊 Sesión iniciada:', {
         userId,
         sessionId,
         agentType
@@ -74,7 +78,7 @@ export function useSessionMetrics({
         heartbeatIntervalRef.current = null;
       }
       
-      console.log('📊 Sesión finalizada:', {
+      logger.info('📊 Sesión finalizada:', {
         userId,
         sessionId,
         currentAgent
@@ -95,7 +99,7 @@ export function useSessionMetrics({
       
       // Configurar nuevo timeout de inactividad (30 minutos)
       activityTimeoutRef.current = setTimeout(() => {
-        console.log('📊 Sesión inactiva - finalizando automáticamente');
+        logger.info('📊 Sesión inactiva - finalizando automáticamente');
         endSession();
       }, 30 * 60 * 1000); // 30 minutos
     }
@@ -115,7 +119,7 @@ export function useSessionMetrics({
       previousAgentRef.current = toAgent;
       updateActivity(); // Actualizar actividad en cambio de agente
       
-      console.log('📊 Cambio de agente registrado:', {
+      logger.info('📊 Cambio de agente registrado:', {
         userId,
         sessionId,
         fromAgent,

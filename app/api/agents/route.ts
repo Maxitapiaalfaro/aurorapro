@@ -1,8 +1,12 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔄 API: Obteniendo agentes disponibles...')
+    logger.info('🔄 API: Obteniendo agentes disponibles...')
     
     // Lazy import to avoid build-time issues
     const { clinicalAgentRouter } = await import('@/lib/clinical-agent-router')
@@ -13,14 +17,14 @@ export async function GET(request: NextRequest) {
       ...config,
     }))
     
-    console.log('✅ API: Agentes obtenidos:', agentsList.length)
+    logger.info('✅ API: Agentes obtenidos:', agentsList.length)
     
     return NextResponse.json({
       success: true,
       agents: agentsList
     })
   } catch (error) {
-    console.error('❌ API Error (Get Agents):', error)
+    logger.error('❌ API Error (Get Agents):', error)
     return NextResponse.json(
       { 
         error: 'Error al obtener agentes',

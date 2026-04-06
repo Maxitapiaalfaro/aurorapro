@@ -1,3 +1,7 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 import { GoogleGenAI } from "@google/genai"
 
 // Load environment variables only on server side
@@ -38,11 +42,11 @@ function resolveGoogleAuthOptions(): Record<string, any> {
         if (typeof creds.private_key === 'string') {
           creds.private_key = creds.private_key.replace(/\\n/g, '\n')
         }
-        console.error('[GenAI Config] Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON')
+        logger.error('[GenAI Config] Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON')
         return { credentials: creds }
       }
     } catch (e) {
-      console.error('[GenAI Config] Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON')
+      logger.error('[GenAI Config] Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON')
     }
   }
 
@@ -50,7 +54,7 @@ function resolveGoogleAuthOptions(): Record<string, any> {
   const svcEmail = env('GOOGLE_SERVICE_ACCOUNT_EMAIL')
   const svcKey = env('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
   if (svcEmail && svcKey) {
-    console.error('[GenAI Config] Using credentials from GOOGLE_SERVICE_ACCOUNT_*')
+    logger.error('[GenAI Config] Using credentials from GOOGLE_SERVICE_ACCOUNT_*')
     return {
       credentials: {
         client_email: svcEmail,
@@ -65,7 +69,7 @@ function resolveGoogleAuthOptions(): Record<string, any> {
     try {
       const fs = require('fs') as typeof import('fs')
       if (fs.existsSync(keyFilename)) {
-        console.error('[GenAI Config] Using service account key file')
+        logger.error('[GenAI Config] Using service account key file')
         return { keyFilename }
       }
     } catch {
@@ -114,7 +118,7 @@ function createGenAIClient(): GoogleGenAI {
         const trimmed = (loc || '').trim().toLowerCase();
         const validPattern = /^(global|[a-z]+-[a-z]+[0-9])$/;
         if (!validPattern.test(trimmed)) {
-          console.error(`[GenAI] Invalid GOOGLE_CLOUD_LOCATION: '${loc}'. Using 'global'.`);
+          logger.error(`[GenAI] Invalid GOOGLE_CLOUD_LOCATION: '${loc}'. Using 'global'.`);
           return 'global';
         }
         return trimmed;
@@ -125,7 +129,7 @@ function createGenAIClient(): GoogleGenAI {
       const hasExplicitCreds = !!(googleAuthOptions.credentials || googleAuthOptions.keyFilename)
 
       if (hasExplicitCreds) {
-        console.error('[GenAI Config] Using Vertex AI (server) with explicit credentials')
+        logger.error('[GenAI Config] Using Vertex AI (server) with explicit credentials')
         return new GoogleGenAI({
           vertexai: true,
           project,
@@ -134,7 +138,7 @@ function createGenAIClient(): GoogleGenAI {
           apiVersion: env('GENAI_API_VERSION') || 'v1'
         });
       }
-      console.error('[GenAI Config] GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION set but no service account credentials found. Falling back to API key.')
+      logger.error('[GenAI Config] GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION set but no service account credentials found. Falling back to API key.')
     }
 
     // API key fallback for server (e.g. Vercel without Vertex AI credentials).
@@ -142,7 +146,7 @@ function createGenAIClient(): GoogleGenAI {
     for (const varName of API_KEY_VAR_NAMES) {
       const key = env(varName)
       if (key) {
-        console.error(`[GenAI Config] Using Gemini API key from ${varName}`)
+        logger.error(`[GenAI Config] Using Gemini API key from ${varName}`)
         return new GoogleGenAI({ apiKey: key });
       }
     }
@@ -155,28 +159,28 @@ function createGenAIClient(): GoogleGenAI {
     // eslint-disable-next-line dot-notation
     const buildTimeKey = process.env.NEXT_PUBLIC_GOOGLE_AI_API_KEY
     if (buildTimeKey) {
-      console.error('[GenAI Config] Using build-time inlined NEXT_PUBLIC_GOOGLE_AI_API_KEY (runtime env vars not available)')
+      logger.error('[GenAI Config] Using build-time inlined NEXT_PUBLIC_GOOGLE_AI_API_KEY (runtime env vars not available)')
       return new GoogleGenAI({ apiKey: buildTimeKey });
     }
 
     // Diagnostic: list which vars we checked
     const checked = API_KEY_VAR_NAMES.map(n => `${n}=${env(n) ? 'SET' : 'MISSING'}`).join(', ')
-    console.error(`[GenAI Config] DIAGNOSTIC — env vars checked: ${checked}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — env vars checked: ${checked}`)
 
     // Extended diagnostics to help identify configuration issues
     const envKeys = Object.keys(process.env)
-    console.error(`[GenAI Config] DIAGNOSTIC — total env vars available: ${envKeys.length}`)
-    console.error(`[GenAI Config] DIAGNOSTIC — NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, VERCEL_ENV=${process.env.VERCEL_ENV ?? 'undefined'}, NEXT_RUNTIME=${process.env.NEXT_RUNTIME ?? 'undefined'}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — total env vars available: ${envKeys.length}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — NODE_ENV=${process.env.NODE_ENV ?? 'undefined'}, VERCEL_ENV=${process.env.VERCEL_ENV ?? 'undefined'}, NEXT_RUNTIME=${process.env.NEXT_RUNTIME ?? 'undefined'}`)
     const relatedVars = envKeys
       .filter(k => /GOOGLE|GEMINI|GENAI|API_KEY/i.test(k))
       .join(', ')
-    console.error(`[GenAI Config] DIAGNOSTIC — env vars matching GOOGLE/GEMINI/GENAI/API_KEY: ${relatedVars || 'NONE'}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — env vars matching GOOGLE/GEMINI/GENAI/API_KEY: ${relatedVars || 'NONE'}`)
 
     // Broader search: any env var that looks like it could be an API credential
     const credentialVars = envKeys
       .filter(k => /KEY|API|TOKEN|SECRET|CREDENTIAL|AUTH|AI|GCP|CLOUD/i.test(k))
       .join(', ')
-    console.error(`[GenAI Config] DIAGNOSTIC — env vars matching KEY/API/TOKEN/SECRET/AI/GCP/CLOUD: ${credentialVars || 'NONE'}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — env vars matching KEY/API/TOKEN/SECRET/AI/GCP/CLOUD: ${credentialVars || 'NONE'}`)
 
     // List all non-system env var names (names only, not values) for debugging.
     // Heuristic filter — may not catch all system vars in every environment.
@@ -184,7 +188,7 @@ function createGenAIClient(): GoogleGenAI {
     const customVars = envKeys
       .filter(k => !systemPrefixes.some(prefix => k.startsWith(prefix)) && k === k.toUpperCase())
       .join(', ')
-    console.error(`[GenAI Config] DIAGNOSTIC — custom env var names: ${customVars || 'NONE'}`)
+    logger.error(`[GenAI Config] DIAGNOSTIC — custom env var names: ${customVars || 'NONE'}`)
 
     throw new Error(
       'No se encontraron credenciales de Google AI en el servidor. ' +

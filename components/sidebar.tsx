@@ -41,6 +41,10 @@ import type { AgentType, PatientRecord } from "@/types/clinical-types"
 import { getAgentVisualConfig } from "@/config/agent-visual-config"
 import { PatientLibrarySection } from "@/components/patient-library-section"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
@@ -141,7 +145,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
         }
       }
     } catch (err) {
-      console.error('❌ Error al cargar la conversación:', err)
+      logger.error('❌ Error al cargar la conversación:', err)
       setSelectedConversation(null)
     }
   }
@@ -172,7 +176,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       setSelectedConversation(null)
       onNewChat?.()
     } catch (err) {
-      console.error('❌ Sidebar: Error en transacción de nueva conversación:', err)
+      logger.error('❌ Sidebar: Error en transacción de nueva conversación:', err)
     } finally {
       setIsCreatingSession(false)
     }
@@ -187,7 +191,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
         setSelectedConversation(null)
       }
     } catch (err) {
-      console.error('Error al eliminar conversación:', err)
+      logger.error('Error al eliminar conversación:', err)
     }
   }
 

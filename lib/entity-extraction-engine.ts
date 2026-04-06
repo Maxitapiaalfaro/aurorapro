@@ -13,6 +13,10 @@ import { ai } from "./google-genai-config"
 import { FunctionCallingConfigMode, Type } from '@google/genai'
 import type { FunctionDeclaration } from '@google/genai'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Tipos para entidades extraídas
 export interface ExtractedEntity {
   type: EntityType
@@ -513,7 +517,7 @@ export class EntityExtractionEngine {
         processingTime
       }
     } catch (error) {
-      console.error('[EntityExtractionEngine] Error extracting entities:', error)
+      logger.error('[EntityExtractionEngine] Error extracting entities:', error)
       return {
         entities: [],
         primaryEntities: [],

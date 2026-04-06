@@ -7,6 +7,10 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 export interface EnvValidationResult {
   valid: boolean;
   errors: string[];
@@ -196,16 +200,16 @@ export function validateAndReport(): void {
   // En desarrollo, solo mostrar warnings
   if (result.environment === 'development') {
     if (result.warnings.length > 0) {
-      console.warn('⚠️  Environment warnings:');
-      result.warnings.forEach(warning => console.warn(`  - ${warning}`));
+      logger.warn('⚠️  Environment warnings:');
+      result.warnings.forEach(warning => logger.warn(`  - ${warning}`));
     }
     return;
   }
 
   // En producción, ser estricto
   if (!result.valid) {
-    console.error('❌ Environment validation failed:');
-    result.errors.forEach(error => console.error(`  - ${error}`));
+    logger.error('❌ Environment validation failed:');
+    result.errors.forEach(error => logger.error(`  - ${error}`));
     
     // Reportar a Sentry
     Sentry.captureMessage('Environment validation failed', {
@@ -228,13 +232,13 @@ export function validateAndReport(): void {
 
   // Mostrar warnings incluso si la validación pasó
   if (result.warnings.length > 0) {
-    console.warn('⚠️  Environment warnings:');
-    result.warnings.forEach(warning => console.warn(`  - ${warning}`));
+    logger.warn('⚠️  Environment warnings:');
+    result.warnings.forEach(warning => logger.warn(`  - ${warning}`));
   }
 
   // Confirmar validación exitosa
   if (result.valid && result.warnings.length === 0) {
-    console.log(`✅ Environment validation passed (${result.environment})`);
+    logger.info(`✅ Environment validation passed (${result.environment})`);
   }
 }
 

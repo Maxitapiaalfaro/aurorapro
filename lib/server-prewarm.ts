@@ -12,6 +12,10 @@
 
 import { getGlobalOrchestrationSystem } from './hopeai-system'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 let isPrewarming = false
 let isPrewarmed = false
 let prewarmError: Error | null = null
@@ -24,14 +28,14 @@ let prewarmEndTime = 0
  */
 async function prewarmSystem() {
   if (isPrewarming || isPrewarmed) {
-    console.log('⚠️ [Prewarm] System already prewarming or prewarmed, skipping')
+    logger.info('⚠️ [Prewarm] System already prewarming or prewarmed, skipping')
     return
   }
 
   isPrewarming = true
   prewarmStartTime = Date.now()
   
-  console.log('🔥 [Prewarm] Starting HopeAI system pre-warming...')
+  logger.info('🔥 [Prewarm] Starting HopeAI system pre-warming...')
 
   try {
     // Inicializar el sistema global
@@ -41,10 +45,10 @@ async function prewarmSystem() {
     const duration = prewarmEndTime - prewarmStartTime
     
     isPrewarmed = true
-    console.log(`✅ [Prewarm] HopeAI system pre-warmed successfully in ${duration}ms`)
+    logger.info(`✅ [Prewarm] HopeAI system pre-warmed successfully in ${duration}ms`)
   } catch (error) {
     prewarmError = error as Error
-    console.error('❌ [Prewarm] Failed to pre-warm HopeAI system:', error)
+    logger.error('❌ [Prewarm] Failed to pre-warm HopeAI system:', error)
   } finally {
     isPrewarming = false
   }
@@ -82,14 +86,14 @@ const isServer = typeof window === 'undefined'
 const isBuildPhase = typeof process.env.NEXT_PHASE === 'string' && process.env.NEXT_PHASE.includes('build')
 
 if (isServer && !isBuildPhase) {
-  console.log('🚀 [Prewarm] Module loaded, starting IMMEDIATE pre-warm...')
+  logger.info('🚀 [Prewarm] Module loaded, starting IMMEDIATE pre-warm...')
 
   // Ejecutar INMEDIATAMENTE (no esperar al siguiente tick)
   // Esto asegura que el sistema se inicialice antes del primer request
   prewarmSystem().catch(error => {
-    console.error('❌ [Prewarm] Unhandled error during pre-warm:', error)
+    logger.error('❌ [Prewarm] Unhandled error during pre-warm:', error)
   })
 } else if (isServer && isBuildPhase) {
-  console.log('⚠️ [Prewarm] Skipping pre-warm during build phase')
+  logger.info('⚠️ [Prewarm] Skipping pre-warm during build phase')
 }
 

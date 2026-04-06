@@ -17,6 +17,10 @@
 import type { Content } from '@google/genai';
 import type { ChatMessage } from '@/types/clinical-types';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Configuración del Context Window Manager
  */
@@ -127,12 +131,12 @@ export class ContextWindowManager {
     const processingTime = Date.now() - startTime;
     
     if (this.config.enableLogging) {
-      console.log(`🔄 Context Window Processing:`);
-      console.log(`   - Original messages: ${sessionContext.length}`);
-      console.log(`   - Processed messages: ${contextWithPreservedReferences.length}`);
-      console.log(`   - Estimated tokens: ${tokensEstimated}`);
-      console.log(`   - Contextual references: ${this.contextualReferences.length}`);
-      console.log(`   - Processing time: ${processingTime}ms`);
+      logger.info(`🔄 Context Window Processing:`);
+      logger.info(`   - Original messages: ${sessionContext.length}`);
+      logger.info(`   - Processed messages: ${contextWithPreservedReferences.length}`);
+      logger.info(`   - Estimated tokens: ${tokensEstimated}`);
+      logger.info(`   - Contextual references: ${this.contextualReferences.length}`);
+      logger.info(`   - Processing time: ${processingTime}ms`);
     }
     
     return {
@@ -427,11 +431,11 @@ export class ContextWindowManager {
     const tokensSaved = Math.max(0, oldTokens - newTokens);
 
     if (this.config.enableLogging) {
-      console.log(`🗜️ [ContextManager] Reactive compaction completed:`);
-      console.log(`   - Original messages: ${originalCount}`);
-      console.log(`   - Compacted to: ${compactedHistory.length}`);
-      console.log(`   - Messages summarized: ${middleBlock.length}`);
-      console.log(`   - Estimated tokens saved: ~${tokensSaved}`);
+      logger.info(`🗜️ [ContextManager] Reactive compaction completed:`);
+      logger.info(`   - Original messages: ${originalCount}`);
+      logger.info(`   - Compacted to: ${compactedHistory.length}`);
+      logger.info(`   - Messages summarized: ${middleBlock.length}`);
+      logger.info(`   - Estimated tokens saved: ~${tokensSaved}`);
     }
 
     return {

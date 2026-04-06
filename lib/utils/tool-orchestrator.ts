@@ -17,6 +17,10 @@
 import type { SecurityCategory } from '../tool-registry';
 import { validateToolInput } from '../tool-input-schemas';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('agent')
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -140,7 +144,7 @@ async function executeSafely(call: PreparedToolCall): Promise<ToolCallResult> {
     const validation = validateToolInput(call.call.name, call.call.args);
 
     if (!validation.success) {
-      console.warn(
+      logger.warn(
         `⚠️ [ToolOrchestrator] Input validation failed for "${call.call.name}": ${validation.errorMessage}`
       );
       return {
@@ -157,7 +161,7 @@ async function executeSafely(call: PreparedToolCall): Promise<ToolCallResult> {
     return await call.execute();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`❌ [ToolOrchestrator] Tool "${call.call.name}" failed: ${message}`);
+    logger.error(`❌ [ToolOrchestrator] Tool "${call.call.name}" failed: ${message}`);
 
     return {
       name: call.call.name,
@@ -207,7 +211,7 @@ export async function executeToolsSafely(
   const plan = batches.map(b =>
     `${b.isParallel ? '⚡ parallel' : '🔒 sequential'}(${b.calls.map(c => c.call.name).join(', ')})`
   ).join(' → ');
-  console.log(`🎯 [ToolOrchestrator] Execution plan: ${plan}`);
+  logger.info(`🎯 [ToolOrchestrator] Execution plan: ${plan}`);
 
   // Execute batches in order, collecting all results
   const allResults: ToolCallResult[] = [];

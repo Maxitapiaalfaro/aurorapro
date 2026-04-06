@@ -8,6 +8,10 @@ import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/cli
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 // Allow sufficient time for AI streaming responses (Gemini API + orchestration)
 export const maxDuration = 60
 
@@ -34,8 +38,8 @@ export async function POST(request: NextRequest) {
   let requestBody: any
   const startTime = Date.now();
 
-  console.log('🖥️ [API /send-message] POST request received on SERVER')
-  console.log('🖥️ [API /send-message] Environment:', {
+  logger.info('🖥️ [API /send-message] POST request received on SERVER')
+  logger.info('🖥️ [API /send-message] Environment:', {
     hasWindow: typeof window !== 'undefined',
     nodeEnv: process.env.NODE_ENV
   })
@@ -50,7 +54,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         )
       }
-      console.warn('[API /send-message] No valid auth token (dev mode)')
+      logger.warn('[API /send-message] No valid auth token (dev mode)')
     }
 
     requestBody = await request.json()
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
     // Use verified uid from token; fall back to body userId only in dev
     const verifiedUserId = authResult.authenticated ? authResult.uid : userId
 
-    console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
+    logger.info('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
       message: message.substring(0, 50) + '...',
       useStreaming,
@@ -72,12 +76,12 @@ export async function POST(request: NextRequest) {
 
     // 📁 If files are attached, log them for transparency
     if (fileReferences && fileReferences.length > 0) {
-      console.log('📁 [API /send-message] Files attached to this message:', fileReferences)
+      logger.info('📁 [API /send-message] Files attached to this message:', fileReferences)
     }
 
     // 📁 If file metadata provided (bypass serverless storage)
     if (fileMetadata && fileMetadata.length > 0) {
-      console.log('📁 [API /send-message] File metadata provided by client (bypass storage):', fileMetadata.map((f: any) => f.name))
+      logger.info('📁 [API /send-message] File metadata provided by client (bypass storage):', fileMetadata.map((f: any) => f.name))
     }
 
     // Crear stream SSE con auto-flush
@@ -106,7 +110,7 @@ export async function POST(request: NextRequest) {
 
           // 📁 If files are present, emit file processing event IMMEDIATELY
           if (fileReferences && fileReferences.length > 0) {
-            console.log('📁 [API /send-message] Emitting file processing start event')
+            logger.info('📁 [API /send-message] Emitting file processing start event')
             sendSSE({
               type: 'tool_execution',
               tool: {
@@ -120,30 +124,30 @@ export async function POST(request: NextRequest) {
             })
           }
 
-          console.log('🔧 [API /send-message] Getting global orchestration system...')
+          logger.info('🔧 [API /send-message] Getting global orchestration system...')
           const systemStartTime = Date.now()
           const orchestrationSystem = await getGlobalOrchestrationSystem()
           const systemInitTime = Date.now() - systemStartTime
-          console.log(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
+          logger.info(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
 
           // Callback para bullets progresivos (con guardia contra controller cerrado)
           const onBulletUpdate = (bullet: ReasoningBullet) => {
             if (controllerClosed) return // Guard: bullets may arrive after stream closes
             try {
-              console.log('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
+              logger.info('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
               sendSSE({
                 type: 'bullet',
                 bullet
               })
             } catch (err) {
-              console.warn('[SSE] Failed to send bullet (controller likely closed):', err)
+              logger.warn('[SSE] Failed to send bullet (controller likely closed):', err)
               controllerClosed = true // Mark as closed to avoid further attempts
             }
           }
 
           // Callback para selección de agente
           const onAgentSelected = (info: { targetAgent: string; confidence: number; reasoning: string }) => {
-            console.log('🎯 [API /send-message] Agente seleccionado:', info.targetAgent)
+            logger.info('🎯 [API /send-message] Agente seleccionado:', info.targetAgent)
             sendSSE({
               type: 'agent_selected',
               info
@@ -165,7 +169,7 @@ export async function POST(request: NextRequest) {
 
           // 📁 If files were attached, emit completion event
           if (fileReferences && fileReferences.length > 0) {
-            console.log('📁 [API /send-message] Emitting file processing completion event')
+            logger.info('📁 [API /send-message] Emitting file processing completion event')
             sendSSE({
               type: 'tool_execution',
               tool: {
@@ -182,7 +186,7 @@ export async function POST(request: NextRequest) {
             })
           }
 
-          console.log('🎯 [API /send-message] Orquestación completada:', {
+          logger.info('🎯 [API /send-message] Orquestación completada:', {
             sessionId: result.updatedState.sessionId,
             agentType: result.updatedState.activeAgent,
             responseLength: result.response?.text?.length || 0,
@@ -211,7 +215,7 @@ export async function POST(request: NextRequest) {
 
           // 🔥 STREAMING: Si la respuesta es un AsyncGenerator, consumirlo y enviar chunks INMEDIATAMENTE
           if (result.response && typeof result.response[Symbol.asyncIterator] === 'function') {
-            console.log('🌊 [API /send-message] Procesando respuesta streaming...')
+            logger.info('🌊 [API /send-message] Procesando respuesta streaming...')
 
             let fullText = ''
             let chunkCount = 0
@@ -269,7 +273,7 @@ export async function POST(request: NextRequest) {
                   fullText += chunk.text
 
                   // 🚀 CRÍTICO: Log CADA chunk para debugging
-                  console.log(`📝 [API /send-message] Chunk #${chunkCount} recibido (${chunk.text.length} chars): "${chunk.text.substring(0, 50)}..."`)
+                  logger.info(`📝 [API /send-message] Chunk #${chunkCount} recibido (${chunk.text.length} chars): "${chunk.text.substring(0, 50)}..."`)
 
                   // 🚀 CRÍTICO: Enviar chunk INMEDIATAMENTE vía SSE (no esperar a acumular)
                   sendSSE({
@@ -281,11 +285,11 @@ export async function POST(request: NextRequest) {
                     }
                   } as any)
 
-                  console.log(`✅ [API /send-message] Chunk #${chunkCount} enviado vía SSE`)
+                  logger.info(`✅ [API /send-message] Chunk #${chunkCount} enviado vía SSE`)
                 }
               }
 
-              console.log(`✅ [API /send-message] Streaming completado: ${chunkCount} chunks, ${fullText.length} caracteres`)
+              logger.info(`✅ [API /send-message] Streaming completado: ${chunkCount} chunks, ${fullText.length} caracteres`)
 
               // Enviar respuesta final con texto completo
               sendSSE({
@@ -303,12 +307,12 @@ export async function POST(request: NextRequest) {
               })
 
             } catch (streamError) {
-              console.error('❌ [API /send-message] Error procesando stream:', streamError)
+              logger.error('❌ [API /send-message] Error procesando stream:', streamError)
               throw streamError
             }
           } else {
             // Respuesta no-streaming
-            console.log('📄 [API /send-message] Respuesta no-streaming')
+            logger.info('📄 [API /send-message] Respuesta no-streaming')
 
             sendSSE({
               type: 'response',
@@ -327,11 +331,11 @@ export async function POST(request: NextRequest) {
             type: 'complete'
           })
 
-          console.log('✅ [API /send-message] Stream completado exitosamente')
+          logger.info('✅ [API /send-message] Stream completado exitosamente')
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error)
-          console.error('❌ [API /send-message] Error en stream: ' + errorMessage)
+          logger.error('❌ [API /send-message] Error en stream: ' + errorMessage)
 
           // Enviar error vía SSE
           sendSSE({
@@ -367,7 +371,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('❌ [API /send-message] Error inicial: ' + errorMessage)
+    logger.error('❌ [API /send-message] Error inicial: ' + errorMessage)
 
     // Seguimiento mejorado de errores
     Sentry.captureException(error, {

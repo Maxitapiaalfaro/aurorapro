@@ -11,6 +11,10 @@
 
 import * as Sentry from '@sentry/nextjs'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('metrics')
+
 interface SingletonMetrics {
   instanceCreationCount: number
   initializationAttempts: number
@@ -70,7 +74,7 @@ class SingletonMonitor {
     if (this.metrics.initializationAttempts > 1) {
       const warning = `⚠️ Múltiples intentos de inicialización detectados: ${this.metrics.initializationAttempts}`
       this.metrics.warnings.push(warning)
-      console.warn(warning)
+      logger.warn(warning)
       
       // Reportar a Sentry
       Sentry.captureException(new Error('Multiple initialization attempts detected'), {
@@ -94,7 +98,7 @@ class SingletonMonitor {
     this.metrics.performanceMetrics.averageInitTime = 
       this.initializationTimes.reduce((a, b) => a + b, 0) / this.initializationTimes.length
 
-    console.log(`✅ Singleton inicializado en ${initTime}ms (promedio: ${this.metrics.performanceMetrics.averageInitTime.toFixed(2)}ms)`)
+    logger.info(`✅ Singleton inicializado en ${initTime}ms (promedio: ${this.metrics.performanceMetrics.averageInitTime.toFixed(2)}ms)`)
   }
 
   /**
@@ -104,7 +108,7 @@ class SingletonMonitor {
     this.metrics.currentStatus = 'error'
     const errorMsg = `❌ Error de inicialización: ${error.message}`
     this.metrics.errors.push(errorMsg)
-    console.error(errorMsg)
+    logger.error(errorMsg)
 
     Sentry.captureException(error, {
       tags: {
@@ -123,7 +127,7 @@ class SingletonMonitor {
     if (this.metrics.instanceCreationCount > 1) {
       const warning = `🚨 CRÍTICO: Múltiples instancias del singleton detectadas: ${this.metrics.instanceCreationCount}`
       this.metrics.warnings.push(warning)
-      console.error(warning)
+      logger.error(warning)
       
       Sentry.captureException(new Error('Multiple singleton instances detected'), {
         tags: {
@@ -244,7 +248,7 @@ ${status.monitorMetrics.errors.slice(-3).map(error => `- ${error}`).join('\n')}`
       
       // Log periódico del estado (solo si hay problemas)
       if (!status.healthCheck.isHealthy) {
-        console.warn('🔍 Singleton Monitor - Problemas detectados:', status.healthCheck.issues)
+        logger.warn('🔍 Singleton Monitor - Problemas detectados:', status.healthCheck.issues)
       }
       
       // Reportar métricas a Sentry cada 5 minutos
@@ -269,7 +273,7 @@ ${status.monitorMetrics.errors.slice(-3).map(error => `- ${error}`).join('\n')}`
    */
   public resetMetrics(): void {
     if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
-      console.warn('⚠️ resetMetrics should only be used in test/development environments')
+      logger.warn('⚠️ resetMetrics should only be used in test/development environments')
     }
     
     this.metrics = {

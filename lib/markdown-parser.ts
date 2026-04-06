@@ -2,6 +2,10 @@ import MarkdownIt from 'markdown-it'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import type { AgentType } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Instancia singleton optimizada de markdown-it para mensajes clínicos
 let mdInstance: MarkdownIt | null = null
 
@@ -146,7 +150,7 @@ export function parseMarkdown(content: string): string {
     
     return result
   } catch (error) {
-    console.error('Error parsing markdown:', error)
+    logger.error('Error parsing markdown:', error)
     // Fallback: retornar el contenido original con saltos de línea convertidos
     return content.replace(/\n/g, '<br>')
   }
@@ -287,7 +291,7 @@ export function parseMarkdownStreaming(content: string): string {
 
     return rendered
   } catch (error) {
-    console.error('Error parsing streaming markdown:', error)
+    logger.error('Error parsing streaming markdown:', error)
     // Fallback más robusto para streaming
     return content.replace(/\n/g, '<br>')
   }

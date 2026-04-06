@@ -19,6 +19,10 @@ import { parallelAISearch } from './parallel-ai-search'
 import type { ValidatedAcademicSource } from './academic-source-validator'
 import type { CrossrefMetadata } from './crossref-doi-resolver'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 // ============================================================================
 // TIPOS Y INTERFACES
 // ============================================================================
@@ -74,7 +78,7 @@ export class AcademicMultiSourceSearch {
     const cacheKey = JSON.stringify(params)
     const cached = this.searchCache.get(cacheKey)
     if (cached) {
-      console.log('[AcademicSearch] Retornando desde caché')
+      logger.info('[AcademicSearch] Retornando desde caché')
       return cached
     }
 
@@ -89,7 +93,7 @@ export class AcademicMultiSourceSearch {
     // ========================================================================
     // TODO: Revertir a prioridad 3 después de pruebas
     if (parallelAISearch.isAvailable()) {
-      console.log('🧪 [AcademicSearch] MODO PRUEBA: Usando Parallel AI como prioridad 1...')
+      logger.info('🧪 [AcademicSearch] MODO PRUEBA: Usando Parallel AI como prioridad 1...')
       try {
         const academicQueries = this.generateAcademicQueries(query)
 
@@ -137,13 +141,13 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
         allSources.push(...parallelResults)
         parallelAICount = parallelResults.length
 
-        console.log(`🧪 [AcademicSearch] Parallel AI: ${parallelAICount} resultados válidos (sin filtrado adicional)`)
-        console.log(`🧪 [AcademicSearch] SALTANDO PubMed y Crossref (modo prueba)`)
+        logger.info(`🧪 [AcademicSearch] Parallel AI: ${parallelAICount} resultados válidos (sin filtrado adicional)`)
+        logger.info(`🧪 [AcademicSearch] SALTANDO PubMed y Crossref (modo prueba)`)
       } catch (error) {
-        console.error('🧪 [AcademicSearch] Error en Parallel AI:', error)
+        logger.error('🧪 [AcademicSearch] Error en Parallel AI:', error)
       }
     } else {
-      console.warn('🧪 [AcademicSearch] Parallel AI no disponible - cayendo a flujo normal')
+      logger.warn('🧪 [AcademicSearch] Parallel AI no disponible - cayendo a flujo normal')
     }
 
     // ========================================================================
@@ -179,9 +183,9 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
         }
       }
 
-      console.log(`[AcademicSearch] PubMed: ${pubmedCount} resultados válidos`)
+      logger.info(`[AcademicSearch] PubMed: ${pubmedCount} resultados válidos`)
     } catch (error) {
-      console.warn('[AcademicSearch] Error en PubMed:', error)
+      logger.warn('[AcademicSearch] Error en PubMed:', error)
     }
     */
 
@@ -190,7 +194,7 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
     // ========================================================================
     /*
     if (allSources.length < maxResults) {
-      console.log('[AcademicSearch] Complementando con Crossref...')
+      logger.info('[AcademicSearch] Complementando con Crossref...')
       try {
         const crossrefResults = await crossrefDOIResolver.searchByQuery({
           query: this.enhanceQueryForPsychology(query),
@@ -228,9 +232,9 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
           }
         }
 
-        console.log(`[AcademicSearch] Crossref: ${crossrefCount} resultados válidos`)
+        logger.info(`[AcademicSearch] Crossref: ${crossrefCount} resultados válidos`)
       } catch (error) {
-        console.warn('[AcademicSearch] Error en Crossref:', error)
+        logger.warn('[AcademicSearch] Error en Crossref:', error)
       }
     }
 
@@ -240,7 +244,7 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
     // Esta sección está comentada porque Parallel AI ya se ejecutó arriba en modo prueba
     /*
     if (allSources.length < maxResults && parallelAISearch.isAvailable()) {
-      console.log('[AcademicSearch] Complementando con Parallel AI...')
+      logger.info('[AcademicSearch] Complementando con Parallel AI...')
       ...código comentado...
     }
     */
@@ -285,7 +289,7 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
     this.searchCache.set(cacheKey, result)
     this.cleanCache()
 
-    console.log(`[AcademicSearch] Búsqueda completada: ${filteredSources.length} resultados en ${result.metadata.searchTime}ms`)
+    logger.info(`[AcademicSearch] Búsqueda completada: ${filteredSources.length} resultados en ${result.metadata.searchTime}ms`)
 
     return result
   }
@@ -375,7 +379,7 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
     // Log de validación
     finalQueries.forEach((q, index) => {
       if (q.length > MAX_QUERY_LENGTH) {
-        console.warn(`[AcademicSearch] Query ${index + 1} excede ${MAX_QUERY_LENGTH} caracteres: ${q.length}`)
+        logger.warn(`[AcademicSearch] Query ${index + 1} excede ${MAX_QUERY_LENGTH} caracteres: ${q.length}`)
       }
     })
 
@@ -439,7 +443,7 @@ CONTEXTO CLÍNICO: Esta búsqueda es para psicólogos clínicos en Latinoaméric
 
       return validatedSources
     } catch (error) {
-      console.error('[AcademicSearch] Error en searchPubMedOnly:', error)
+      logger.error('[AcademicSearch] Error en searchPubMedOnly:', error)
       return []
     }
   }

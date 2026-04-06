@@ -9,6 +9,10 @@
 import * as Sentry from '@sentry/nextjs';
 import type { AgentType } from '@/types/clinical-types';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('metrics')
+
 // Interfaces para las métricas
 interface MessageMetrics {
   userId?: string;
@@ -227,7 +231,7 @@ export class SentryMetricsTracker {
       // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
-      console.error('❌ Error al registrar métrica de mensaje:', error);
+      logger.error('❌ Error al registrar métrica de mensaje:', error);
       // Capturar el error en Sentry pero no interrumpir el flujo
       Sentry.captureException(error, {
         tags: {
@@ -267,7 +271,7 @@ export class SentryMetricsTracker {
       // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
-      console.error('❌ Error al iniciar tracking de sesión:', error);
+      logger.error('❌ Error al iniciar tracking de sesión:', error);
       Sentry.captureException(error, {
         tags: {
           metric_type: 'session_start',
@@ -308,7 +312,7 @@ export class SentryMetricsTracker {
       }
 
     } catch (error) {
-      console.error('❌ Error al actualizar actividad de sesión:', error);
+      logger.error('❌ Error al actualizar actividad de sesión:', error);
       Sentry.captureException(error, {
         tags: {
           metric_type: 'session_activity',
@@ -397,7 +401,7 @@ export class SentryMetricsTracker {
       this.sessionAgentSwitches.delete(sessionId);
 
     } catch (error) {
-      console.error('❌ Error al finalizar tracking de sesión:', error);
+      logger.error('❌ Error al finalizar tracking de sesión:', error);
       Sentry.captureException(error, {
         tags: {
           metric_type: 'session_end',
@@ -465,7 +469,7 @@ export class SentryMetricsTracker {
       // 🔒 SECURITY: Console logging disabled in production
 
     } catch (error) {
-      console.error('❌ Error al registrar cambio de agente:', error);
+      logger.error('❌ Error al registrar cambio de agente:', error);
       Sentry.captureException(error, {
         tags: {
           metric_type: 'agent_switch',

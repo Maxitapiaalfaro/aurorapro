@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ClinicalFile } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface MessageFileAttachmentsProps {
   files: ClinicalFile[]
   variant?: 'compact' | 'detailed'
@@ -141,7 +145,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
                   className="text-xs"
                   onClick={() => {
                     // TODO: Implementar vista previa
-                    console.log('Ver archivo:', file.id)
+                    logger.info('Ver archivo:', file.id)
                   }}
                 >
                   <Eye className="w-3 h-3 mr-1" />
@@ -153,7 +157,7 @@ export function MessageFileAttachments({ files, variant = 'compact', isUserMessa
                   className="text-xs"
                   onClick={() => {
                     // TODO: Implementar descarga
-                    console.log('Descargar archivo:', file.id)
+                    logger.info('Descargar archivo:', file.id)
                   }}
                 >
                   <Download className="w-3 h-3 mr-1" />

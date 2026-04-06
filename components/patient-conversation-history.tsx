@@ -32,6 +32,10 @@ import { usePatientConversationHistory } from "@/hooks/use-patient-conversation-
 import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 import type { AgentType, ClinicalMode, PatientRecord } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface PatientConversationHistoryProps {
   patient: PatientRecord
   userId: string
@@ -154,7 +158,7 @@ export function PatientConversationHistory({
       try {
         await updateConversationTitle(sessionId, editingTitle.trim())
       } catch (error) {
-        console.error('Error actualizando título:', error)
+        logger.error('Error actualizando título:', error)
       }
     }
     setEditingId(null)

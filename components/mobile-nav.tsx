@@ -40,6 +40,10 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface MobileNavProps {
   userId: string
   createSession: (userId: string, mode: ClinicalMode, agent: AgentType) => Promise<string | null>
@@ -115,7 +119,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
     if (isCreatingSession) return
     try {
       setIsCreatingSession(true)
-      console.log('📱 Mobile: Preparando nueva conversación (sin crear sesión hasta enviar)...')
+      logger.info('📱 Mobile: Preparando nueva conversación (sin crear sesión hasta enviar)...')
       // Solo cerrar el sheet; la sesión se creará al enviar el primer mensaje
       setIsOpen(false)
       onNewChat?.()
@@ -130,7 +134,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
       await onConversationSelect(sessionId)
       setIsOpen(false) // Cerrar el sheet después de seleccionar
     } catch (err) {
-      console.error('❌ Mobile: Error seleccionando conversación:', err)
+      logger.error('❌ Mobile: Error seleccionando conversación:', err)
     }
   }
 
@@ -140,7 +144,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
     try {
       await deleteConversation(sessionId)
     } catch (err) {
-      console.error('❌ Mobile: Error eliminando conversación:', err)
+      logger.error('❌ Mobile: Error eliminando conversación:', err)
     }
   }
 
@@ -377,7 +381,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                       clearSelectionTrigger={clearPatientSelectionTrigger}
                       onConversationSelect={async (sessionId: string) => {
                         // Handle conversation selection from patient history modal
-                        console.log('📱 Mobile: Conversación seleccionada desde historial de paciente:', sessionId);
+                        logger.info('📱 Mobile: Conversación seleccionada desde historial de paciente:', sessionId);
                         await onConversationSelect(sessionId);
                         setIsOpen(false); // Close mobile nav after selecting conversation
                       }}
@@ -405,7 +409,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
             onGenerate={async () => {
               // En mobile, la generación de ficha se maneja desde el chat
               // Este callback no debería ser llamado, pero lo dejamos por compatibilidad
-              console.log('📱 Mobile: Generación de ficha solicitada desde panel')
+              logger.info('📱 Mobile: Generación de ficha solicitada desde panel')
             }}
             isGenerating={false}
           />

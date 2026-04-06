@@ -53,6 +53,10 @@ interface ConversationHistoryListProps {
 // Aurora Branding: Import centralized agent visual config
 import { getAgentVisualConfig } from "@/config/agent-visual-config"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Legacy mapping for backward compatibility - now uses Aurora palette
 const agentConfig = {
   'socratico': {
@@ -158,7 +162,7 @@ export function ConversationHistoryList({
         onConversationSelect?.(sessionId)
       }
     } catch (err) {
-      console.error('Error al cargar la conversación:', err)
+      logger.error('Error al cargar la conversación:', err)
     }
   }
 

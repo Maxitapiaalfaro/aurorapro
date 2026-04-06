@@ -35,6 +35,10 @@ import { DevMessageMetrics } from "@/components/dev-message-metrics"
 import { ExecutionTimeline } from "@/components/execution-timeline"
 import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-status"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface ChatInterfaceProps {
   activeAgent: AgentType
   isProcessing: boolean
@@ -274,7 +278,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               newMessageFiles[message.id] = files
             }
           } catch (error) {
-            console.error('Error loading files for message:', message.id, error)
+            logger.error('Error loading files for message:', message.id, error)
           }
         }
       }
@@ -449,7 +453,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   }
 
   const handleSendMessage = async (explicitMessage?: string) => {
-    console.log('🔄 Frontend: Iniciando envío de mensaje...', {
+    logger.info('🔄 Frontend: Iniciando envío de mensaje...', {
       hasInput: !!inputValue.trim(),
       hasSession: !!currentSession,
       sessionId: currentSession?.sessionId,
@@ -458,7 +462,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     
     const messageToSend = (explicitMessage ?? inputValue).trim()
     if (!messageToSend) {
-      console.log('❌ Frontend: Envío cancelado - falta input o sesión')
+      logger.info('❌ Frontend: Envío cancelado - falta input o sesión')
       return
     }
 
@@ -470,7 +474,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     setStreamingResponse("")
 
     // 🔄 Resetear indicador académico para el nuevo mensaje
-    console.log('🔄 Frontend: Reseteando indicador académico antes de enviar mensaje', {
+    logger.info('🔄 Frontend: Reseteando indicador académico antes de enviar mensaje', {
       estadoAnterior: academicSearchState,
       resultadosAnteriores: academicSearchResults
     })
@@ -485,7 +489,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
     // Activar scroll único para mostrar el mensaje del usuario
     setShouldScrollOnce(true)
 
-    console.log('📤 Frontend: Enviando mensaje:', message.substring(0, 50) + '...')
+    logger.info('📤 Frontend: Enviando mensaje:', message.substring(0, 50) + '...')
 
     // Instrumentación Sentry para envío de mensaje desde UI
     return Sentry.startSpan(
@@ -518,7 +522,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           
           // ARCHITECTURAL FIX: Limpiar estado visual inmediatamente después del envío exitoso
           // Los archivos ya están en el contexto de sesión, no necesitamos mostrarlos más en UI
-          console.log('🧹 Frontend: Limpiando estado visual de archivos adjuntos post-envío')
+          logger.info('🧹 Frontend: Limpiando estado visual de archivos adjuntos post-envío')
           
           const responseTime = Date.now() - startTime
           
@@ -562,7 +566,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     lastUpdateTs = now
 
                     if (isFirstChunk) {
-                      console.log('🚀 [ChatInterface] Primer chunk mostrado inmediatamente:', fullResponse.substring(0, 50))
+                      logger.info('🚀 [ChatInterface] Primer chunk mostrado inmediatamente:', fullResponse.substring(0, 50))
                     }
                   }
 
@@ -674,7 +678,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     : undefined
                   await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline)
                 } catch (historyError) {
-                  console.error('❌ Frontend: Error agregando al historial:', historyError)
+                  logger.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)
                 }
               }
@@ -691,7 +695,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               }
               span.setStatus({ code: 1, message: "Streaming completed successfully" })
             } catch (streamError) {
-              console.error('❌ Frontend: Error en streaming:', streamError)
+              logger.error('❌ Frontend: Error en streaming:', streamError)
               span.setStatus({ code: 2, message: "Streaming failed" })
               Sentry.captureException(streamError)
               setIsStreaming(false)
@@ -699,7 +703,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             }
           } else if (response && response.text) {
             // Respuesta no streaming o respuesta con function calls procesadas
-            console.log('✅ Frontend: Respuesta con texto recibida:', response.text.substring(0, 100) + '...')
+            logger.info('✅ Frontend: Respuesta con texto recibida:', response.text.substring(0, 100) + '...')
             
             span.setAttribute("response.type", "non_streaming")
             span.setAttribute("response.length", response.text.length)
@@ -707,7 +711,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             
             // Si hay function calls, mostrar información adicional
             if (response.functionCalls) {
-              console.log('🔧 Frontend: Function calls detectadas:', response.functionCalls.length)
+              logger.info('🔧 Frontend: Function calls detectadas:', response.functionCalls.length)
               span.setAttribute("response.function_calls_count", response.functionCalls.length)
             }
             
@@ -728,9 +732,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 // de lo contrario usar el agente activo actual
                 const responseAgent = response?.routingInfo?.targetAgent || activeAgent
                 await addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [])
-                console.log('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
+                logger.info('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
               } catch (historyError) {
-                console.error('❌ Frontend: Error agregando al historial:', historyError)
+                logger.error('❌ Frontend: Error agregando al historial:', historyError)
                 Sentry.captureException(historyError)
               }
             }
@@ -738,13 +742,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             setIsStreaming(false)
             span.setStatus({ code: 1, message: "Non-streaming response processed successfully" })
           } else {
-            console.log('⚠️ Frontend: Respuesta inesperada o nula:', response)
+            logger.info('⚠️ Frontend: Respuesta inesperada o nula:', response)
             span.setAttribute("response.type", "unexpected")
             span.setStatus({ code: 2, message: "Unexpected or null response" })
             setIsStreaming(false)
           }
         } catch (error) {
-          console.error("❌ Frontend: Error sending message:", error)
+          logger.error("❌ Frontend: Error sending message:", error)
           span.setStatus({ code: 2, message: "Message send failed" })
           Sentry.captureException(error)
           setIsStreaming(false)
@@ -768,7 +772,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       try {
         await uploadDocument(file)
       } catch (error) {
-        console.error("Error uploading file:", error)
+        logger.error("Error uploading file:", error)
       }
     }
   }

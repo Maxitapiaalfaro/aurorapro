@@ -1,3 +1,7 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('storage')
+
 import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
 /**
@@ -25,7 +29,7 @@ export class MemoryServerStorage {
     if (this.initialized) return
     this.initialized = true
     // No-op: purely in-memory
-    console.log('✅ [MemoryStorage] Initialized (serverless-safe, no disk writes)')
+    logger.info('✅ [MemoryStorage] Initialized (serverless-safe, no disk writes)')
   }
 
   async shutdown(): Promise<void> {
@@ -37,7 +41,7 @@ export class MemoryServerStorage {
     this.fichas.clear()
     this.fichasByPaciente.clear()
     this.initialized = false
-    console.log('🧹 [MemoryStorage] Shutdown and cleared all in-memory data')
+    logger.info('🧹 [MemoryStorage] Shutdown and cleared all in-memory data')
   }
 
   // ---- Chat Sessions ----
@@ -60,7 +64,7 @@ export class MemoryServerStorage {
       set.add(chatState.sessionId)
     }
 
-    console.log(`💾 [MemoryStorage] Saved session: ${chatState.sessionId}`)
+    logger.info(`💾 [MemoryStorage] Saved session: ${chatState.sessionId}`)
   }
 
   async loadChatSession(sessionId: string): Promise<ChatState | null> {
@@ -139,7 +143,7 @@ export class MemoryServerStorage {
       const ids = this.userSessions.get(s.userId)
       if (ids) ids.delete(sessionId)
     }
-    console.log(`🗑️ [MemoryStorage] Deleted session: ${sessionId}`)
+    logger.info(`🗑️ [MemoryStorage] Deleted session: ${sessionId}`)
   }
 
   // ---- Clinical Files ----
@@ -154,7 +158,7 @@ export class MemoryServerStorage {
       }
       set.add(file.id)
     }
-    console.log(`💾 [MemoryStorage] Saved clinical file: ${file.id}`)
+    logger.info(`💾 [MemoryStorage] Saved clinical file: ${file.id}`)
   }
 
   async getClinicalFiles(sessionId?: string): Promise<ClinicalFile[]> {
@@ -173,7 +177,7 @@ export class MemoryServerStorage {
   async getClinicalFileById(fileId: string): Promise<ClinicalFile | null> {
     if (!this.initialized) throw new Error('Storage not initialized')
     const file = this.clinicalFiles.get(fileId)
-    console.log(`📁 [MemoryStorage.getClinicalFileById] Lookup for ${fileId}:`, {
+    logger.info(`📁 [MemoryStorage.getClinicalFileById] Lookup for ${fileId}:`, {
       found: !!file,
       status: file?.status,
       name: file?.name,
@@ -192,7 +196,7 @@ export class MemoryServerStorage {
       const ids = this.sessionFiles.get((f as any).sessionId)
       if (ids) ids.delete(fileId)
     }
-    console.log(`🗑️ [MemoryStorage] Deleted clinical file: ${fileId}`)
+    logger.info(`🗑️ [MemoryStorage] Deleted clinical file: ${fileId}`)
   }
 
   // ---- Fichas Clínicas ----
@@ -205,7 +209,7 @@ export class MemoryServerStorage {
       this.fichasByPaciente.set(ficha.pacienteId, set)
     }
     set.add(ficha.fichaId)
-    console.log(`💾 [MemoryStorage] Saved ficha clínica: ${ficha.fichaId}`)
+    logger.info(`💾 [MemoryStorage] Saved ficha clínica: ${ficha.fichaId}`)
   }
 
   async getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null> {
@@ -234,7 +238,7 @@ export class MemoryServerStorage {
     this.sessionFiles.clear()
     this.fichas.clear()
     this.fichasByPaciente.clear()
-    console.log('🧹 [MemoryStorage] Cleared all data')
+    logger.info('🧹 [MemoryStorage] Cleared all data')
   }
 
   getStorageStats() {

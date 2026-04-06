@@ -21,6 +21,10 @@ import { rehypeAuroraClasses, rehypeTableDataLabels } from './rehype-aurora-clas
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import type { AgentType } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Procesador unificado para markdown estático (contenido completo)
  */
@@ -235,7 +239,7 @@ export async function parseMarkdown(
     
     return html
   } catch (error) {
-    console.error('Error parsing markdown:', error)
+    logger.error('Error parsing markdown:', error)
     // Fallback: retornar el contenido original con saltos de línea convertidos
     return content.replace(/\n/g, '<br>')
   }
@@ -293,7 +297,7 @@ export async function parseMarkdownStreaming(content: string): Promise<string> {
 
     return html
   } catch (error) {
-    console.error('Error parsing streaming markdown:', error)
+    logger.error('Error parsing streaming markdown:', error)
     // Fallback más robusto para streaming
     return content.replace(/\n/g, '<br>')
   }
@@ -316,7 +320,7 @@ export function parseMarkdownSync(content: string): string {
     const result = staticProcessor.processSync(withHighlights)
     return String(result)
   } catch (error) {
-    console.error('Error parsing markdown sync:', error)
+    logger.error('Error parsing markdown sync:', error)
     return content.replace(/\n/g, '<br>')
   }
 }
@@ -364,7 +368,7 @@ export function parseMarkdownStreamingSync(content: string): string {
 
     return html
   } catch (error) {
-    console.error('Error parsing streaming markdown sync:', error)
+    logger.error('Error parsing streaming markdown sync:', error)
     return content.replace(/\n/g, '<br>')
   }
 }

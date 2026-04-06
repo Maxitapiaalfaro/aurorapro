@@ -77,6 +77,10 @@ import { FichaClinicaPanel } from "@/components/patient-library/FichaClinicaPane
 import { PatientConversationHistory } from "@/components/patient-conversation-history"
 import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Component to display session count for a patient
  */
@@ -104,7 +108,7 @@ function PatientSessionCount({ patient }: { patient: PatientRecord }) {
 
         setSessionCount(userMessageCount)
       } catch (err) {
-        console.error('Error loading session count:', err)
+        logger.error('Error loading session count:', err)
       } finally {
         setLoading(false)
       }
@@ -198,7 +202,7 @@ export function PatientLibrarySection({
   useEffect(() => {
     if (clearSelectionTrigger !== undefined && clearSelectionTrigger > 0) {
       selectPatient(null)
-      console.log('🧹 Selección de paciente limpiada desde trigger externo')
+      logger.info('🧹 Selección de paciente limpiada desde trigger externo')
     }
   }, [clearSelectionTrigger, selectPatient])
 
@@ -237,7 +241,7 @@ export function PatientLibrarySection({
         
         setPatientInsights(countMap)
       } catch (err) {
-        console.error('Failed to load insight counts:', err)
+        logger.error('Failed to load insight counts:', err)
       }
     }
     
@@ -307,7 +311,7 @@ export function PatientLibrarySection({
       setIsCreateDialogOpen(false)
       resetForm()
     } catch (err) {
-      console.error("Failed to create patient:", err)
+      logger.error("Failed to create patient:", err)
     }
   }
 
@@ -356,7 +360,7 @@ export function PatientLibrarySection({
       setEditingPatient(null)
       resetForm()
     } catch (err) {
-      console.error("Failed to update patient:", err)
+      logger.error("Failed to update patient:", err)
     }
   }
 
@@ -364,7 +368,7 @@ export function PatientLibrarySection({
     try {
       await deletePatient(patientId)
     } catch (err) {
-      console.error("Failed to delete patient:", err)
+      logger.error("Failed to delete patient:", err)
     }
   }
 
@@ -443,7 +447,7 @@ export function PatientLibrarySection({
       await generateFichaClinica(patient.id, fichaId, { ...sessionState, patientForm, conversationSummary } as any)
       await loadFichasClinicas(patient.id)
     } catch (err) {
-      console.error('Error generating ficha clínica:', err)
+      logger.error('Error generating ficha clínica:', err)
     }
   }
 
@@ -1089,7 +1093,7 @@ export function PatientLibrarySection({
                 userId={systemState.userId}
                 className="pb-2"
                 onConversationSelect={async (sessionId: string) => {
-                    console.log('📱 Cargando conversación desde historial de paciente:', sessionId);
+                    logger.info('📱 Cargando conversación desde historial de paciente:', sessionId);
                     
                     // Cerrar el modal inmediatamente para mejor UX
                     setShowConversationHistory(false);

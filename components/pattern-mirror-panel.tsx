@@ -36,6 +36,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ClinicalDomain, type ExploredDomain } from '@/lib/clinical-pattern-analyzer';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface PatternMirrorPanelProps {
   patientId: string;
   patientName: string;
@@ -150,7 +154,7 @@ export function PatternMirrorPanel({
       await storage.saveAnalysisState(updatedState);
     }
     
-    console.log(`📊 [Análisis Longitudinal] Domain ${domainType} validated:`, agreed ? 'agreed' : 'questioned');
+    logger.info(`📊 [Análisis Longitudinal] Domain ${domainType} validated:`, agreed ? 'agreed' : 'questioned');
   };
 
   /**

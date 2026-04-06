@@ -2,6 +2,10 @@
 
 import type { PatientRecord, PatientSummaryCache, PatientSessionMeta } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * PatientSummaryBuilder - Generates compact, token-limited summaries from PatientRecord
  * Follows the executive plan specification for 800-1200 token summaries
@@ -112,7 +116,7 @@ export class PatientSummaryBuilder {
   ): string {
     // Prioridad 1: Si existe ficha clínica completada, usarla
     if (latestFicha && latestFicha.contenido && latestFicha.contenido.trim().length > 0) {
-      console.log(`📋 Using ficha clínica as patient summary (version ${latestFicha.version})`);
+      logger.info(`📋 Using ficha clínica as patient summary (version ${latestFicha.version})`);
       
       // Agregar encabezado para contexto
       const fichaWithHeader = `[Ficha Clínica Actualizada - Versión ${latestFicha.version}]\n\n${latestFicha.contenido}`;

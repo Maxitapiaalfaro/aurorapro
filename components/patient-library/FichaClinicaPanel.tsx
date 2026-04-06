@@ -39,6 +39,10 @@ import { parseMarkdown } from "@/lib/markdown-parser"
 import { listUserSessions, loadSessionWithMessages } from "@/lib/firestore-client-storage"
 import type { FichaClinicaState, PatientRecord } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface FichaClinicaPanelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -183,7 +187,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
     try {
       setIsGeneratingInsights(true)
 
-      console.log('🔍 [Análisis Longitudinal] Panel trigger clicked for patient:', patient.displayName, patient.id)
+      logger.info('🔍 [Análisis Longitudinal] Panel trigger clicked for patient:', patient.displayName, patient.id)
 
       // Notify start: background-safe hint
       toast({
@@ -210,7 +214,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
         session.patientId === patient.id
       )
 
-      console.log('📊 [Análisis Longitudinal] Found patient sessions:', patientSessionSummaries.length)
+      logger.info('📊 [Análisis Longitudinal] Found patient sessions:', patientSessionSummaries.length)
 
       // Load full session history for each patient session
       const allMessages: any[] = []
@@ -224,7 +228,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
       // Count user messages (each represents a session interaction)
       const userMessageCount = allMessages.filter(msg => msg.role === 'user').length
 
-      console.log('📊 [Análisis Longitudinal] Total messages:', allMessages.length, 'User messages:', userMessageCount)
+      logger.info('📊 [Análisis Longitudinal] Total messages:', allMessages.length, 'User messages:', userMessageCount)
 
       if (userMessageCount < 3) {
         toast({
@@ -253,7 +257,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
         throw new Error(data.error || 'Error al generar análisis')
       }
 
-      console.log('✅ [Análisis Longitudinal] Analysis received from server:', data.analysisId)
+      logger.info('✅ [Análisis Longitudinal] Analysis received from server:', data.analysisId)
 
       // Save analysis to IndexedDB (client-side storage)
       const { getPatternAnalysisStorage } = await import('@/lib/pattern-analysis-storage')
@@ -272,7 +276,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
 
       await storage.saveAnalysisState(analysisState)
 
-      console.log('💾 [Análisis Longitudinal] Analysis saved to IndexedDB:', data.analysisId)
+      logger.info('💾 [Análisis Longitudinal] Analysis saved to IndexedDB:', data.analysisId)
 
       toast({
         title: "Análisis completado",
@@ -289,7 +293,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
       setPatientPendingCount(count)
 
     } catch (err) {
-      console.error('❌ [Análisis Longitudinal] Error generating insights:', err)
+      logger.error('❌ [Análisis Longitudinal] Error generating insights:', err)
       
       toast({
         title: "Error al generar análisis",

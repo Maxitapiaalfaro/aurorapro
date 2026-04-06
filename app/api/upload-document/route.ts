@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ClinicalFileManager } from '@/lib/clinical-file-manager'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 export async function POST(request: NextRequest) {
   try {
     const authResult = await verifyFirebaseAuth(request)
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('🔄 API: Subiendo documento...', {
+    logger.info('🔄 API: Subiendo documento...', {
       fileName: file.name,
       fileSize: file.size,
       sessionId,
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
       verifiedUserId
     )
     
-    console.log('✅ API: Documento subido exitosamente:', uploadedFile.id)
+    logger.info('✅ API: Documento subido exitosamente:', uploadedFile.id)
     
     return NextResponse.json({
       success: true,
@@ -94,7 +98,7 @@ export async function POST(request: NextRequest) {
       message: `Documento "${file.name}" subido exitosamente`
     })
   } catch (error) {
-    console.error('❌ API Error (Upload Document):', error)
+    logger.error('❌ API Error (Upload Document):', error)
     // Map common errors for clearer feedback
     const message = error instanceof Error ? error.message : 'Error desconocido'
     const code = (error as any)?.code || ''

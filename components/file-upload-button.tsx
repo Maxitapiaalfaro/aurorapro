@@ -6,6 +6,10 @@ import { Plus, Upload, X, FileText, ImageIcon, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ClinicalFile } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface FileUploadButtonProps {
   onFilesSelected: (files: ClinicalFile[]) => void
   uploadDocument: (file: File) => Promise<ClinicalFile>
@@ -42,7 +46,7 @@ export function FileUploadButton({
           const uploadedFile = await uploadDocument(file)
           uploadedFiles.push(uploadedFile)
         } catch (error) {
-          console.error('Error uploading file:', file.name, error)
+          logger.error('Error uploading file:', file.name, error)
           setUploadError(`Error subiendo ${file.name}: ${error instanceof Error ? error.message : 'Error desconocido'}`)
         }
       }

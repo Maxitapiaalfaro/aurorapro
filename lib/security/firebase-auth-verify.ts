@@ -2,6 +2,10 @@ import 'server-only'
 
 import { getAdminAuthInstance } from '@/lib/firebase-admin-config'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Verifica un Firebase ID token extraído del header Authorization.
  *
@@ -32,7 +36,7 @@ export async function verifyFirebaseAuth(request: Request): Promise<AuthResult> 
     return { authenticated: true, uid: decodedToken.uid }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Token verification failed'
-    console.error('[Auth] Token verification failed:', message)
+    logger.error('[Auth] Token verification failed:', message)
     return { authenticated: false, error: message }
   }
 }

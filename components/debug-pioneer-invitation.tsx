@@ -8,6 +8,10 @@ import { usePioneerInvitation } from '@/hooks/use-pioneer-invitation'
 import { useSessionMetrics } from '@/hooks/use-session-metrics'
 import { Sparkles, Clock, MessageSquare, Target, Bug } from 'lucide-react'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface DebugPioneerInvitationProps {
   userId: string;
   sessionId: string;
@@ -248,7 +252,7 @@ export function DebugPioneerInvitation({
                 // Limpiar localStorage para este usuario
                 const storageKey = `hopeai_pioneer_invitation_${userId}`;
                 localStorage.removeItem(storageKey);
-                console.log('🧹 Estado de invitación reseteado para:', userId);
+                logger.info('🧹 Estado de invitación reseteado para:', userId);
                 window.location.reload(); // Recargar para aplicar cambios
               }}
               size="sm"
@@ -260,7 +264,7 @@ export function DebugPioneerInvitation({
             
             <Button
               onClick={() => {
-                console.log('🧪 Forzando mostrar invitación...');
+                logger.info('🧪 Forzando mostrar invitación...');
                 markAsShown();
               }}
               size="sm"

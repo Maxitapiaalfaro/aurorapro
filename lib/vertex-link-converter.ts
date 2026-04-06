@@ -17,6 +17,10 @@
 import { academicSourceValidator } from './academic-source-validator'
 import { crossrefDOIResolver } from './crossref-doi-resolver'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // ============================================================================
 // TIPOS Y INTERFACES
 // ============================================================================
@@ -144,7 +148,7 @@ export class VertexLinkConverter {
     // Verificar caché primero
     if (this.redirectCache.has(vertexLink)) {
       const cached = this.redirectCache.get(vertexLink)
-      console.log('[VertexConverter] Using cached redirect for:', vertexLink.substring(0, 100))
+      logger.info('[VertexConverter] Using cached redirect for:', vertexLink.substring(0, 100))
       return cached || null
     }
 
@@ -152,7 +156,7 @@ export class VertexLinkConverter {
     await this.waitForRequestSlot()
 
     try {
-      console.log('[VertexConverter] Resolving vertex redirect:', vertexLink.substring(0, 100) + '...')
+      logger.info('[VertexConverter] Resolving vertex redirect:', vertexLink.substring(0, 100) + '...')
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
@@ -176,7 +180,7 @@ export class VertexLinkConverter {
       this.cacheTimestamps.set(vertexLink, Date.now())
       this.cleanCache()
 
-      console.log('[VertexConverter] Resolved to:', finalUrl)
+      logger.info('[VertexConverter] Resolved to:', finalUrl)
       return finalUrl
 
     } catch (error) {
@@ -186,9 +190,9 @@ export class VertexLinkConverter {
 
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          console.warn('[VertexConverter] Timeout resolving redirect:', vertexLink.substring(0, 100))
+          logger.warn('[VertexConverter] Timeout resolving redirect:', vertexLink.substring(0, 100))
         } else {
-          console.warn('[VertexConverter] Error resolving redirect:', error.message)
+          logger.warn('[VertexConverter] Error resolving redirect:', error.message)
         }
       }
       return null
@@ -216,7 +220,7 @@ export class VertexLinkConverter {
 
       // Si es un vertex:// link, no podemos hacer mucho
       if (vertexLink.startsWith('vertex://')) {
-        console.warn('[VertexConverter] Cannot convert vertex:// protocol link:', vertexLink)
+        logger.warn('[VertexConverter] Cannot convert vertex:// protocol link:', vertexLink)
         return null
       }
 
@@ -248,7 +252,7 @@ export class VertexLinkConverter {
 
       return vertexLink
     } catch (error) {
-      console.error('[VertexConverter] Error converting vertex link:', error)
+      logger.error('[VertexConverter] Error converting vertex link:', error)
       return null
     }
   }
@@ -269,7 +273,7 @@ export class VertexLinkConverter {
     const vertexLinks = this.extractVertexLinks(responseText)
 
     // Paso 2: Resolver todos los vertex links en paralelo (más eficiente)
-    console.log(`[VertexConverter] Processing ${vertexLinks.length} vertex links...`)
+    logger.info(`[VertexConverter] Processing ${vertexLinks.length} vertex links...`)
 
     const conversionPromises = vertexLinks.map(async (vertexLink) => {
       const convertedUrl = await this.convertVertexLink(vertexLink)
@@ -302,11 +306,11 @@ export class VertexLinkConverter {
           ''
         )
 
-        console.warn('[VertexConverter] Could not resolve redirect, removed from text:', original.substring(0, 100))
+        logger.warn('[VertexConverter] Could not resolve redirect, removed from text:', original.substring(0, 100))
       }
     }
 
-    console.log(`[VertexConverter] Successfully converted ${conversionCount}/${vertexLinks.length} links`)
+    logger.info(`[VertexConverter] Successfully converted ${conversionCount}/${vertexLinks.length} links`)
 
     // Paso 4: Si hay grounding metadata, extraer URLs validadas y reemplazar sección de Referencias
     if (groundingMetadata?.groundingChunks) {
@@ -372,7 +376,7 @@ export class VertexLinkConverter {
         }
 
         // Resolver todos los URIs en paralelo (más eficiente)
-        console.log(`[VertexConverter] Resolving ${chunks.length} URLs from grounding metadata...`)
+        logger.info(`[VertexConverter] Resolving ${chunks.length} URLs from grounding metadata...`)
 
         const resolutionPromises = chunks.map(async ({ uri, title }) => {
           // Intentar convertir/resolver el URI
@@ -416,10 +420,10 @@ export class VertexLinkConverter {
         const resolvedUrls = await Promise.all(resolutionPromises)
         urls.push(...resolvedUrls)
 
-        console.log(`[VertexConverter] Successfully resolved ${urls.filter(u => u.url).length}/${chunks.length} URLs`)
+        logger.info(`[VertexConverter] Successfully resolved ${urls.filter(u => u.url).length}/${chunks.length} URLs`)
       }
     } catch (error) {
-      console.error('[VertexConverter] Error extracting URLs from grounding:', error)
+      logger.error('[VertexConverter] Error extracting URLs from grounding:', error)
     }
 
     return urls
