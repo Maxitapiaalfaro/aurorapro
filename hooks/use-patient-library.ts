@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth } from "@/providers/auth-provider"
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import {
   savePatient,
   loadPatient,
@@ -246,7 +247,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         .sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
 
       const { patientForm, conversationSummary, ...sessionStateCore } = sessionState || {}
-      const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, {
+      const res = await authenticatedFetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

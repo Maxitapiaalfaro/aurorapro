@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 /**
  * Hook para transcripción de voz a texto usando Gemini API
@@ -197,7 +198,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       }
       
       // Enviar al endpoint de transcripción
-      const response = await fetch('/api/transcribe-audio', {
+      const response = await authenticatedFetch('/api/transcribe-audio', {
         method: 'POST',
         body: formData,
         signal: controller.signal,

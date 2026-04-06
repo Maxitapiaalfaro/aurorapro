@@ -24,6 +24,7 @@ import { PatientContextComposer, PatientSummaryBuilder } from "@/lib/patient-sum
 import * as Sentry from "@sentry/nextjs"
 import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-client-storage"
 import { useAuth } from "@/providers/auth-provider"
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
@@ -448,7 +449,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       formData.append('sessionId', sessionIdForUpload as string)
       formData.append('userId', systemState.userId)
 
-      const response = await fetch('/api/upload-document', {
+      const response = await authenticatedFetch('/api/upload-document', {
         method: 'POST',
         body: formData
       })
@@ -508,7 +509,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         attempts++
         
         // Verificar estado del archivo en Google GenAI
-        const response = await fetch('/api/check-file-status', {
+        const response = await authenticatedFetch('/api/check-file-status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ geminiFileId })
@@ -675,7 +676,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const conversationSummary = systemState.history.slice(-6).map(m => `${m.role === 'user' ? 'Paciente' : 'Modelo'}: ${m.content}`).join('\n')
       const fichaId = `ficha_${patient.id}_${Date.now()}`
 
-      const res = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`, {
+      const res = await authenticatedFetch(`/api/patients/${encodeURIComponent(patient.id)}/ficha`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

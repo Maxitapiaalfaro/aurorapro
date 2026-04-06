@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import type { AgentType, ClinicalMode, ChatState } from "@/types/clinical-types"
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 export function useHopeAI() {
   const [isInitialized, setIsInitialized] = useState(false)
@@ -24,7 +25,7 @@ export function useHopeAI() {
       setError(null)
 
       try {
-        const response = await fetch('/api/sessions', {
+        const response = await authenticatedFetch('/api/sessions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -59,7 +60,7 @@ export function useHopeAI() {
       setError(null)
 
       try {
-        const response = await fetch(`/api/sessions?userId=${encodeURIComponent(userId)}`)
+        const response = await authenticatedFetch(`/api/sessions?userId=${encodeURIComponent(userId)}`)
         const data = await response.json()
 
         if (!response.ok) {
@@ -105,14 +106,14 @@ export function useHopeAI() {
           hasSessionMeta: !!sessionMeta,
           patientReference: sessionMeta?.patient?.reference
         })
-        const response = await fetch('/api/send-message', {
+        const response = await authenticatedFetch('/api/send-message', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
-            sessionId: currentSession.sessionId, 
-            message, 
+          body: JSON.stringify({
+            sessionId: currentSession.sessionId,
+            message,
             useStreaming,
             sessionMeta
           }),
@@ -149,14 +150,14 @@ export function useHopeAI() {
       setError(null)
 
       try {
-        const response = await fetch('/api/switch-agent', {
+        const response = await authenticatedFetch('/api/switch-agent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
-            sessionId: currentSession.sessionId, 
-            newAgent 
+          body: JSON.stringify({
+            sessionId: currentSession.sessionId,
+            newAgent
           }),
         })
 
@@ -192,7 +193,7 @@ export function useHopeAI() {
         formData.append('sessionId', currentSession.sessionId)
         formData.append('userId', userId)
 
-        const response = await fetch('/api/upload-document', {
+        const response = await authenticatedFetch('/api/upload-document', {
           method: 'POST',
           body: formData,
         })
@@ -217,7 +218,7 @@ export function useHopeAI() {
   // Get available agents
   const getAvailableAgents = useCallback(async () => {
     try {
-      const response = await fetch('/api/agents')
+      const response = await authenticatedFetch('/api/agents')
       const data = await response.json()
 
       if (!response.ok) {

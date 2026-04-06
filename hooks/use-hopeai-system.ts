@@ -13,6 +13,7 @@ import {
   listUserSessions,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 import { useAuth } from '@/providers/auth-provider'
 
@@ -295,7 +296,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       // 🔥 FIX: Llamar al endpoint API en lugar de ejecutar código de IA en el cliente.
       // createClinicalSession() invoca ai.chats.create() que requiere credenciales del servidor
       // (Vertex AI). En el navegador no hay credenciales y lanzaba "Error al crear la sesión".
-      const response = await fetch('/api/sessions', {
+      const response = await authenticatedFetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, mode, agent }),

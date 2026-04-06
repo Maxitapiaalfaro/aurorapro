@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { authenticatedFetch } from '@/lib/authenticated-fetch';
 import { getPatternAnalysisStorage, type PatternAnalysisState } from '@/lib/pattern-analysis-storage';
 import type { PatternAnalysis } from '@/lib/clinical-pattern-analyzer';
 import type { ChatMessage } from '@/types/clinical-types';
@@ -70,7 +71,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
     try {
       console.log(`🔍 [Pattern Mirror Hook] Generating analysis for ${patientName}`);
 
-      const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}/pattern-analysis`, {
+      const response = await authenticatedFetch(`/api/patients/${encodeURIComponent(patientId)}/pattern-analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

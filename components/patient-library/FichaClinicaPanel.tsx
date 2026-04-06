@@ -10,6 +10,7 @@ import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { PatternMirrorPanel } from "@/components/pattern-mirror-panel"
 import { usePatternMirror } from "@/hooks/use-pattern-mirror"
 import { useAuth } from "@/providers/auth-provider"
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import { 
   Tooltip,
   TooltipContent,
@@ -235,7 +236,7 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
       }
 
       // Call Pattern Analysis API with all patient messages
-      const response = await fetch(`/api/patients/${encodeURIComponent(patient.id)}/pattern-analysis`, {
+      const response = await authenticatedFetch(`/api/patients/${encodeURIComponent(patient.id)}/pattern-analysis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -10,6 +10,7 @@ import { Sparkles, Crown, Mail, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfigSafe } from '@/config/agent-visual-config'
 import type { AgentType } from '@/types/clinical-types'
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 // DialogContent personalizado sin el botón X
 const CustomDialogContent = React.forwardRef<
@@ -94,7 +95,7 @@ export function PioneerCircleInvitation({
     
     try {
       // Llamar al endpoint especializado de Pioneer Circle
-      const response = await fetch('/api/pioneer-circle', {
+      const response = await authenticatedFetch('/api/pioneer-circle', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
