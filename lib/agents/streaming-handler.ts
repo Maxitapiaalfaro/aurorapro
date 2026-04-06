@@ -12,6 +12,9 @@ import { vertexLinkConverter } from "../vertex-link-converter"
 import { checkToolPermission } from "../security/tool-permissions"
 import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
+import { createLogger } from "@/lib/logger"
+
+const logger = createLogger('agent')
 
 /**
  * The streaming handler needs access to some router state.
@@ -213,9 +216,9 @@ export async function extractUrlsFromGroundingMetadata(groundingMetadata: any): 
             trustScore
           })
 
-          console.log(`[ClinicalRouter] ✅ URL incluida: ${rawUrl.url} (trust: ${trustScore})`)
+          logger.info(`URL incluida: ${rawUrl.url} (trust: ${trustScore})`)
         } catch (error) {
-          console.warn(`[ClinicalRouter] Error procesando URL ${rawUrl.url}:`, error)
+          logger.warn(`Error procesando URL ${rawUrl.url}:`, error)
           // Incluir de todas formas - mejor mostrar la referencia que perderla
           urls.push({
             title: rawUrl.title,
@@ -226,12 +229,200 @@ export async function extractUrlsFromGroundingMetadata(groundingMetadata: any): 
       }
     }
 
-    console.log(`[ClinicalRouter] Extracted and validated ${urls.length} URLs from grounding metadata`)
+    logger.info(`Extracted and validated ${urls.length} URLs from grounding metadata`)
   } catch (error) {
-    console.error('[ClinicalRouter] Error extracting URLs from grounding metadata:', error)
+    logger.error('Error extracting URLs from grounding metadata:', error)
   }
 
   return urls
+}
+
+// ---- Shared tool helpers (deduplicated from streaming/non-streaming paths) ----
+
+const KNOWN_DYNAMIC_TOOLS = new Set([
+  'google_search',
+  'search_academic_literature',
+  'search_evidence_for_reflection',
+  'search_evidence_for_documentation',
+]);
+
+/**
+ * Validates a single function call against security policies and prepares it for execution.
+ * Returns a PreparedToolCall with either a denied executor or the real executor.
+ */
+export function prepareFunctionCallWithSecurity(
+  call: any,
+  psychologistId: string | null,
+  sessionId: string,
+  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>
+): PreparedToolCall {
+  const toolRegistry = ToolRegistry.getInstance();
+  const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
+  const securityCategory = registeredTool?.metadata.securityCategory ?? 'external';
+
+  // Unregistered + unknown → return a "denied" executor
+  if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
+    logger.warn(`UNREGISTERED tool BLOCKED: ${call.name}`);
+    return {
+      call,
+      securityCategory,
+      execute: async (): Promise<ToolCallResult> => ({
+        name: call.name,
+        response: {
+          error: "Execution denied for security reasons",
+          reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
+          security_category: 'unknown',
+        },
+      }),
+    } as PreparedToolCall;
+  }
+
+  const permissionResult = checkToolPermission(
+    call.name,
+    securityCategory,
+    call.args || {},
+    { psychologistId, sessionId }
+  );
+
+  if (permissionResult.decision === 'deny') {
+    logger.warn(`Tool execution DENIED: ${call.name} — ${permissionResult.reason}`);
+    return {
+      call,
+      securityCategory,
+      execute: async (): Promise<ToolCallResult> => ({
+        name: call.name,
+        response: {
+          error: "Execution denied for security reasons",
+          reason: permissionResult.reason,
+          security_category: securityCategory,
+        },
+      }),
+    } as PreparedToolCall;
+  }
+
+  logger.info(`Tool execution ALLOWED: ${call.name} (${securityCategory})`);
+
+  // Build the actual executor function
+  return {
+    call,
+    securityCategory,
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences),
+  } as PreparedToolCall;
+}
+
+/**
+ * Executes a single tool call. Shared between streaming and non-streaming paths.
+ * Mutates academicReferences array as a side-effect for academic search tools.
+ */
+async function executeToolCall(
+  call: any,
+  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>
+): Promise<ToolCallResult> {
+  if (call.name === "google_search") {
+    logger.info(`Executing Google Search:`, call.args)
+    return {
+      name: call.name,
+      response: "Search completed with automatic processing",
+    }
+  }
+
+  if (call.name === "search_academic_literature" ||
+      call.name === "search_evidence_for_reflection" ||
+      call.name === "search_evidence_for_documentation") {
+    logger.info(`Executing Academic Search (${call.name}):`, call.args)
+    let searchResults: any
+
+    const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
+
+    if (typeof window === 'undefined') {
+      try {
+        const { academicMultiSourceSearch } = await import('../academic-multi-source-search');
+        logger.info(`Calling academicMultiSourceSearch directly for ${call.name}`)
+        searchResults = await academicMultiSourceSearch.search({
+          query: call.args.query,
+          maxResults: call.args.max_results || defaultMaxResults,
+          language: 'both',
+          minTrustScore: 60
+        })
+      } catch (error) {
+        logger.error('Error importing academicMultiSourceSearch:', error);
+        const response = await fetch('/api/academic-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: call.args.query,
+            maxResults: call.args.max_results || defaultMaxResults
+          })
+        });
+        if (response.ok) {
+          searchResults = await response.json();
+        }
+      }
+    } else {
+      logger.warn('Academic search called from client - using API route')
+      const response = await fetch('/api/academic-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: call.args.query,
+          maxResults: call.args.max_results || defaultMaxResults,
+          language: 'both',
+          minTrustScore: 60
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`)
+      }
+
+      const data = await response.json()
+      searchResults = data.results
+    }
+
+    logger.info(`Academic search completed:`, {
+      totalFound: searchResults.metadata.totalFound,
+      validated: searchResults.sources.length,
+      fromParallelAI: searchResults.metadata.fromParallelAI
+    })
+
+    // Side-effect: capture academic references for UI emission
+    const refs = searchResults.sources.map((source: any) => ({
+      title: source.title,
+      url: source.url,
+      doi: source.doi,
+      authors: source.authors?.join?.(', ') || (Array.isArray(source.authors) ? source.authors.join(', ') : source.authors),
+      year: source.year,
+      journal: source.journal
+    }))
+    // Mutate the shared array so callers see the results
+    academicReferences.length = 0
+    academicReferences.push(...refs)
+    logger.info(`Stored ${academicReferences.length} academic references from search`)
+
+    const formattedResults = {
+      total_found: searchResults.metadata.totalFound,
+      validated_count: searchResults.sources.length,
+      sources: searchResults.sources.map((source: any) => ({
+        title: source.title,
+        authors: source.authors?.join(', ') || 'Unknown',
+        year: source.year,
+        journal: source.journal,
+        doi: source.doi,
+        url: source.url,
+        abstract: source.abstract,
+        excerpts: source.excerpts || [],
+        trust_score: source.trustScore
+      }))
+    }
+
+    return {
+      name: call.name,
+      response: formattedResults
+    }
+  }
+
+  // Unknown tool that passed security — return null-like
+  return { name: call.name, response: null }
 }
 
 // ---- Streaming handlers ----
@@ -269,7 +460,7 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
       }
 
       // 📊 CAPTURE METRICS AFTER STREAM COMPLETION
-      console.log(`📊 [ClinicalRouter] Stream complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
+      logger.info(`Stream complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
 
       if (interactionId && finalResponse) {
         try {
@@ -283,28 +474,28 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
               accumulatedText
             );
 
-            console.log(`📊 [ClinicalRouter] Streaming Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            logger.info(`Streaming Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
           } else {
             // Fallback: estimate tokens
             const inputTokens = Math.ceil(enhancedMessage.length / 4);
             const outputTokens = Math.ceil(accumulatedText.length / 4);
             sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
 
-            console.log(`📊 [ClinicalRouter] Streaming Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            logger.info(`Streaming Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
           }
 
           // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
           const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
           if (completedMetrics) {
-            console.log(`✅ [ClinicalRouter] Streaming interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+            logger.info(`Streaming interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
           }
         } catch (error) {
-          console.warn(`⚠️ [ClinicalRouter] Could not extract streaming token usage:`, error);
+          logger.warn(`Could not extract streaming token usage:`, error);
         }
       }
 
     } catch (error) {
-      console.error(`❌ [ClinicalRouter] Error in streaming wrapper:`, error);
+      logger.error(`Error in streaming wrapper:`, error);
       throw error;
     }
   })();
@@ -357,7 +548,7 @@ export async function handleStreamingWithTools(
           // Convertir vertex links en tiempo real
           let processedText = extractedText
           if (vertexLinkConverter.hasVertexLinks(processedText)) {
-            console.log('[ClinicalRouter] Detected vertex links in initial stream, converting...')
+            logger.info('Detected vertex links in initial stream, converting...')
             const conversionResult = await vertexLinkConverter.convertResponse(
               processedText,
               chunk.groundingMetadata
@@ -365,7 +556,7 @@ export async function handleStreamingWithTools(
             processedText = conversionResult.convertedResponse
 
             if (conversionResult.conversionCount > 0) {
-              console.log(`[ClinicalRouter] Converted ${conversionResult.conversionCount} vertex links`)
+              logger.info(`Converted ${conversionResult.conversionCount} vertex links`)
             }
           }
 
@@ -388,7 +579,7 @@ export async function handleStreamingWithTools(
 
       // After the initial stream is complete, handle function calls if any
       if (functionCalls.length > 0) {
-        console.log(`[ClinicalRouter] Processing ${functionCalls.length} function calls`)
+        logger.info(`Processing ${functionCalls.length} function calls`)
 
         // 🎨 UX: Emitir indicador de inicio de búsqueda académica (todas las variantes)
         const academicSearchCalls = functionCalls.filter((call: any) =>
@@ -421,171 +612,9 @@ export async function handleStreamingWithTools(
         let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
-        const KNOWN_DYNAMIC_TOOLS = new Set([
-          'google_search',
-          'search_academic_literature',
-          'search_evidence_for_reflection',
-          'search_evidence_for_documentation',
-        ]);
-
-        const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) => {
-          const toolRegistry = ToolRegistry.getInstance();
-          const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
-          const securityCategory = registeredTool?.metadata.securityCategory ?? 'external';
-
-          // ─── Security pre-check (synchronous, before orchestration) ───
-          // Unregistered + unknown → return a "denied" executor
-          if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
-            console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED: ${call.name}`);
-            return {
-              call,
-              securityCategory,
-              execute: async (): Promise<ToolCallResult> => ({
-                name: call.name,
-                response: {
-                  error: "Execution denied for security reasons",
-                  reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
-                  security_category: 'unknown',
-                },
-              }),
-            } as PreparedToolCall;
-          }
-
-          const permissionResult = checkToolPermission(
-            call.name,
-            securityCategory,
-            call.args || {},
-            { psychologistId: psychologistId ?? null, sessionId }
-          );
-
-          if (permissionResult.decision === 'deny') {
-            console.warn(`🔒 [Security] Tool execution DENIED: ${call.name} — ${permissionResult.reason}`);
-            return {
-              call,
-              securityCategory,
-              execute: async (): Promise<ToolCallResult> => ({
-                name: call.name,
-                response: {
-                  error: "Execution denied for security reasons",
-                  reason: permissionResult.reason,
-                  security_category: securityCategory,
-                },
-              }),
-            } as PreparedToolCall;
-          }
-
-          console.log(`✅ [Security] Tool execution ALLOWED: ${call.name} (${securityCategory})`);
-
-          // ─── Build the actual executor function ───
-          return {
-            call,
-            securityCategory,
-            execute: async (): Promise<ToolCallResult> => {
-              if (call.name === "google_search") {
-                console.log(`[ClinicalRouter] Executing Google Search:`, call.args)
-                return {
-                  name: call.name,
-                  response: "Search completed with automatic processing",
-                }
-              }
-
-              if (call.name === "search_academic_literature" ||
-                  call.name === "search_evidence_for_reflection" ||
-                  call.name === "search_evidence_for_documentation") {
-                console.log(`🔍 [ClinicalRouter] Executing Academic Search (${call.name}):`, call.args)
-                let searchResults: any
-
-                const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
-
-                if (typeof window === 'undefined') {
-                  try {
-                    const { academicMultiSourceSearch } = await import('../academic-multi-source-search');
-                    console.log(`🔍 [Server] Calling academicMultiSourceSearch directly for ${call.name}`)
-                    searchResults = await academicMultiSourceSearch.search({
-                      query: call.args.query,
-                      maxResults: call.args.max_results || defaultMaxResults,
-                      language: 'both',
-                      minTrustScore: 60
-                    })
-                  } catch (error) {
-                    console.error('❌ Error importing academicMultiSourceSearch:', error);
-                    const response = await fetch('/api/academic-search', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        query: call.args.query,
-                        maxResults: call.args.max_results || defaultMaxResults
-                      })
-                    });
-                    if (response.ok) {
-                      searchResults = await response.json();
-                    }
-                  }
-                } else {
-                  console.warn('⚠️ [Client] Academic search called from client - using API route')
-                  const response = await fetch('/api/academic-search', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      query: call.args.query,
-                      maxResults: call.args.max_results || defaultMaxResults,
-                      language: 'both',
-                      minTrustScore: 60
-                    })
-                  })
-
-                  if (!response.ok) {
-                    throw new Error(`API returned ${response.status}`)
-                  }
-
-                  const data = await response.json()
-                  searchResults = data.results
-                }
-
-                console.log(`✅ [ClinicalRouter] Academic search completed:`, {
-                  totalFound: searchResults.metadata.totalFound,
-                  validated: searchResults.sources.length,
-                  fromParallelAI: searchResults.metadata.fromParallelAI
-                })
-
-                // 🎯 Side-effect: capture academic references for UI emission
-                academicReferences = searchResults.sources.map((source: any) => ({
-                  title: source.title,
-                  url: source.url,
-                  doi: source.doi,
-                  authors: source.authors?.join?.(', ') || (Array.isArray(source.authors) ? source.authors.join(', ') : source.authors),
-                  year: source.year,
-                  journal: source.journal
-                }))
-                console.log(`📚 [ClinicalRouter] Stored ${academicReferences.length} academic references from ParallelAI`)
-
-                const formattedResults = {
-                  total_found: searchResults.metadata.totalFound,
-                  validated_count: searchResults.sources.length,
-                  sources: searchResults.sources.map((source: any) => ({
-                    title: source.title,
-                    authors: source.authors?.join(', ') || 'Unknown',
-                    year: source.year,
-                    journal: source.journal,
-                    doi: source.doi,
-                    url: source.url,
-                    abstract: source.abstract,
-                    excerpts: source.excerpts || [],
-                    trust_score: source.trustScore
-                  }))
-                }
-
-                return {
-                  name: call.name,
-                  response: formattedResults
-                }
-              }
-
-              // Unknown tool that passed security — return null-like
-              return { name: call.name, response: null }
-            },
-          } as PreparedToolCall;
-        });
+        const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences)
+        );
 
         // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
         const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
@@ -631,7 +660,7 @@ export async function handleStreamingWithTools(
         }
 
         if (validResponses.length > 0) {
-          console.log(`[ClinicalRouter] Sending ${validResponses.length} function responses back to model`)
+          logger.info(`Sending ${validResponses.length} function responses back to model`)
 
           // Send ALL function results back to the model (not just the first one)
           // Build an array of functionResponse parts for all valid responses
@@ -667,7 +696,7 @@ export async function handleStreamingWithTools(
                 // Convertir vertex links en el texto antes de enviar
                 let processedText = extractedText
                 if (vertexLinkConverter.hasVertexLinks(processedText)) {
-                  console.log('[ClinicalRouter] Detected vertex links in response, converting...')
+                  logger.info('Detected vertex links in response, converting...')
                   const conversionResult = await vertexLinkConverter.convertResponse(
                     processedText,
                     chunk.groundingMetadata
@@ -675,7 +704,7 @@ export async function handleStreamingWithTools(
                   processedText = conversionResult.convertedResponse
 
                   if (conversionResult.conversionCount > 0) {
-                    console.log(`[ClinicalRouter] Converted ${conversionResult.conversionCount} vertex links`)
+                    logger.info(`Converted ${conversionResult.conversionCount} vertex links`)
                   }
                 }
 
@@ -720,7 +749,7 @@ export async function handleStreamingWithTools(
 
             // Otherwise, send empty responses for the recursive function calls
             // so the model can proceed to generate text
-            console.log(`[ClinicalRouter] Follow-up round ${round + 1}: handling ${followUpFunctionCalls.length} recursive function calls`)
+            logger.info(`Follow-up round ${round + 1}: handling ${followUpFunctionCalls.length} recursive function calls`)
             const recursiveResponseParts = followUpFunctionCalls.map((call: any) => ({
               functionResponse: {
                 name: call.name,
@@ -738,7 +767,7 @@ export async function handleStreamingWithTools(
 
           // 🎯 NUEVA FUNCIONALIDAD: Emitir referencias académicas de ParallelAI al final del streaming
           if (academicReferences.length > 0) {
-            console.log(`📚 [ClinicalRouter] Emitting ${academicReferences.length} academic references from ParallelAI`)
+            logger.info(`Emitting ${academicReferences.length} academic references from ParallelAI`)
             yield {
               text: "",
               metadata: {
@@ -752,12 +781,12 @@ export async function handleStreamingWithTools(
 
       // If no content was yielded at all, yield an empty chunk to prevent UI hanging
       if (!hasYieldedContent) {
-        console.warn('[ClinicalRouter] No content yielded, providing fallback')
+        logger.warn('No content yielded, providing fallback')
         yield { text: "" }
       }
 
       // 📊 CAPTURE METRICS AFTER STREAM COMPLETION (with tools)
-      console.log(`📊 [ClinicalRouter] Stream with tools complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
+      logger.info(`Stream with tools complete - interactionId: ${interactionId}, finalResponse exists: ${!!finalResponse}, accumulated text length: ${accumulatedText.length}`);
 
       if (interactionId && finalResponse) {
         try {
@@ -771,28 +800,28 @@ export async function handleStreamingWithTools(
               accumulatedText
             );
 
-            console.log(`📊 [ClinicalRouter] Streaming with tools - Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            logger.info(`Streaming with tools - Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
           } else {
             // Fallback: estimate tokens
             const inputTokens = Math.ceil(enhancedMessage.length / 4);
             const outputTokens = Math.ceil(accumulatedText.length / 4);
             sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
 
-            console.log(`📊 [ClinicalRouter] Streaming with tools - Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+            logger.info(`Streaming with tools - Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
           }
 
           // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
           const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
           if (completedMetrics) {
-            console.log(`✅ [ClinicalRouter] Streaming with tools interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+            logger.info(`Streaming with tools interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
           }
         } catch (error) {
-          console.warn(`⚠️ [ClinicalRouter] Could not extract streaming with tools token usage:`, error);
+          logger.warn(`Could not extract streaming with tools token usage:`, error);
         }
       }
 
     } catch (error) {
-      console.error("[ClinicalRouter] Error in streaming with tools:", error)
+      logger.error("Error in streaming with tools:", error)
       // Yield error information as a chunk
       yield {
         text: "Lo siento, hubo un error procesando tu solicitud. Por favor, inténtalo de nuevo.",
@@ -813,118 +842,9 @@ export async function handleNonStreamingWithTools(
 
   if (functionCalls && functionCalls.length > 0) {
     // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
-    const KNOWN_DYNAMIC_TOOLS = new Set([
-      'google_search',
-      'search_academic_literature',
-      'search_evidence_for_reflection',
-      'search_evidence_for_documentation',
-    ]);
-
-    const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) => {
-      const toolRegistry = ToolRegistry.getInstance();
-      const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
-      const securityCategory = registeredTool?.metadata.securityCategory ?? 'external';
-
-      if (!registeredTool && !KNOWN_DYNAMIC_TOOLS.has(call.name)) {
-        console.warn(`🔒 [Security] UNREGISTERED tool BLOCKED (non-streaming): ${call.name}`);
-        return {
-          call,
-          securityCategory,
-          execute: async (): Promise<ToolCallResult> => ({
-            name: call.name,
-            response: {
-              error: "Execution denied for security reasons",
-              reason: `Tool "${call.name}" is not registered in ToolRegistry. Unregistered tools are blocked.`,
-              security_category: 'unknown',
-            },
-          }),
-        } as PreparedToolCall;
-      }
-
-      const permissionResult = checkToolPermission(
-        call.name,
-        securityCategory,
-        call.args || {},
-        { psychologistId: psychologistId ?? null, sessionId }
-      );
-
-      if (permissionResult.decision === 'deny') {
-        console.warn(`🔒 [Security] Tool execution DENIED (non-streaming): ${call.name} — ${permissionResult.reason}`);
-        return {
-          call,
-          securityCategory,
-          execute: async (): Promise<ToolCallResult> => ({
-            name: call.name,
-            response: {
-              error: "Execution denied for security reasons",
-              reason: permissionResult.reason,
-              security_category: securityCategory,
-            },
-          }),
-        } as PreparedToolCall;
-      }
-
-      console.log(`✅ [Security] Tool execution ALLOWED (non-streaming): ${call.name} (${securityCategory})`);
-
-      return {
-        call,
-        securityCategory,
-        execute: async (): Promise<ToolCallResult> => {
-          if (call.name === "google_search") {
-            console.log(`[ClinicalRouter] Executing Google Search (non-streaming):`, call.args)
-            return {
-              name: call.name,
-              response: "Search completed with automatic processing",
-            }
-          }
-
-          if (call.name === "search_academic_literature" ||
-              call.name === "search_evidence_for_reflection" ||
-              call.name === "search_evidence_for_documentation") {
-            console.log(`🔍 [ClinicalRouter] Academic search in non-streaming mode`)
-            const { academicMultiSourceSearch } = await import('../academic-multi-source-search');
-            const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
-            const searchResults = await academicMultiSourceSearch.search({
-              query: call.args.query,
-              maxResults: call.args.max_results || defaultMaxResults,
-              language: 'both',
-              minTrustScore: 60
-            })
-
-            academicReferences = searchResults.sources.map((source: any) => ({
-              title: source.title,
-              url: source.url,
-              doi: source.doi,
-              authors: source.authors?.join?.(', ') || (Array.isArray(source.authors) ? source.authors.join(', ') : source.authors),
-              year: source.year,
-              journal: source.journal
-            }))
-            console.log(`📚 [ClinicalRouter] Stored ${academicReferences.length} academic references (non-streaming)`)
-
-            return {
-              name: call.name,
-              response: {
-                total_found: searchResults.metadata.totalFound,
-                validated_count: searchResults.sources.length,
-                sources: searchResults.sources.map((source: any) => ({
-                  title: source.title,
-                  authors: source.authors?.join(', ') || 'Unknown',
-                  year: source.year,
-                  journal: source.journal,
-                  doi: source.doi,
-                  url: source.url,
-                  abstract: source.abstract,
-                  excerpts: source.excerpts || [],
-                  trust_score: source.trustScore
-                }))
-              }
-            }
-          }
-
-          return { name: call.name, response: null }
-        },
-      } as PreparedToolCall;
-    });
+    const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
+      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences)
+    );
 
     // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
     const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
@@ -945,7 +865,7 @@ export async function handleNonStreamingWithTools(
 
       // NUEVO: Convertir vertex links en la respuesta
       if (followUpResult.text && vertexLinkConverter.hasVertexLinks(followUpResult.text)) {
-        console.log('[ClinicalRouter] Detected vertex links in non-streaming response, converting...')
+        logger.info('Detected vertex links in non-streaming response, converting...')
         const conversionResult = await vertexLinkConverter.convertResponse(
           followUpResult.text,
           followUpResult.groundingMetadata
@@ -953,7 +873,7 @@ export async function handleNonStreamingWithTools(
         followUpResult.text = conversionResult.convertedResponse
 
         if (conversionResult.conversionCount > 0) {
-          console.log(`[ClinicalRouter] Converted ${conversionResult.conversionCount} vertex links`)
+          logger.info(`Converted ${conversionResult.conversionCount} vertex links`)
         }
       }
 
@@ -972,7 +892,7 @@ export async function handleNonStreamingWithTools(
 
       // 📚 Agregar referencias académicas de ParallelAI
       if (academicReferences.length > 0) {
-        console.log(`📚 [ClinicalRouter] Adding ${academicReferences.length} academic references to non-streaming response`)
+        logger.info(`Adding ${academicReferences.length} academic references to non-streaming response`)
         followUpResult.groundingUrls = [
           ...(followUpResult.groundingUrls || []),
           ...academicReferences

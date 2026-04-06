@@ -6,37 +6,9 @@
  */
 import type { AgentType } from "@/types/clinical-types"
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
+import { createLogger } from "@/lib/logger"
 
-/**
- * ARCHITECTURAL FIX: Generate agent-specific context for file attachments
- * Provides flexible, conversation-aware context that maintains flow between agents
- * while enabling specialized responses based on agent expertise.
- *
- * NOTE: This function is currently unused (dead code carried over from the router).
- */
-export function buildAgentSpecificFileContext(agentType: AgentType, fileCount: number, fileNames: string): string {
-  const baseContext = `**Archivos en contexto:** ${fileNames} (${fileCount} archivo${fileCount > 1 ? 's' : ''}).`;
-
-  switch (agentType) {
-    case 'socratico':
-      return `${baseContext}
-
-Como especialista en exploración reflexiva, puedes aprovechar este material para enriquecer el diálogo terapéutico. Responde naturalmente integrando tu perspectiva socrática según el flujo de la conversación.`;
-
-    case 'clinico':
-      return `${baseContext}
-
-Como especialista en documentación clínica, este material está disponible para síntesis profesional. Integra tu perspectiva organizacional según sea relevante para la conversación en curso.`;
-
-    case 'academico':
-      return `${baseContext}
-
-Como especialista en evidencia científica, puedes utilizar este material para informar tu análisis académico. Integra tu perspectiva basada en investigación según el contexto conversacional.`;
-
-    default:
-      return `${baseContext} Material disponible para análisis contextual apropiado.`;
-  }
-}
+const logger = createLogger('agent')
 
 /**
  * METADATA SECTION: Identidad del usuario (TERAPEUTA)
@@ -174,19 +146,19 @@ export function buildEnhancedMessage(originalMessage: string, enrichedContext: a
   // 2. METADATA OPERATIVA (si está disponible)
   if (enrichedContext.operationalMetadata) {
     contextSections.push(buildOperationalMetadataSection(enrichedContext.operationalMetadata))
-    console.log(`📊 [ClinicalRouter] Operational metadata included in message`)
+    logger.info(`Operational metadata included in message`)
   }
 
   // 3. DECISIÓN DE ROUTING (si está disponible)
   if (enrichedContext.routingDecision) {
     contextSections.push(buildRoutingDecisionSection(enrichedContext.routingDecision, agent))
-    console.log(`🎯 [ClinicalRouter] Routing decision included: ${enrichedContext.routingDecision.reason}`)
+    logger.info(`Routing decision included: ${enrichedContext.routingDecision.reason}`)
   }
 
   // 4. CONTEXTO DEL CASO CLÍNICO (si hay paciente)
   if (enrichedContext.patient_reference) {
     contextSections.push(buildClinicalCaseContextSection(enrichedContext))
-    console.log(`🏥 [ClinicalRouter] Clinical case context included`)
+    logger.info(`Clinical case context included`)
   }
 
   // 5. ENTIDADES EXTRAÍDAS (si están disponibles)
