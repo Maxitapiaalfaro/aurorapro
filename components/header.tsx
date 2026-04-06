@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon } from "@phosphor-icons/react"
+import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon, SignOutIcon } from "@phosphor-icons/react"
 import { useTheme } from "next-themes"
+import { signOut } from "firebase/auth"
+import { auth } from "@/lib/firebase-config"
 import type { PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
 import { clinicalStorage } from "@/lib/clinical-context-storage"
@@ -271,6 +273,15 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           ) : (
             <MoonIcon className="h-5 w-5" weight="duotone" />
           )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 text-mineral-gray hover:text-destructive hover:bg-destructive/10 transition-colors"
+          onClick={() => signOut(auth)}
+          title="Cerrar sesión"
+        >
+          <SignOutIcon className="h-5 w-5" weight="duotone" />
         </Button>
       </div>
     </header>

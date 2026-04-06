@@ -90,7 +90,7 @@ function PatientSessionCount({ patient }: { patient: PatientRecord }) {
         const { clinicalStorage } = await import('@/lib/clinical-context-storage')
         await clinicalStorage.initialize()
         
-        const allSessions = await clinicalStorage.getUserSessions(systemState.userId || 'demo_user')
+        const allSessions = await clinicalStorage.getUserSessions(systemState.userId)
         const patientSessions = allSessions.filter(session => 
           session.clinicalContext?.patientId === patient.id
         )
@@ -1087,7 +1087,7 @@ export function PatientLibrarySection({
             <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 overflow-y-auto max-h-[calc(100svh-7rem)] sm:max-h-[60vh] overscroll-contain touch-pan-y">
               <PatientConversationHistory
                 patient={historyPatient}
-                userId={"demo_user"}
+                userId={systemState.userId}
                 className="pb-2"
                 onConversationSelect={async (sessionId: string) => {
                     console.log('📱 Cargando conversación desde historial de paciente:', sessionId);

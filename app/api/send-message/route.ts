@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hopeAI } from '@/lib/hopeai-system'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
+import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
@@ -40,14 +41,29 @@ export async function POST(request: NextRequest) {
   })
 
   try {
+    // Verify Firebase Auth token
+    const authResult = await verifyFirebaseAuth(request)
+    if (!authResult.authenticated) {
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json(
+          { error: 'Unauthorized', message: authResult.error },
+          { status: 401 }
+        )
+      }
+      console.warn('[API /send-message] No valid auth token (dev mode)')
+    }
+
     requestBody = await request.json()
-    const { sessionId, message, useStreaming = true, userId = 'default-user', suggestedAgent, sessionMeta, fileReferences, fileMetadata } = requestBody
+    const { sessionId, message, useStreaming = true, userId, suggestedAgent, sessionMeta, fileReferences, fileMetadata } = requestBody
+
+    // Use verified uid from token; fall back to body userId only in dev
+    const verifiedUserId = authResult.authenticated ? authResult.uid : userId
 
     console.log('🔄 [API /send-message] Enviando mensaje con sistema optimizado...', {
       sessionId,
       message: message.substring(0, 50) + '...',
       useStreaming,
-      userId,
+      userId: verifiedUserId,
       suggestedAgent,
       patientReference: sessionMeta?.patient?.reference || 'None',
       fileReferences: fileReferences?.length || 0,
@@ -181,11 +197,11 @@ export async function POST(request: NextRequest) {
           const activeAgent: AgentType = result.updatedState.activeAgent as AgentType || 'socratico';
 
           // Actualizar actividad de sesión con el agente correcto
-          sentryMetricsTracker.updateSessionActivity(userId, sessionId, activeAgent);
+          sentryMetricsTracker.updateSessionActivity(verifiedUserId, sessionId, activeAgent);
 
           // Registrar métricas del mensaje del usuario
           sentryMetricsTracker.trackMessageSent({
-            userId,
+            userId: verifiedUserId,
             sessionId,
             agentType: activeAgent,
             timestamp: new Date(),

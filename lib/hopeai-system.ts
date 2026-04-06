@@ -501,16 +501,13 @@ export class HopeAISystem {
   }> {
     if (!this._initialized) await this.initialize()
 
-    // 🎯 START COMPREHENSIVE METRICS TRACKING
-    const interactionId = sessionMetricsTracker.startInteraction(sessionId, 'demo_user', message);
-
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
       console.log(`[HopeAI] Creating new session: ${sessionId}`)
       currentState = {
         sessionId,
-        userId: 'default-user',
+        userId: '',
         activeAgent: 'socratic-philosopher', // Default agent
         history: [],
         metadata: {
@@ -547,6 +544,9 @@ export class HopeAISystem {
       currentState.sessionMeta = sessionMeta
       await this.saveChatSessionBoth(currentState)
     }
+
+    // 🎯 START COMPREHENSIVE METRICS TRACKING (after currentState is loaded)
+    const interactionId = sessionMetricsTracker.startInteraction(sessionId, currentState.userId, message);
 
     // Get session files automatically - no longer passed as parameter
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
@@ -809,7 +809,7 @@ export class HopeAISystem {
         orchestrationResult = await this.dynamicOrchestrator.orchestrate(
           message,
           sessionId,
-          currentState.userId || 'demo_user',
+          currentState.userId,
           resolvedSessionFiles,
           onBulletUpdate,
           externalConversationHistory,
@@ -917,7 +917,7 @@ export class HopeAISystem {
             () => {
               // Registrar métricas del cambio de agente
               trackAgentSwitch({
-                userId: currentState.userId || 'demo_user',
+                userId: currentState.userId,
                 sessionId,
                 fromAgent: currentState.activeAgent,
                 toAgent: routingResult.targetAgent,
@@ -1050,7 +1050,7 @@ export class HopeAISystem {
           () => {
             // Registrar métricas del cambio de agente
             trackAgentSwitch({
-              userId: currentState.userId || 'demo_user',
+              userId: currentState.userId,
               sessionId,
               fromAgent: currentState.activeAgent,
               toAgent: routingResult.targetAgent,
@@ -1282,7 +1282,7 @@ export class HopeAISystem {
       async () => {
         // Registrar métricas del cambio de agente
         trackAgentSwitch({
-          userId: currentState.userId || 'demo_user',
+          userId: currentState.userId,
           sessionId,
           fromAgent: currentState.activeAgent,
           toAgent: newAgent,

@@ -90,8 +90,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     trackAgentChange,
     getSessionStats
   } = useSessionMetrics({
-    userId: systemState.userId || "demo_user",
-    sessionId: systemState.sessionId || "temp_session",
+    userId: systemState.userId ?? '',
+    sessionId: systemState.sessionId ?? '',
     currentAgent: systemState.activeAgent
   })
 
@@ -100,7 +100,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   // Cargar conversaciones para asegurar que tenemos el conteo correcto
   useEffect(() => {
-    const userId = systemState.userId || "demo_user"
+    const userId = systemState.userId
     if (userId) {
       loadConversations(userId)
     }
@@ -113,8 +113,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     recordResponse,
     eligibilityMetrics
   } = usePioneerInvitation({
-    userId: systemState.userId || "demo_user",
-    sessionId: systemState.sessionId || "temp_session",
+    userId: systemState.userId ?? '',
+    sessionId: systemState.sessionId ?? '',
     currentAgent: systemState.activeAgent,
     isActive: true,
     currentMessageCount: systemState.history?.length || 0, // Usar el count real
@@ -376,7 +376,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         patient,
         {
           sessionId: '', // Vacío - se llenará cuando se cree la sesión al enviar primer mensaje
-          userId: systemState.userId || "demo_user",
+          userId: systemState.userId,
           clinicalMode: "clinical",
           activeAgent: 'socratico' // Agente por defecto
         },
@@ -419,7 +419,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     let sessionIdForUpload: string | null = systemState.sessionId
     if (!sessionIdForUpload) {
       try {
-        const userId = systemState.userId || 'demo_user'
+        const userId = systemState.userId
         const mode = systemState.mode || 'clinical_supervision'
         const agent = systemState.activeAgent || 'socratico'
         const sid = await createSession(userId, mode, agent)
@@ -442,7 +442,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const formData = new FormData()
       formData.append('file', file)
       formData.append('sessionId', sessionIdForUpload as string)
-      formData.append('userId', systemState.userId || 'demo_user')
+      formData.append('userId', systemState.userId)
 
       const response = await fetch('/api/upload-document', {
         method: 'POST',
@@ -800,7 +800,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           activeTab={sidebarActiveTab}
           onActiveTabChange={setSidebarActiveTab}
-          userId={systemState.userId || "demo_user"}
+          userId={systemState.userId}
           createSession={createSession}
           onConversationSelect={handleConversationSelect}
           onPatientConversationStart={handlePatientConversationStart}
@@ -826,7 +826,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
         {isMobile && (
           <MobileNav 
-            userId={systemState.userId || "demo_user"}
+            userId={systemState.userId}
             createSession={createSession}
             onConversationSelect={handleConversationSelect}
             isOpen={mobileNavOpen}

@@ -24,6 +24,7 @@ import {
   type App,
 } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { getAuth as getAdminAuth, type Auth as AdminAuth } from 'firebase-admin/auth'
 
 // ---------------------------------------------------------------------------
 // Use bracket notation for env vars to bypass Next.js webpack inlining.
@@ -92,6 +93,7 @@ function resolveCredential() {
 
 let _app: App
 let _db: Firestore
+let _auth: AdminAuth
 
 export function getAdminApp(): App {
   if (getApps().length > 0) {
@@ -121,4 +123,17 @@ export function getAdminFirestore(): Firestore {
   const app = getAdminApp()
   _db = getFirestore(app)
   return _db
+}
+
+/**
+ * Returns the server-side Firebase Auth instance (firebase-admin).
+ * Used for verifying ID tokens in API routes.
+ * Safe to call multiple times — returns the singleton.
+ */
+export function getAdminAuthInstance(): AdminAuth {
+  if (_auth) return _auth
+
+  const app = getAdminApp()
+  _auth = getAdminAuth(app)
+  return _auth
 }

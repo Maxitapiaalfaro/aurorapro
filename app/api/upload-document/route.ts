@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ClinicalFileManager } from '@/lib/clinical-file-manager'
+import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await verifyFirebaseAuth(request)
+    if (!authResult.authenticated && process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Unauthorized', message: authResult.error }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const sessionId = formData.get('sessionId') as string
     const userId = formData.get('userId') as string
+    const verifiedUserId = authResult.authenticated ? authResult.uid : userId
     
-    if (!file || !sessionId || !userId) {
+    if (!file || !sessionId) {
       return NextResponse.json(
-        { error: 'file, sessionId y userId son requeridos' },
+        { error: 'file y sessionId son requeridos' },
         { status: 400 }
       )
     }
-    
+
     console.log('🔄 API: Subiendo documento...', {
       fileName: file.name,
       fileSize: file.size,
       sessionId,
-      userId
+      userId: verifiedUserId
     })
 
     // Early validation: type and size
@@ -76,7 +83,7 @@ export async function POST(request: NextRequest) {
     const uploadedFile = await HopeAISystemSingleton.uploadDocument(
       sessionId,
       file,
-      userId
+      verifiedUserId
     )
     
     console.log('✅ API: Documento subido exitosamente:', uploadedFile.id)

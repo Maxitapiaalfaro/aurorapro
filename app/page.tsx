@@ -1,7 +1,24 @@
 "use client"
+
+import { useAuth } from "@/providers/auth-provider"
+import { AuthGate } from "@/components/auth-gate"
 import { MainInterfaceOptimized } from "@/components/main-interface-optimized"
 
 export default function HopeAIPage() {
+  const { user, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Cargando...</div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <AuthGate />
+  }
+
   return (
     <div className="min-h-screen">
       <MainInterfaceOptimized />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { trackConversion } from '@/lib/enhanced-sentry-metrics-tracker'
 import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
+import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import type { AgentType } from '@/types/clinical-types'
 
 /**
@@ -13,8 +14,14 @@ export async function POST(request: NextRequest) {
   let requestBody: any
 
   try {
+    const authResult = await verifyFirebaseAuth(request)
+    if (!authResult.authenticated && process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Unauthorized', message: authResult.error }, { status: 401 })
+    }
+
     requestBody = await request.json()
     const { email, userMetrics, currentAgent, sessionId, userId } = requestBody
+    const verifiedUserId = authResult.authenticated ? authResult.uid : userId
 
     console.log('🌟 Pioneer Circle: Nueva solicitud recibida', {
       email: email.substring(0, 3) + '***', // Privacy protection

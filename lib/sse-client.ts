@@ -8,6 +8,20 @@
  */
 
 import type { ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
+import { auth } from '@/lib/firebase-config'
+
+/**
+ * Gets a fresh Firebase ID token for the current user.
+ * Returns undefined if no user is signed in.
+ */
+async function getAuthToken(): Promise<string | undefined> {
+  try {
+    return await auth.currentUser?.getIdToken()
+  } catch {
+    console.warn('[SSEClient] Could not get auth token')
+    return undefined
+  }
+}
 
 /**
  * Tipos de eventos SSE
@@ -84,16 +98,19 @@ export class SSEClient {
     try {
       console.log('🔄 [SSEClient] Enviando mensaje vía SSE...')
 
+      const idToken = await getAuthToken()
+
       const response = await fetch('/api/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
           sessionId: params.sessionId,
           message: params.message,
           useStreaming: params.useStreaming ?? true,
-          userId: params.userId ?? 'default-user',
+          userId: params.userId,
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,
@@ -154,16 +171,19 @@ export class SSEClient {
     try {
       console.log('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
 
+      const idToken = await getAuthToken()
+
       const response = await fetch('/api/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
           sessionId: params.sessionId,
           message: params.message,
           useStreaming: params.useStreaming ?? true,
-          userId: params.userId ?? 'default-user',
+          userId: params.userId,
           suggestedAgent: params.suggestedAgent,
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,

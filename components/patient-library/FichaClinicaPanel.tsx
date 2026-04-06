@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { PatternMirrorPanel } from "@/components/pattern-mirror-panel"
 import { usePatternMirror } from "@/hooks/use-pattern-mirror"
+import { useAuth } from "@/providers/auth-provider"
 import { 
   Tooltip,
   TooltipContent,
@@ -53,6 +54,7 @@ interface FichaClinicaPanelProps {
 export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefresh, onGenerate, isGenerating = false, onCancelGeneration, canRevert = false, onRevert, initialTab = "ficha" }: FichaClinicaPanelProps) {
   const [activeTab, setActiveTab] = useState<string>(initialTab)
   const { pendingCount, loadLatestAnalysis } = usePatternMirror()
+  const { psychologistId } = useAuth()
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
   const [copiedFicha, setCopiedFicha] = useState(false)
   const copyResetTimeoutRef = useRef<number | null>(null)
@@ -195,9 +197,9 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
       await clinicalStorage.initialize()
       
       // Get system state for userId
-      const systemState = (window as any).__hopeai_system_state__?.systemState || { userId: 'demo_user' }
-      
-      const allSessions = await clinicalStorage.getUserSessions(systemState.userId || 'demo_user')
+      const userId = psychologistId ?? ''
+
+      const allSessions = await clinicalStorage.getUserSessions(userId)
       
       // Filter sessions that belong to this patient
       const patientSessions = allSessions.filter(session => 

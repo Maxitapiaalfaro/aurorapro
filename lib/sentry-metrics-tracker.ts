@@ -80,7 +80,7 @@ export class SentryMetricsTracker {
    */
   public trackMessageSent(metrics: MessageMetrics): void {
     const { 
-      userId = 'demo_user', 
+      userId = '',
       sessionId = 'default_session', 
       agentType, 
       timestamp = new Date(), 
