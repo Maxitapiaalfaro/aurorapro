@@ -2,6 +2,14 @@
 
 **Date**: 2026-04-06
 **Commit**: 7d483bd (main branch)
+**Updated**: 2026-04-06 — Post P0/P1 completion
+
+> **Status Notes:**
+> - P0 (Firebase Auth) and P1 (Firestore offline-first migration) are COMPLETE.
+> - 3 client-side storage files have been DELETED: `clinical-context-storage.ts` (354 lines), `patient-persistence.ts` (325 lines), `client-context-persistence.ts` (516 lines).
+> - `hipaa-compliant-storage.ts` is a SERVER-SIDE file still used by `hopeai-system.ts` — cannot be eliminated until P6/P7.
+> - Decomposition priorities below refer to the remaining files. Dead code purge (P2) should happen first.
+> - The total `lib/` line count is now reduced by ~1,195 lines from the baseline below.
 
 ---
 

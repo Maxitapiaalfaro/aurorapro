@@ -5,6 +5,14 @@
 > Versión: 1.0
 > Base de análisis: Código fuente de Aurora (repositorio actual) y código fuente de referencia de Claude Code (en `docs/architecture/claude/claude-code-main`).
 
+> **Estado actualizado (2026-04-06):**
+> - Las 8 recomendaciones (P0.1–P2.3) permanecen **abiertas**. Estas prioridades son independientes del stack P0-P7 del proyecto.
+> - **Contexto relevante completado:** Firebase Auth (HTTP-level auth en todas las API routes) y Firestore offline-first migration (3 archivos IndexedDB eliminados, reemplazados por `lib/firestore-client-storage.ts`).
+> - Firebase Auth mitiga parcialmente P0.1 (autenticación HTTP, no permisos de herramientas a nivel de modelo).
+> - La persistencia en Firestore con subcollection de mensajes habilita parcialmente P2.1 (datos inter-sesión existen, pero no hay extracción semántica automática).
+> - Archivos eliminados: `clinical-context-storage.ts`, `patient-persistence.ts`, `client-context-persistence.ts`. Las referencias a estos archivos en este documento son históricas.
+> - Archivos servidor (`hipaa-compliant-storage.ts`, `server-storage-adapter.ts`, `server-storage-memory.ts`) siguen en uso.
+
 ---
 
 ## Tabla de Contenidos
