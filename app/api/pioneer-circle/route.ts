@@ -5,6 +5,10 @@ import { trackConversion } from '@/lib/enhanced-sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import type { AgentType } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 /**
  * Endpoint especializado para Pioneer Circle
  * Captura emails y métricas de usuarios interesados en el programa
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
     const { email, userMetrics, currentAgent, sessionId, userId } = requestBody
     const verifiedUserId = authResult.authenticated ? authResult.uid : userId
 
-    console.log('🌟 Pioneer Circle: Nueva solicitud recibida', {
+    logger.info('🌟 Pioneer Circle: Nueva solicitud recibida', {
       email: email.substring(0, 3) + '***', // Privacy protection
       userMetrics,
       currentAgent,
@@ -80,7 +84,7 @@ export async function POST(request: NextRequest) {
         timestamp: new Date()
       })
     } catch (metricsError) {
-      console.warn('⚠️ Error en tracking de métricas:', metricsError)
+      logger.warn('⚠️ Error en tracking de métricas:', metricsError)
     }
 
     // 3. Capturar como Sentry Event para dashboard
@@ -104,7 +108,7 @@ export async function POST(request: NextRequest) {
     })
 
     // 4. Log estructurado para análisis posterior
-    console.log('✅ Pioneer Circle: Registro completado exitosamente', {
+    logger.info('✅ Pioneer Circle: Registro completado exitosamente', {
       userId,
       sessionId,
       agent: currentAgent,
@@ -123,7 +127,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('❌ Pioneer Circle Error:', error)
+    logger.error('❌ Pioneer Circle Error:', error)
     
     // Capturar error en Sentry
     Sentry.captureException(error, {

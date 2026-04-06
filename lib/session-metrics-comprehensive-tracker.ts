@@ -1,3 +1,7 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('metrics')
+
 /**
  * Comprehensive Session Metrics Tracker
  * 
@@ -266,7 +270,7 @@ export class SessionMetricsComprehensiveTracker {
     } else {
       // Default to 0 if pricing is not available
       interaction.tokens.estimatedCost = 0;
-      console.warn(`⚠️ [SessionMetrics] Pricing not available for model ${model}, defaulting to $0.00`);
+      logger.warn(`⚠️ [SessionMetrics] Pricing not available for model ${model}, defaulting to $0.00`);
     }
     
     // Behavioral metrics
@@ -275,9 +279,9 @@ export class SessionMetricsComprehensiveTracker {
     }
 
     // 🔍 DEBUG: Log what was recorded
-    console.log(`📊 [SessionMetrics] recordModelCallComplete - ID: ${interactionId}`);
-    console.log(`📊 [SessionMetrics] Input: ${inputTokens}, Output: ${outputTokens}, Total: ${interaction.tokens.totalTokens}`);
-    console.log(`📊 [SessionMetrics] Model: ${model}, Cost: $${interaction.tokens.estimatedCost.toFixed(6)}`);
+    logger.info(`📊 [SessionMetrics] recordModelCallComplete - ID: ${interactionId}`);
+    logger.info(`📊 [SessionMetrics] Input: ${inputTokens}, Output: ${outputTokens}, Total: ${interaction.tokens.totalTokens}`);
+    logger.info(`📊 [SessionMetrics] Model: ${model}, Cost: $${interaction.tokens.estimatedCost.toFixed(6)}`);
   }
 
   /**
@@ -301,17 +305,17 @@ export class SessionMetricsComprehensiveTracker {
     const completedInteraction = interaction as ComprehensiveSessionMetrics;
     
     // 🔍 DEBUG: Log what we're saving
-    console.log(`📊 [SessionMetrics] completeInteraction - ID: ${interactionId}, Session: ${completedInteraction.sessionId}`);
-    console.log(`📊 [SessionMetrics] Tokens: ${completedInteraction.tokens.totalTokens}, Cost: $${completedInteraction.tokens.estimatedCost.toFixed(6)}`);
-    console.log(`📊 [SessionMetrics] Time: ${completedInteraction.timing.totalResponseTime}ms, Agent: ${completedInteraction.computational?.agentUsed}`);
+    logger.info(`📊 [SessionMetrics] completeInteraction - ID: ${interactionId}, Session: ${completedInteraction.sessionId}`);
+    logger.info(`📊 [SessionMetrics] Tokens: ${completedInteraction.tokens.totalTokens}, Cost: $${completedInteraction.tokens.estimatedCost.toFixed(6)}`);
+    logger.info(`📊 [SessionMetrics] Time: ${completedInteraction.timing.totalResponseTime}ms, Agent: ${completedInteraction.computational?.agentUsed}`);
     
     // Store in session history
     if (!this.interactions.has(completedInteraction.sessionId)) {
       this.interactions.set(completedInteraction.sessionId, []);
-      console.log(`📊 [SessionMetrics] Created new interaction array for session ${completedInteraction.sessionId}`);
+      logger.info(`📊 [SessionMetrics] Created new interaction array for session ${completedInteraction.sessionId}`);
     }
     this.interactions.get(completedInteraction.sessionId)!.push(completedInteraction);
-    console.log(`📊 [SessionMetrics] Added interaction to session. Total interactions now: ${this.interactions.get(completedInteraction.sessionId)!.length}`);
+    logger.info(`📊 [SessionMetrics] Added interaction to session. Total interactions now: ${this.interactions.get(completedInteraction.sessionId)!.length}`);
     
     // Update session snapshot
     this.updateSessionSnapshot(completedInteraction);
@@ -428,18 +432,18 @@ export class SessionMetricsComprehensiveTracker {
     const sessionInteractions = this.interactions.get(sessionId) || [];
     
     // 🔍 DEBUG: Log what we're working with
-    console.log(`📊 [SessionMetrics] Updating snapshot for session ${sessionId}`);
-    console.log(`📊 [SessionMetrics] Total interactions in session: ${sessionInteractions.length}`);
+    logger.info(`📊 [SessionMetrics] Updating snapshot for session ${sessionId}`);
+    logger.info(`📊 [SessionMetrics] Total interactions in session: ${sessionInteractions.length}`);
     if (sessionInteractions.length > 0) {
       const lastInteraction = sessionInteractions[sessionInteractions.length - 1];
-      console.log(`📊 [SessionMetrics] Last interaction tokens: ${lastInteraction.tokens.totalTokens}, cost: $${lastInteraction.tokens.estimatedCost}`);
+      logger.info(`📊 [SessionMetrics] Last interaction tokens: ${lastInteraction.tokens.totalTokens}, cost: $${lastInteraction.tokens.estimatedCost}`);
     }
     
     const totalTokens = sessionInteractions.reduce((sum, i) => sum + i.tokens.totalTokens, 0);
     const totalCost = sessionInteractions.reduce((sum, i) => sum + (i.tokens.estimatedCost || 0), 0);
     const totalTime = sessionInteractions.reduce((sum, i) => sum + i.timing.totalResponseTime, 0);
     
-    console.log(`📊 [SessionMetrics] Calculated totals - Tokens: ${totalTokens}, Cost: $${totalCost}, Time: ${totalTime}ms`);
+    logger.info(`📊 [SessionMetrics] Calculated totals - Tokens: ${totalTokens}, Cost: $${totalCost}, Time: ${totalTime}ms`);
     
     // Agent preferences
     const agentCounts: { [agent: string]: number } = {};

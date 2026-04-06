@@ -11,6 +11,10 @@ import {
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
 import type { SessionSummary } from "@/lib/firestore-client-storage"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface ConversationSummary {
   sessionId: string
   title: string
@@ -100,7 +104,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     }
 
     try {
-      console.log(`Cargando conversaciones paginadas para usuario: ${_userId}`)
+      logger.info(`Cargando conversaciones paginadas para usuario: ${_userId}`)
 
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
@@ -110,7 +114,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
       const result = await listUserSessions(psychologistId, paginationOptions)
 
-      console.log(`Cargada pagina con ${result.items.length} conversaciones de ${result.totalCount} totales`)
+      logger.info(`Cargada pagina con ${result.items.length} conversaciones de ${result.totalCount} totales`)
 
       const summaries = result.items.map(createConversationSummary)
 
@@ -126,11 +130,11 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       setNextPageToken(result.nextPageToken)
       lastLoadedUserId.current = _userId
 
-      console.log(`Primera pagina de conversaciones cargada exitosamente`)
+      logger.info(`Primera pagina de conversaciones cargada exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error cargando conversaciones: ${errorMessage}`)
-      console.error('Error cargando conversaciones:', err)
+      logger.error('Error cargando conversaciones:', err)
     } finally {
       setIsLoading(false)
     }
@@ -146,7 +150,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     setError(null)
 
     try {
-      console.log(`Cargando mas conversaciones...`)
+      logger.info(`Cargando mas conversaciones...`)
 
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
@@ -157,7 +161,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
       const result = await listUserSessions(psychologistId, paginationOptions)
 
-      console.log(`Cargadas ${result.items.length} conversaciones adicionales`)
+      logger.info(`Cargadas ${result.items.length} conversaciones adicionales`)
 
       const newSummaries = result.items.map(createConversationSummary)
 
@@ -179,11 +183,11 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       setHasNextPage(result.hasNextPage)
       setNextPageToken(result.nextPageToken)
 
-      console.log(`Conversaciones adicionales cargadas exitosamente`)
+      logger.info(`Conversaciones adicionales cargadas exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error cargando mas conversaciones: ${errorMessage}`)
-      console.error('Error cargando mas conversaciones:', err)
+      logger.error('Error cargando mas conversaciones:', err)
     } finally {
       setIsLoadingMore(false)
     }
@@ -209,12 +213,12 @@ export function useConversationHistory(): UseConversationHistoryReturn {
         throw new Error(`Conversacion no encontrada: ${sessionId}`)
       }
 
-      console.log(`Conversacion cargada: ${sessionId}`)
+      logger.info(`Conversacion cargada: ${sessionId}`)
       return chatState
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error abriendo conversacion: ${errorMessage}`)
-      console.error('Error abriendo conversacion:', err)
+      logger.error('Error abriendo conversacion:', err)
       return null
     }
   }, [psychologistId])
@@ -249,11 +253,11 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       setConversations(updatedConversations)
       conversationCache.current.delete(sessionId)
 
-      console.log(`Conversacion eliminada: ${sessionId}`)
+      logger.info(`Conversacion eliminada: ${sessionId}`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error eliminando conversacion: ${errorMessage}`)
-      console.error('Error eliminando conversacion:', err)
+      logger.error('Error eliminando conversacion:', err)
     }
   }, [psychologistId, allConversations])
 
@@ -301,7 +305,7 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const refreshConversations = useCallback(async () => {
     // Prevenir multiples refreshes simultaneos
     if (isRefreshing) {
-      console.log('Refresh ya en progreso, ignorando solicitud duplicada')
+      logger.info('Refresh ya en progreso, ignorando solicitud duplicada')
       return
     }
 
@@ -315,11 +319,11 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       if (currentUserId) {
         try {
           setIsRefreshing(true)
-          console.log('Iniciando refresh debounced de conversaciones')
+          logger.info('Iniciando refresh debounced de conversaciones')
           await loadConversations(currentUserId, true)
-          console.log('Refresh de conversaciones completado')
+          logger.info('Refresh de conversaciones completado')
         } catch (error) {
-          console.error('Error en refresh de conversaciones:', error)
+          logger.error('Error en refresh de conversaciones:', error)
         } finally {
           setIsRefreshing(false)
         }

@@ -1,6 +1,10 @@
 import { aiFiles } from "./google-genai-config"
 import type { ClinicalFile } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Dynamic import: getStorageAdapter is loaded lazily to prevent firebase-admin
 // from leaking into the client bundle via transitive imports.
 async function getStorageAdapterLazy() {
@@ -64,9 +68,9 @@ export class ClinicalFileManager {
       try {
         await this.waitForFileToBeActive(uploadResult.name, 60000) // 60 segundos máximo
         clinicalFile.status = "processed"
-        console.log(`[ClinicalFileManager] File processing completed: ${uploadResult.name}`)
+        logger.info(`[ClinicalFileManager] File processing completed: ${uploadResult.name}`)
       } catch (waitError) {
-        console.error(`[ClinicalFileManager] File processing timeout or failed: ${uploadResult.name}`, waitError)
+        logger.error(`[ClinicalFileManager] File processing timeout or failed: ${uploadResult.name}`, waitError)
         clinicalFile.status = "error"
       }
 
@@ -77,7 +81,7 @@ export class ClinicalFileManager {
 
       return clinicalFile
     } catch (error) {
-      console.error("Error uploading file:", error)
+      logger.error("Error uploading file:", error)
 
       // Update status to error
       const storage = await getStorageAdapterLazy()
@@ -137,7 +141,7 @@ export class ClinicalFileManager {
     try {
       return await aiFiles.files.get({ name: geminiFileId })
     } catch (error) {
-      console.error("Error getting file info:", error)
+      logger.error("Error getting file info:", error)
       throw error
     }
   }
@@ -151,7 +155,7 @@ export class ClinicalFileManager {
         const fileInfo = await this.getFileInfo(geminiFileId)
         
         if (fileInfo.state === 'ACTIVE') {
-          console.log(`[ClinicalFileManager] File is now ACTIVE: ${geminiFileId}`)
+          logger.info(`[ClinicalFileManager] File is now ACTIVE: ${geminiFileId}`)
           return fileInfo
         }
         
@@ -159,12 +163,12 @@ export class ClinicalFileManager {
           throw new Error(`File processing failed: ${geminiFileId}`)
         }
         
-        console.log(`[ClinicalFileManager] File still processing: ${geminiFileId}, state: ${fileInfo.state}`)
+        logger.info(`[ClinicalFileManager] File still processing: ${geminiFileId}, state: ${fileInfo.state}`)
         
         // Esperar antes del siguiente intento
         await new Promise(resolve => setTimeout(resolve, pollInterval))
       } catch (error) {
-        console.error(`[ClinicalFileManager] Error checking file status: ${geminiFileId}`, error)
+        logger.error(`[ClinicalFileManager] Error checking file status: ${geminiFileId}`, error)
         throw error
       }
     }
@@ -185,7 +189,7 @@ export class ClinicalFileManager {
       // Remove from IndexedDB (implement delete method)
       // await clinicalStorage.deleteClinicalFile(fileId);
     } catch (error) {
-      console.error("Error deleting file:", error)
+      logger.error("Error deleting file:", error)
       throw error
     }
   }

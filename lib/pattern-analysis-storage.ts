@@ -9,6 +9,10 @@
 
 import type { PatternAnalysis } from './clinical-pattern-analyzer';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('storage')
+
 /**
  * Storage state for pattern analysis
  */
@@ -73,13 +77,13 @@ export class PatternAnalysisStorage {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = () => {
-        console.error('❌ [Pattern Storage] Failed to open IndexedDB:', request.error);
+        logger.error('❌ [Pattern Storage] Failed to open IndexedDB:', request.error);
         reject(request.error);
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('✅ [Pattern Storage] IndexedDB initialized');
+        logger.info('✅ [Pattern Storage] IndexedDB initialized');
         resolve();
       };
 
@@ -102,7 +106,7 @@ export class PatternAnalysisStorage {
           // Index by viewed date for pending review queries
           store.createIndex('viewedAt', 'viewedAt', { unique: false });
 
-          console.log('🔧 [Pattern Storage] Created pattern_analyses object store');
+          logger.info('🔧 [Pattern Storage] Created pattern_analyses object store');
         }
       };
     });
@@ -134,12 +138,12 @@ export class PatternAnalysisStorage {
       const request = store.put(serialized);
 
       request.onsuccess = () => {
-        console.log(`💾 [Pattern Storage] Saved analysis state: ${state.analysisId}`);
+        logger.info(`💾 [Pattern Storage] Saved analysis state: ${state.analysisId}`);
         resolve();
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to save analysis state:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to save analysis state:`, request.error);
         reject(request.error);
       };
     });
@@ -180,7 +184,7 @@ export class PatternAnalysisStorage {
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to load analysis:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to load analysis:`, request.error);
         reject(request.error);
       };
     });
@@ -218,7 +222,7 @@ export class PatternAnalysisStorage {
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to get patient analyses:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to get patient analyses:`, request.error);
         reject(request.error);
       };
     });
@@ -305,12 +309,12 @@ export class PatternAnalysisStorage {
       const request = store.delete(analysisId);
 
       request.onsuccess = () => {
-        console.log(`🗑️ [Pattern Storage] Deleted analysis: ${analysisId}`);
+        logger.info(`🗑️ [Pattern Storage] Deleted analysis: ${analysisId}`);
         resolve();
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to delete analysis:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to delete analysis:`, request.error);
         reject(request.error);
       };
     });
@@ -346,7 +350,7 @@ export class PatternAnalysisStorage {
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to get pending analyses:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to get pending analyses:`, request.error);
         reject(request.error);
       };
     });
@@ -372,12 +376,12 @@ export class PatternAnalysisStorage {
       const request = store.clear();
 
       request.onsuccess = () => {
-        console.log('🧹 [Pattern Storage] Cleared all pattern analyses');
+        logger.info('🧹 [Pattern Storage] Cleared all pattern analyses');
         resolve();
       };
 
       request.onerror = () => {
-        console.error(`❌ [Pattern Storage] Failed to clear data:`, request.error);
+        logger.error(`❌ [Pattern Storage] Failed to clear data:`, request.error);
         reject(request.error);
       };
     });

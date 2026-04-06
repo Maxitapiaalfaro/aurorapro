@@ -9,6 +9,10 @@ import { verifyAdminRequest } from '@/lib/security/admin-auth';
 import { getAuditLogger } from '@/lib/security/audit-logger';
 import { getRateLimiter } from '@/lib/security/rate-limiter';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 export async function GET(request: NextRequest) {
   try {
     // 🔒 SEGURIDAD: Verificar autenticación
@@ -90,7 +94,7 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error in security audit API:', error);
+    logger.error('Error in security audit API:', error);
     return NextResponse.json(
       {
         error: 'Internal Server Error',
@@ -157,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error in security audit POST:', error);
+    logger.error('Error in security audit POST:', error);
     return NextResponse.json(
       {
         error: 'Internal Server Error',

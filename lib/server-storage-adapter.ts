@@ -2,6 +2,10 @@ import 'server-only'
 
 import type { ChatState, ChatMessage, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('storage')
+
 // Dynamic import para evitar que better-sqlite3 se incluya en el bundle del cliente
 type HIPAAStorage = any
 
@@ -36,44 +40,44 @@ export class ServerStorageAdapter {
       if (isVercel || forceMemory) {
         // ── Phase 2: Use Firestore instead of MemoryServerStorage ──
         try {
-          console.log('🔧 [ServerStorageAdapter] Creating FirestoreStorageAdapter (Vercel/serverless)...')
+          logger.info('🔧 [ServerStorageAdapter] Creating FirestoreStorageAdapter (Vercel/serverless)...')
           const { FirestoreStorageAdapter } = await import('./firestore-storage-adapter')
           this.storage = new FirestoreStorageAdapter()
-          console.log('✅ [ServerStorageAdapter] FirestoreStorageAdapter instance created')
+          logger.info('✅ [ServerStorageAdapter] FirestoreStorageAdapter instance created')
         } catch (error) {
           // Graceful fallback: if firebase-admin fails (missing credentials, etc.)
           // fall back to MemoryServerStorage to avoid hard crashes
-          console.warn('⚠️ [ServerStorageAdapter] FirestoreStorageAdapter failed, falling back to MemoryServerStorage:', error)
+          logger.warn('⚠️ [ServerStorageAdapter] FirestoreStorageAdapter failed, falling back to MemoryServerStorage:', error)
           const { MemoryServerStorage } = await import('./server-storage-memory')
           this.storage = new MemoryServerStorage()
-          console.log('✅ [ServerStorageAdapter] MemoryServerStorage fallback instance created')
+          logger.info('✅ [ServerStorageAdapter] MemoryServerStorage fallback instance created')
         }
       } else {
-        console.log('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
+        logger.info('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
         // Dynamic import para evitar bundling en cliente
         const { HIPAACompliantStorage } = await import('./hipaa-compliant-storage')
         this.storage = new HIPAACompliantStorage()
-        console.log('✅ [ServerStorageAdapter] HIPAACompliantStorage instance created')
+        logger.info('✅ [ServerStorageAdapter] HIPAACompliantStorage instance created')
       }
     }
     return this.storage
   }
 
   async initialize(): Promise<void> {
-    console.log('🔧 [ServerStorageAdapter] initialize() called')
+    logger.info('🔧 [ServerStorageAdapter] initialize() called')
     if (this.initialized) {
-      console.log('✅ [ServerStorageAdapter] Already initialized, skipping')
+      logger.info('✅ [ServerStorageAdapter] Already initialized, skipping')
       return
     }
 
-    console.log('🔧 [ServerStorageAdapter] Ensuring storage...')
+    logger.info('🔧 [ServerStorageAdapter] Ensuring storage...')
     const storage = await this.ensureStorage()
-    console.log('🔧 [ServerStorageAdapter] Calling storage.initialize()...')
+    logger.info('🔧 [ServerStorageAdapter] Calling storage.initialize()...')
     await storage.initialize()
     this.initialized = true
 
     const backendName = storage.constructor?.name || 'unknown'
-    console.log(`✅ [ServerStorageAdapter] Initialized (backend: ${backendName})`)
+    logger.info(`✅ [ServerStorageAdapter] Initialized (backend: ${backendName})`)
   }
 
   async saveChatSession(chatState: ChatState): Promise<void> {
@@ -229,14 +233,14 @@ declare global {
 // Función para obtener el adaptador de almacenamiento (server-side only)
 export async function getStorageAdapter() {
   // This module is server-only. Client-side code uses firestore-client-storage.ts directly.
-  console.log('🖥️ [getStorageAdapter] Running on SERVER')
+  logger.info('🖥️ [getStorageAdapter] Running on SERVER')
   // Usar singleton global verdadero para mantener el estado entre llamadas API
   if (!globalThis.__hopeai_storage_adapter__) {
-    console.log('🔧 [getStorageAdapter] Creating new ServerStorageAdapter instance (Singleton Global)')
+    logger.info('🔧 [getStorageAdapter] Creating new ServerStorageAdapter instance (Singleton Global)')
     globalThis.__hopeai_storage_adapter__ = new ServerStorageAdapter()
     await globalThis.__hopeai_storage_adapter__.initialize()
   } else {
-    console.log('♻️ [getStorageAdapter] Reusing existing ServerStorageAdapter instance (Singleton Global)')
+    logger.info('♻️ [getStorageAdapter] Reusing existing ServerStorageAdapter instance (Singleton Global)')
   }
   return globalThis.__hopeai_storage_adapter__
 }

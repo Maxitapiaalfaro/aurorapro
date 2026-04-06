@@ -10,6 +10,10 @@
 
 import { auth } from '@/lib/firebase-config'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Gets a fresh Firebase ID token for the current user.
  * Returns undefined if no user is signed in.
@@ -18,7 +22,7 @@ async function getAuthToken(): Promise<string | undefined> {
   try {
     return await auth.currentUser?.getIdToken()
   } catch {
-    console.warn('[AuthFetch] Could not get auth token')
+    logger.warn('[AuthFetch] Could not get auth token')
     return undefined
   }
 }

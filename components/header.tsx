@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { DisplaySettingsPopover } from "@/components/display-settings-popover"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface HeaderProps {
   onHistoryToggle?: () => void
   sessionMeta?: PatientSessionMeta | null
@@ -90,7 +94,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           setFichas(sorted)
         })
         .catch(err => {
-          console.error('Error cargando fichas:', err)
+          logger.error('Error cargando fichas:', err)
           setFichas([])
         })
     } else {

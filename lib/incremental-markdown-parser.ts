@@ -16,6 +16,10 @@
 
 import { parseMarkdownStreamingSync } from './markdown-parser-streamdown'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Estado del parser incremental
  */
@@ -207,12 +211,12 @@ export class IncrementalMarkdownParser {
         const tableInfo = this.state.hasTable 
           ? ` [TABLE: ${this.state.tableRowCount} rows, ${this.state.isTableComplete ? 'complete' : 'incomplete'}]`
           : ''
-        console.log(
+        logger.info(
           `[IncrementalParser] Parsed ${content.length} chars in ${Date.now() - this.state.lastParseTimestamp}ms${tableInfo}`
         )
       }
     } catch (error) {
-      console.error('[IncrementalParser] Parse error:', error)
+      logger.error('[IncrementalParser] Parse error:', error)
       // Fallback: usar último HTML válido
       callback(this.state.lastParsedHtml || content.replace(/\n/g, '<br>'))
     }

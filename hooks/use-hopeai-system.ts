@@ -16,6 +16,10 @@ import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 import { useAuth } from '@/providers/auth-provider'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // ARQUITECTURA MEJORADA: Constante para límite de bullets históricos
 const MAX_HISTORICAL_BULLETS = 15
 
@@ -135,7 +139,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
     if (!systemState.isInitialized && !allowDuringInit) {
-      console.error('Sistema HopeAI no inicializado')
+      logger.error('Sistema HopeAI no inicializado')
       return false
     }
 
@@ -155,7 +159,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       // Priority 1: Use sessionMeta from ChatState if available
       if (chatState.sessionMeta) {
-        console.log(`✅ Using existing sessionMeta from ChatState for patient: ${chatState.sessionMeta.patient.reference}`)
+        logger.info(`✅ Using existing sessionMeta from ChatState for patient: ${chatState.sessionMeta.patient.reference}`)
         sessionMetaToUse = chatState.sessionMeta
       }
       // Priority 2: Reconstruct sessionMeta if session has patient context but no sessionMeta
@@ -168,7 +172,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           const patient = psychologistId ? await loadPatient(psychologistId, chatState.clinicalContext.patientId!) : null
 
           if (patient) {
-            console.log(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
+            logger.info(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
             const composer = new PatientContextComposer()
 
             // Get full patient summary to enrich sessionMeta
@@ -181,7 +185,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               activeAgent: chatState.activeAgent
             }, patientSummary)
 
-            console.log(`✅ SessionMeta reconstructed for patient: ${sessionMetaToUse.patient.reference}`)
+            logger.info(`✅ SessionMeta reconstructed for patient: ${sessionMetaToUse.patient.reference}`)
 
             // 🏥 FIX: Save reconstructed sessionMeta back to storage
             chatState.sessionMeta = sessionMetaToUse
@@ -189,12 +193,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               const pid = resolvePatientId(chatState)
               await saveSessionMetadata(psychologistId, pid, chatState)
             }
-            console.log(`💾 Reconstructed sessionMeta saved to storage`)
+            logger.info(`💾 Reconstructed sessionMeta saved to storage`)
           } else {
-            console.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
+            logger.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
           }
         } catch (error) {
-          console.error('Failed to reconstruct sessionMeta:', error)
+          logger.error('Failed to reconstruct sessionMeta:', error)
         }
       }
 
@@ -211,11 +215,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }))
       lastSessionIdRef.current = chatState.sessionId
 
-      console.log('✅ Sesión HopeAI cargada:', sessionId)
-      console.log('📊 Historial cargado con', chatState.history.length, 'mensajes')
+      logger.info('✅ Sesión HopeAI cargada:', sessionId)
+      logger.info('📊 Historial cargado con', chatState.history.length, 'mensajes')
       return true
     } catch (error) {
-      console.error('❌ Error cargando sesión:', error)
+      logger.error('❌ Error cargando sesión:', error)
       setSystemState(prev => ({
         ...prev,
         error: 'Error al cargar la sesión',
@@ -234,7 +238,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       const mostRecent = recent.items[0]
 
       if (mostRecent) {
-        console.log('🔄 Intentando restaurar sesión más reciente:', mostRecent.sessionId)
+        logger.info('🔄 Intentando restaurar sesión más reciente:', mostRecent.sessionId)
 
         // Verificar que la sesión sea válida y no muy antigua (ej: menos de 24 horas)
         const sessionAge = Date.now() - new Date(mostRecent.lastUpdated).getTime()
@@ -243,19 +247,19 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         if (sessionAge < maxAge) {
           const success = await loadSession(mostRecent.sessionId, true) // Permitir carga durante inicialización
           if (success) {
-            console.log('✅ Sesión más reciente restaurada exitosamente')
+            logger.info('✅ Sesión más reciente restaurada exitosamente')
             return true // Indicar que se restauró una sesión
           } else {
-            console.log('⚠️ No se pudo restaurar la sesión más reciente')
+            logger.info('⚠️ No se pudo restaurar la sesión más reciente')
           }
         } else {
-          console.log('⚠️ Sesión más reciente demasiado antigua, no se restaurará')
+          logger.info('⚠️ Sesión más reciente demasiado antigua, no se restaurará')
         }
       } else {
-        console.log('ℹ️ No hay sesiones recientes para restaurar')
+        logger.info('ℹ️ No hay sesiones recientes para restaurar')
       }
     } catch (error) {
-      console.error('❌ Error intentando restaurar sesión:', error)
+      logger.error('❌ Error intentando restaurar sesión:', error)
       // No lanzamos el error para no interrumpir la inicialización
     }
     return false // No se restauró ninguna sesión
@@ -270,7 +274,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       isInitialized: true,
       isLoading: false
     }))
-    console.log('🚀 HopeAI Client System initialized (client-side storage + SSE)')
+    logger.info('🚀 HopeAI Client System initialized (client-side storage + SSE)')
   }, []) // Sin dependencias para evitar re-inicializaciones
 
   // Estado para prevenir creación múltiple simultánea
@@ -284,7 +288,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   ): Promise<string | null> => {
     // Prevenir múltiples ejecuciones simultáneas
     if (isCreatingSession) {
-      console.log('⚠️ Hook: Creación de sesión ya en progreso, ignorando solicitud duplicada')
+      logger.info('⚠️ Hook: Creación de sesión ya en progreso, ignorando solicitud duplicada')
       return null
     }
 
@@ -325,11 +329,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }))
       lastSessionIdRef.current = sessionId
 
-      console.log('✅ Sesión HopeAI creada:', sessionId)
+      logger.info('✅ Sesión HopeAI creada:', sessionId)
       return sessionId
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error('❌ Error creando sesión: ' + errorMessage)
+      logger.error('❌ Error creando sesión: ' + errorMessage)
       setSystemState(prev => ({
         ...prev,
         error: errorMessage || 'Error al crear la sesión',
@@ -351,7 +355,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     sessionMeta?: any
   ): Promise<any> => {
     // 🔍 CRITICAL DIAGNOSTIC: Log what we receive at entry point
-    console.log('🔍 [HOOK.sendMessage] ENTRY POINT:', {
+    logger.info('🔍 [HOOK.sendMessage] ENTRY POINT:', {
       messageLength: message.length,
       useStreaming,
       attachedFilesProvided: !!attachedFiles,
@@ -375,7 +379,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       const mode = systemState.mode || 'clinical_supervision'
       const agent = systemState.activeAgent || 'socratico'
       
-      console.log('🔄 Creando sesión lazy con contexto:', {
+      logger.info('🔄 Creando sesión lazy con contexto:', {
         hasSessionMeta: !!systemState.sessionMeta,
         patientRef: systemState.sessionMeta?.patient?.reference
       })
@@ -400,8 +404,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           sessionId: newSessionId,
           sessionMeta: updatedSessionMeta
         }))
-        console.log('✅ SessionMeta actualizado con sessionId:', newSessionId)
-        console.log('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
+        logger.info('✅ SessionMeta actualizado con sessionId:', newSessionId)
+        logger.info('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
 
         // 🏥 FIX: Also persist the updated sessionMeta to Firestore immediately
         try {
@@ -416,11 +420,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
               }
               await saveSessionMetadata(psychologistId, pid, currentState)
-              console.log('💾 SessionMeta persisted to Firestore after lazy session creation')
+              logger.info('💾 SessionMeta persisted to Firestore after lazy session creation')
             }
           }
         } catch (error) {
-          console.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
+          logger.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
         }
       }
     }
@@ -502,10 +506,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         }
       } catch (persistError) {
-        console.error('❌ [Firestore] Error al verificar/crear sesión:', persistError)
+        logger.error('❌ [Firestore] Error al verificar/crear sesión:', persistError)
       }
 
-      console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
+      logger.info('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
 
       // 📁 Obtener metadata completa de archivos desde IndexedDB para bypass de serverless storage
       let fileMetadata: any[] | undefined = undefined
@@ -522,13 +526,13 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             uploadDate: file.uploadDate,
             sessionId: file.sessionId
           }))
-          console.log('📁 [Client] Passing file metadata to bypass serverless storage:', fileMetadata.map(f => f.name))
+          logger.info('📁 [Client] Passing file metadata to bypass serverless storage:', fileMetadata.map(f => f.name))
         } catch (e) {
-          console.warn('⚠️ [Client] Could not extract file metadata:', e)
+          logger.warn('⚠️ [Client] Could not extract file metadata:', e)
         }
       } else {
         // 🔄 FALLBACK: If attachedFiles is empty, try loading from IndexedDB directly
-        console.log('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
+        logger.info('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
 
         // First, check if we have file IDs from the user message's fileReferences
         const fileIdsToLoad: string[] = []
@@ -538,7 +542,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           const lastUserMessage = [...systemState.history].reverse().find(m => m.role === 'user')
           if (lastUserMessage?.fileReferences && lastUserMessage.fileReferences.length > 0) {
             fileIdsToLoad.push(...lastUserMessage.fileReferences)
-            console.log('📁 [Client] Found file IDs from last user message:', fileIdsToLoad)
+            logger.info('📁 [Client] Found file IDs from last user message:', fileIdsToLoad)
           }
         }
 
@@ -547,11 +551,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
           // Try loading by specific file IDs first (most reliable)
           if (fileIdsToLoad.length > 0 && psychologistId) {
-            console.log('📁 [Client] Loading files by ID:', fileIdsToLoad)
+            logger.info('📁 [Client] Loading files by ID:', fileIdsToLoad)
             const filePromises = fileIdsToLoad.map(id => getClinicalFile(psychologistId, id))
             const filesResults = await Promise.all(filePromises)
             loadedFiles = filesResults.filter(f => f !== null)
-            console.log('📁 [Client] Loaded by ID:', {
+            logger.info('📁 [Client] Loaded by ID:', {
               requested: fileIdsToLoad.length,
               loaded: loadedFiles.length,
               files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
@@ -560,9 +564,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
           // If no files loaded by ID, try loading by sessionId
           if (loadedFiles.length === 0 && sessionIdToUse && psychologistId) {
-            console.log('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
+            logger.info('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
             loadedFiles = await getClinicalFilesBySession(psychologistId, sessionIdToUse)
-            console.log('📁 [Client] Loaded by sessionId:', {
+            logger.info('📁 [Client] Loaded by sessionId:', {
               count: loadedFiles.length,
               files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
             })
@@ -570,7 +574,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
           // Last resort: load ALL recent processed files and filter by recency
           if (loadedFiles.length === 0 && psychologistId) {
-            console.log('📁 [Client] No files found by ID or sessionId, loading all recent files...')
+            logger.info('📁 [Client] No files found by ID or sessionId, loading all recent files...')
             const allFiles = await getClinicalFilesBySession(psychologistId, sessionIdToUse || '')
             // Get files uploaded in the last 5 minutes that are processed
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
@@ -582,20 +586,20 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             recentFiles.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
             if (recentFiles.length > 0) {
               loadedFiles = [recentFiles[0]] // Take only the most recent file
-              console.log('📁 [Client] Found recent file:', {
+              logger.info('📁 [Client] Found recent file:', {
                 id: loadedFiles[0].id,
                 name: loadedFiles[0].name,
                 uploadDate: loadedFiles[0].uploadDate
               })
             } else {
-              console.log('⚠️ [Client] No recent processed files found in IndexedDB')
+              logger.info('⚠️ [Client] No recent processed files found in IndexedDB')
             }
           }
 
           if (loadedFiles.length > 0) {
             // Filter for processed files only
             const processedFiles = loadedFiles.filter(f => f.status === 'processed')
-            console.log('📁 [Client] Filtered to processed files:', {
+            logger.info('📁 [Client] Filtered to processed files:', {
               processedCount: processedFiles.length,
               totalCount: loadedFiles.length
             })
@@ -612,34 +616,34 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 uploadDate: file.uploadDate,
                 sessionId: file.sessionId
               }))
-              console.log('✅ [Client] IndexedDB fallback succeeded, passing file metadata:', fileMetadata.map(f => f.name))
+              logger.info('✅ [Client] IndexedDB fallback succeeded, passing file metadata:', fileMetadata.map(f => f.name))
             } else {
-              console.log('⚠️ [Client] IndexedDB fallback found files but none are processed')
+              logger.info('⚠️ [Client] IndexedDB fallback found files but none are processed')
             }
           } else {
-            console.log('⚠️ [Client] IndexedDB fallback found no files')
+            logger.info('⚠️ [Client] IndexedDB fallback found no files')
           }
         } catch (idbError) {
-          console.error('❌ [Client] IndexedDB fallback failed:', idbError)
+          logger.error('❌ [Client] IndexedDB fallback failed:', idbError)
         }
       }
 
       // Callback para manejar bullets progresivos
       const handleBulletUpdate = (bullet: ReasoningBullet) => {
-        console.log('🎯 Bullet recibido:', bullet.content)
+        logger.info('🎯 Bullet recibido:', bullet.content)
         addReasoningBullet(bullet)
       }
 
       // 🎯 CALLBACK: Cuando se selecciona el agente INMEDIATAMENTE
       const handleAgentSelected = (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => {
-        console.log('🎯 Agente seleccionado INMEDIATAMENTE:', routingInfo.targetAgent)
+        logger.info('🎯 Agente seleccionado INMEDIATAMENTE:', routingInfo.targetAgent)
         setSystemState(prev => {
           // 🔥 ACTUALIZAR el mensaje del usuario con el agente REAL
           const updatedHistory = [...prev.history]
           const lastMessage = updatedHistory[updatedHistory.length - 1]
           if (lastMessage && lastMessage.role === 'user') {
             lastMessage.agent = routingInfo.targetAgent as AgentType
-            console.log('🔄 Mensaje del usuario actualizado con agente real:', routingInfo.targetAgent)
+            logger.info('🔄 Mensaje del usuario actualizado con agente real:', routingInfo.targetAgent)
           }
 
           return {
@@ -675,10 +679,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               existingState.activeAgent = routingInfo.targetAgent as AgentType
               existingState.metadata = { ...existingState.metadata, lastUpdated: new Date() }
               await saveSessionMetadata(psychologistId, pid, existingState)
-              console.log('💾 [Firestore] Agente del mensaje de usuario actualizado en persistencia')
+              logger.info('💾 [Firestore] Agente del mensaje de usuario actualizado en persistencia')
             }
           } catch (e) {
-            console.warn('⚠️ [Firestore] No se pudo actualizar el agente en persistencia:', e)
+            logger.warn('⚠️ [Firestore] No se pudo actualizar el agente en persistencia:', e)
           }
         })()
       }
@@ -695,7 +699,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       const sseClient = getSSEClient()
 
       // 🔍 FINAL DIAGNOSTIC: Log what we're about to send to the API
-      console.log('🔍 [HOOK.sendMessage] ABOUT TO SEND TO API:', {
+      logger.info('🔍 [HOOK.sendMessage] ABOUT TO SEND TO API:', {
         sessionId: sessionIdToUse,
         messagePreview: message.substring(0, 50) + '...',
         fileReferencesCount: attachedFiles?.map(file => file.id).length || 0,
@@ -731,7 +735,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               onBullet: handleBulletUpdate,
               onAgentSelected: handleAgentSelected,
               onToolExecution: (tool: ToolExecutionEvent) => {
-                console.log('🔧 Tool execution event:', tool.toolName, tool.status)
+                logger.info('🔧 Tool execution event:', tool.toolName, tool.status)
                 setSystemState(prev => {
                   if (tool.status === 'started') {
                     // Deduplicate: skip if a tool with the same toolName and query is already in 'started' state
@@ -795,7 +799,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               onChunk: (chunk) => {
                 // Este callback se ejecuta pero no necesitamos hacer nada aquí
                 // porque el generator ya está yieldando los chunks
-                console.log('📝 Chunk procesado en callback')
+                logger.info('📝 Chunk procesado en callback')
                 // Update phase to streaming on first chunk
                 setSystemState(prev => {
                   if (prev.processingStatus.phase !== 'streaming') {
@@ -811,7 +815,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 })
               },
               onResponse: (responseData) => {
-                console.log('✅ Respuesta final recibida vía SSE')
+                logger.info('✅ Respuesta final recibida vía SSE')
 
                 // 🎯 ACTUALIZAR ROUTING INFO si está disponible
                 if (responseData.response?.routingInfo) {
@@ -821,7 +825,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                     routingInfo: responseData.response.routingInfo,
                     transitionState: 'specialist_responding'
                   }))
-                  console.log('🎯 Agente seleccionado:', responseData.response.routingInfo.targetAgent)
+                  logger.info('🎯 Agente seleccionado:', responseData.response.routingInfo.targetAgent)
                 }
 
                 // 🛠️ FIX: Finalizar indicador de generación de bullets si el backend
@@ -846,11 +850,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                 })
               },
               onError: (error, details) => {
-                console.error('❌ Error SSE:', error, details)
+                logger.error('❌ Error SSE:', error, details)
                 throw new Error(error)
               },
               onComplete: () => {
-                console.log('✅ Stream SSE completado')
+                logger.info('✅ Stream SSE completado')
                 // 🛠️ FIX: Asegurar que isGenerating quede en false al cerrar el stream
                 setSystemState(prev => ({
                   ...prev,
@@ -868,11 +872,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             }
           )) {
             // ✅ YIELDAR CADA CHUNK INMEDIATAMENTE para que la UI se actualice
-            console.log('🚀 [Hook] Yielding chunk:', chunk.text?.substring(0, 50))
+            logger.info('🚀 [Hook] Yielding chunk:', chunk.text?.substring(0, 50))
             yield chunk
           }
         } catch (error) {
-          console.error('❌ Error en stream generator:', error)
+          logger.error('❌ Error en stream generator:', error)
           throw error
         }
       })()
@@ -884,12 +888,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         enumerable: true
       })
 
-      console.log('✅ Retornando AsyncGenerator para streaming en tiempo real')
+      logger.info('✅ Retornando AsyncGenerator para streaming en tiempo real')
 
       // Retornar el generator directamente - chat-interface.tsx lo consumirá
       return streamGenerator
     } catch (error) {
-      console.error('❌ Error enviando mensaje:', error)
+      logger.error('❌ Error enviando mensaje:', error)
       setSystemState(prev => ({
         ...prev,
         error: 'Error al enviar el mensaje',
@@ -908,7 +912,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Cambiar agente manualmente (aunque el sistema puede hacerlo automáticamente)
   const switchAgent = useCallback(async (newAgent: AgentType): Promise<boolean> => {
     if (!systemState.sessionId) {
-      console.error('No hay sesión activa para cambiar agente')
+      logger.error('No hay sesión activa para cambiar agente')
       return false
     }
 
@@ -923,10 +927,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         isLoading: false
       }))
 
-      console.log('✅ Agente cambiado a:', newAgent)
+      logger.info('✅ Agente cambiado a:', newAgent)
       return true
     } catch (error) {
-      console.error('❌ Error cambiando agente:', error)
+      logger.error('❌ Error cambiando agente:', error)
       setSystemState(prev => ({ ...prev, isLoading: false }))
       return false
     }
@@ -991,7 +995,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }
 
     if (!targetSessionId) {
-      console.warn('⚠️ addStreamingResponseToHistory: Sin sessionId, se omite la escritura del historial')
+      logger.warn('⚠️ addStreamingResponseToHistory: Sin sessionId, se omite la escritura del historial')
       return
     }
 
@@ -1014,10 +1018,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
     if (bulletsToAttach.length > 0) {
       aiMessage.reasoningBullets = [...bulletsToAttach]
-      console.log('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
+      logger.info('🎯 Bullets asociados al mensaje:', bulletsToAttach.length)
     }
 
-    console.log('🔄 [addStreamingResponseToHistory] Agregando mensaje del modelo al historial local:', {
+    logger.info('🔄 [addStreamingResponseToHistory] Agregando mensaje del modelo al historial local:', {
       currentHistoryLength: historyRef.current.length,
       aiMessageId: aiMessage.id,
       aiMessageContent: aiMessage.content.substring(0, 50)
@@ -1035,8 +1039,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     // Limpiar bullets temporales después de asociarlos
     setCurrentMessageBullets([])
 
-    console.log('✅ Respuesta de streaming agregada al historial')
-    console.log('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
+    logger.info('✅ Respuesta de streaming agregada al historial')
+    logger.info('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
     // NOTE: AI message is NOT persisted from the frontend to avoid duplication.
     // The server already persists AI messages as part of saveChatSessionBoth() during streaming/response handling.
@@ -1044,7 +1048,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // Establecer contexto del paciente
   const setSessionMeta = useCallback((sessionMeta: any) => {
-    console.log('🏥 Estableciendo contexto del paciente:', sessionMeta?.patient?.reference || 'None')
+    logger.info('🏥 Estableciendo contexto del paciente:', sessionMeta?.patient?.reference || 'None')
     setSystemState(prev => ({
       ...prev,
       sessionMeta

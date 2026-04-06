@@ -16,6 +16,10 @@ import { ai } from './google-genai-config';
 import type { ChatMessage } from '@/types/clinical-types';
 import * as Sentry from '@sentry/nextjs';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * LONGITUDINAL ANALYSIS SYSTEM INSTRUCTION v5.0
@@ -221,7 +225,7 @@ export class ClinicalPatternAnalyzer {
           span?.setAttribute('session.count', sessionHistory.length);
           span?.setAttribute('trigger.reason', triggerReason);
 
-      console.log(`🔍 [Análisis Longitudinal] Starting analysis (${sessionHistory.length} sessions)`);
+      logger.info(`🔍 [Análisis Longitudinal] Starting analysis (${sessionHistory.length} sessions)`);
 
       // Step 1: Extract clinical domains from conversation history
       const domainAnalysis = await this.extractClinicalDomains(sessionHistory);
@@ -265,7 +269,7 @@ export class ClinicalPatternAnalyzer {
         meta
       };
 
-      console.log(`✅ [Análisis Longitudinal] Analysis complete:`, {
+      logger.info(`✅ [Análisis Longitudinal] Analysis complete:`, {
         exploredDomains: exploredDomains.length,
         unexploredDomains: unexploredDomains.length,
         reflectiveQuestions: reflectiveQuestions.length
@@ -274,7 +278,7 @@ export class ClinicalPatternAnalyzer {
       return analysis;
 
         } catch (error) {
-          console.error(`❌ [Análisis Longitudinal] Analysis failed:`, error);
+          logger.error(`❌ [Análisis Longitudinal] Analysis failed:`, error);
           Sentry.captureException(error, {
             tags: {
               component: 'clinical-pattern-analyzer',
@@ -314,7 +318,7 @@ export class ClinicalPatternAnalyzer {
       }
     });
 
-    console.log('🔍 [Análisis Longitudinal] Raw SDK response:', JSON.stringify(result, null, 2));
+    logger.info('🔍 [Análisis Longitudinal] Raw SDK response:', JSON.stringify(result, null, 2));
 
     return this.parseDomainExtractionResults(result, sessionHistory);
   }
@@ -571,12 +575,12 @@ Tu análisis NO es evaluación del terapeuta - es **cartografía de su estilo cl
         }
       }
     } catch (err) {
-      console.error('❌ [Análisis Longitudinal] Error extracting function call:', err);
+      logger.error('❌ [Análisis Longitudinal] Error extracting function call:', err);
     }
 
     if (!functionCall) {
-      console.warn('⚠️ [Análisis Longitudinal] No function calls in domain extraction response');
-      console.warn('Available structure:', {
+      logger.warn('⚠️ [Análisis Longitudinal] No function calls in domain extraction response');
+      logger.warn('Available structure:', {
         hasCandidates: !!result?.candidates,
         candidatesLength: result?.candidates?.length,
         firstCandidate: result?.candidates?.[0]
@@ -584,7 +588,7 @@ Tu análisis NO es evaluación del terapeuta - es **cartografía de su estilo cl
       return domainMap;
     }
 
-    console.log('✅ [Pattern Mirror] Found function call:', functionCall.name);
+    logger.info('✅ [Pattern Mirror] Found function call:', functionCall.name);
     const args = functionCall.args as any;
 
     // Process explored domains

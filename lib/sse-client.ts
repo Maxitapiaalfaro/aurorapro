@@ -10,6 +10,10 @@
 import type { ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 /**
  * Tipos de eventos SSE
  */
@@ -83,7 +87,7 @@ export class SSEClient {
     this.abortController = new AbortController()
 
     try {
-      console.log('🔄 [SSEClient] Enviando mensaje vía SSE...')
+      logger.info('🔄 [SSEClient] Enviando mensaje vía SSE...')
 
       const response = await authenticatedFetch('/api/send-message', {
         method: 'POST',
@@ -112,22 +116,22 @@ export class SSEClient {
         throw new Error('No se recibió stream del servidor')
       }
 
-      console.log('✅ [SSEClient] Stream iniciado, procesando eventos...')
+      logger.info('✅ [SSEClient] Stream iniciado, procesando eventos...')
 
       // Procesar stream SSE
       const result = await this.processSSEStream(response.body, callbacks)
 
-      console.log('✅ [SSEClient] Stream completado exitosamente')
+      logger.info('✅ [SSEClient] Stream completado exitosamente')
 
       return result
 
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('⚠️ [SSEClient] Request cancelada por el usuario')
+        logger.info('⚠️ [SSEClient] Request cancelada por el usuario')
         throw new Error('Request cancelada')
       }
 
-      console.error('❌ [SSEClient] Error:', error)
+      logger.error('❌ [SSEClient] Error:', error)
       
       if (callbacks.onError) {
         callbacks.onError(
@@ -153,7 +157,7 @@ export class SSEClient {
     this.abortController = new AbortController()
 
     try {
-      console.log('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
+      logger.info('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
 
       const response = await authenticatedFetch('/api/send-message', {
         method: 'POST',
@@ -182,7 +186,7 @@ export class SSEClient {
         throw new Error('No se recibió stream del servidor')
       }
 
-      console.log('✅ [SSEClient] Stream iniciado, yielding chunks...')
+      logger.info('✅ [SSEClient] Stream iniciado, yielding chunks...')
 
       // Procesar stream y yieldar chunks en tiempo real
       const reader = response.body.getReader()
@@ -199,7 +203,7 @@ export class SSEClient {
       const resetStreamTimeout = () => {
         if (streamTimeoutId) clearTimeout(streamTimeoutId)
         streamTimeoutId = setTimeout(() => {
-          console.error('⏱️ [SSEClient] Stream timeout — no data received within', STREAM_TIMEOUT_MS / 1000, 'seconds')
+          logger.error('⏱️ [SSEClient] Stream timeout — no data received within', STREAM_TIMEOUT_MS / 1000, 'seconds')
           this.abortController?.abort()
         }, STREAM_TIMEOUT_MS)
       }
@@ -212,7 +216,7 @@ export class SSEClient {
           const { done, value } = await reader.read()
 
           if (done) {
-            console.log('✅ [SSEClient] Stream terminado')
+            logger.info('✅ [SSEClient] Stream terminado')
             break
           }
 
@@ -240,21 +244,21 @@ export class SSEClient {
                     break
 
                   case 'agent_selected':
-                    console.log('🎯 [SSEClient] Agente seleccionado:', event.info.targetAgent)
+                    logger.info('🎯 [SSEClient] Agente seleccionado:', event.info.targetAgent)
                     if (callbacks.onAgentSelected) {
                       callbacks.onAgentSelected(event.info)
                     }
                     break
 
                   case 'tool_execution':
-                    console.log('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
+                    logger.info('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
                     if (callbacks.onToolExecution) {
                       callbacks.onToolExecution(event.tool)
                     }
                     break
 
                   case 'chunk':
-                    console.log(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars) - YIELDING`)
+                    logger.info(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars) - YIELDING`)
 
                     // ✅ YIELDAR CHUNK INMEDIATAMENTE para streaming real
                     yield {
@@ -269,7 +273,7 @@ export class SSEClient {
                     break
 
                   case 'response':
-                    console.log('✅ [SSEClient] Respuesta final recibida')
+                    logger.info('✅ [SSEClient] Respuesta final recibida')
                     finalResult = event.result
                     if (callbacks.onResponse) {
                       callbacks.onResponse(event.result)
@@ -277,21 +281,21 @@ export class SSEClient {
                     break
 
                   case 'error':
-                    console.error('❌ [SSEClient] Error recibido:', event.error)
+                    logger.error('❌ [SSEClient] Error recibido:', event.error)
                     if (callbacks.onError) {
                       callbacks.onError(event.error, event.details)
                     }
                     throw new Error(event.error)
 
                   case 'complete':
-                    console.log('✅ [SSEClient] Stream completado')
+                    logger.info('✅ [SSEClient] Stream completado')
                     if (callbacks.onComplete) {
                       callbacks.onComplete()
                     }
                     break
                 }
               } catch (parseError) {
-                console.error('❌ [SSEClient] Error parseando evento:', parseError)
+                logger.error('❌ [SSEClient] Error parseando evento:', parseError)
               }
             }
           }
@@ -301,17 +305,17 @@ export class SSEClient {
         reader.releaseLock()
       }
 
-      console.log('✅ [SSEClient] Stream completado exitosamente')
+      logger.info('✅ [SSEClient] Stream completado exitosamente')
 
       return finalResult
 
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('⚠️ [SSEClient] Request cancelada por el usuario')
+        logger.info('⚠️ [SSEClient] Request cancelada por el usuario')
         throw new Error('Request cancelada')
       }
 
-      console.error('❌ [SSEClient] Error:', error)
+      logger.error('❌ [SSEClient] Error:', error)
 
       if (callbacks.onError) {
         callbacks.onError(
@@ -343,7 +347,7 @@ export class SSEClient {
         const { done, value } = await reader.read()
 
         if (done) {
-          console.log('✅ [SSEClient] Stream terminado')
+          logger.info('✅ [SSEClient] Stream terminado')
           break
         }
 
@@ -367,35 +371,35 @@ export class SSEClient {
               // Procesar evento según tipo
               switch (event.type) {
                 case 'bullet':
-                  console.log('🎯 [SSEClient] Bullet recibido')
+                  logger.info('🎯 [SSEClient] Bullet recibido')
                   if (callbacks.onBullet) {
                     callbacks.onBullet(event.bullet)
                   }
                   break
 
                 case 'agent_selected':
-                  console.log('🎯 [SSEClient] Agente seleccionado:', event.info.targetAgent)
+                  logger.info('🎯 [SSEClient] Agente seleccionado:', event.info.targetAgent)
                   if (callbacks.onAgentSelected) {
                     callbacks.onAgentSelected(event.info)
                   }
                   break
 
                 case 'tool_execution':
-                  console.log('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
+                  logger.info('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
                   if (callbacks.onToolExecution) {
                     callbacks.onToolExecution(event.tool)
                   }
                   break
 
                 case 'chunk':
-                  console.log(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars)`)
+                  logger.info(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars)`)
                   if (callbacks.onChunk) {
                     callbacks.onChunk(event.chunk)
                   }
                   break
 
                 case 'response':
-                  console.log('✅ [SSEClient] Respuesta final recibida')
+                  logger.info('✅ [SSEClient] Respuesta final recibida')
                   finalResult = event.result
                   if (callbacks.onResponse) {
                     callbacks.onResponse(event.result)
@@ -403,24 +407,24 @@ export class SSEClient {
                   break
 
                 case 'error':
-                  console.error('❌ [SSEClient] Error del servidor:', event.error)
+                  logger.error('❌ [SSEClient] Error del servidor:', event.error)
                   if (callbacks.onError) {
                     callbacks.onError(event.error, event.details)
                   }
                   throw new Error(event.error)
 
                 case 'complete':
-                  console.log('✅ [SSEClient] Stream completado')
+                  logger.info('✅ [SSEClient] Stream completado')
                   if (callbacks.onComplete) {
                     callbacks.onComplete()
                   }
                   break
 
                 default:
-                  console.warn('⚠️ [SSEClient] Tipo de evento desconocido:', (event as any).type)
+                  logger.warn('⚠️ [SSEClient] Tipo de evento desconocido:', (event as any).type)
               }
             } catch (parseError) {
-              console.error('❌ [SSEClient] Error parseando evento:', parseError)
+              logger.error('❌ [SSEClient] Error parseando evento:', parseError)
             }
           }
         }
@@ -438,7 +442,7 @@ export class SSEClient {
    */
   cancel(): void {
     if (this.abortController) {
-      console.log('⚠️ [SSEClient] Cancelando request...')
+      logger.info('⚠️ [SSEClient] Cancelando request...')
       this.abortController.abort()
     }
   }

@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from "react"
 import type { AgentType, ClinicalMode, ChatState } from "@/types/clinical-types"
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 export function useHopeAI() {
   const [isInitialized, setIsInitialized] = useState(false)
   const [currentSession, setCurrentSession] = useState<ChatState | null>(null)
@@ -86,7 +90,7 @@ export function useHopeAI() {
   // Send message
   const sendMessage = useCallback(
     async (message: string, useStreaming = true, sessionMeta?: any) => {
-      console.log('🔄 Hook: sendMessage llamado', {
+      logger.info('🔄 Hook: sendMessage llamado', {
         hasSession: !!currentSession,
         sessionId: currentSession?.sessionId,
         message: message.substring(0, 50) + '...',
@@ -94,7 +98,7 @@ export function useHopeAI() {
       })
       
       if (!currentSession) {
-        console.log('❌ Hook: No hay sesión actual')
+        logger.info('❌ Hook: No hay sesión actual')
         return null
       }
 
@@ -102,7 +106,7 @@ export function useHopeAI() {
       setError(null)
 
       try {
-        console.log('📡 Hook: Enviando request a /api/send-message', {
+        logger.info('📡 Hook: Enviando request a /api/send-message', {
           hasSessionMeta: !!sessionMeta,
           patientReference: sessionMeta?.patient?.reference
         })
@@ -119,19 +123,19 @@ export function useHopeAI() {
           }),
         })
 
-        console.log('📡 Hook: Response status:', response.status)
+        logger.info('📡 Hook: Response status:', response.status)
         const data = await response.json()
-        console.log('📡 Hook: Response data:', data)
+        logger.info('📡 Hook: Response data:', data)
 
         if (!response.ok) {
           throw new Error(data.details || data.error || 'Failed to send message')
         }
 
         setCurrentSession(data.updatedState)
-        console.log('✅ Hook: Mensaje enviado exitosamente')
+        logger.info('✅ Hook: Mensaje enviado exitosamente')
         return data.response
       } catch (err) {
-        console.error('❌ Hook: Error en sendMessage:', err)
+        logger.error('❌ Hook: Error en sendMessage:', err)
         setError(err instanceof Error ? err.message : "Failed to send message")
         return null
       } finally {

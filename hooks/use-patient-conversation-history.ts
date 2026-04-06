@@ -12,6 +12,10 @@ import {
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse, PatientRecord } from "@/types/clinical-types"
 import type { SessionSummary } from "@/lib/firestore-client-storage"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface PatientConversationSummary {
   sessionId: string
   title: string
@@ -80,7 +84,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     const patientId = summary.patientId
 
     if (!patientId || patientId === 'default_patient') {
-      console.log(`No se encontro patientId para sesion ${summary.sessionId}`)
+      logger.info(`No se encontro patientId para sesion ${summary.sessionId}`)
       return null
     }
 
@@ -120,7 +124,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     }
 
     try {
-      console.log(`Cargando conversaciones para paciente: ${patientId}`)
+      logger.info(`Cargando conversaciones para paciente: ${patientId}`)
 
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
@@ -130,7 +134,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
 
       const result = await listUserSessions(psychologistId, paginationOptions)
 
-      console.log(`Procesando ${result.items.length} conversaciones para filtrar por paciente`)
+      logger.info(`Procesando ${result.items.length} conversaciones para filtrar por paciente`)
 
       // Filtrar y convertir solo las conversaciones del paciente especifico
       const patientSummaries = result.items
@@ -139,7 +143,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
           summary !== null && summary.patientId === patientId
         )
 
-      console.log(`Encontradas ${patientSummaries.length} conversaciones para el paciente ${patientId}`)
+      logger.info(`Encontradas ${patientSummaries.length} conversaciones para el paciente ${patientId}`)
 
       // Actualizar cache
       patientSummaries.forEach((summary: PatientConversationSummary) => {
@@ -154,11 +158,11 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       lastLoadedPatientId.current = patientId
       lastLoadedUserId.current = userId
 
-      console.log(`Conversaciones del paciente cargadas exitosamente`)
+      logger.info(`Conversaciones del paciente cargadas exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error cargando conversaciones del paciente: ${errorMessage}`)
-      console.error('Error cargando conversaciones del paciente:', err)
+      logger.error('Error cargando conversaciones del paciente:', err)
     } finally {
       setIsLoading(false)
     }
@@ -174,7 +178,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     setError(null)
 
     try {
-      console.log(`Cargando mas conversaciones para paciente: ${currentPatientId}`)
+      logger.info(`Cargando mas conversaciones para paciente: ${currentPatientId}`)
 
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
@@ -194,7 +198,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
           !conversationCache.current.has(summary.sessionId)
         )
 
-      console.log(`Cargadas ${newPatientSummaries.length} nuevas conversaciones del paciente`)
+      logger.info(`Cargadas ${newPatientSummaries.length} nuevas conversaciones del paciente`)
 
       // Actualizar cache y estado
       newPatientSummaries.forEach((summary: PatientConversationSummary) => {
@@ -211,7 +215,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error cargando mas conversaciones: ${errorMessage}`)
-      console.error('Error cargando mas conversaciones:', err)
+      logger.error('Error cargando mas conversaciones:', err)
     } finally {
       setIsLoadingMore(false)
     }
@@ -224,7 +228,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     setError(null)
 
     try {
-      console.log(`Abriendo conversacion: ${sessionId}`)
+      logger.info(`Abriendo conversacion: ${sessionId}`)
 
       const result = await findSessionById(psychologistId, sessionId)
 
@@ -239,12 +243,12 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         throw new Error('Conversacion no encontrada')
       }
 
-      console.log(`Conversacion cargada exitosamente`)
+      logger.info(`Conversacion cargada exitosamente`)
       return chatState
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error abriendo conversacion: ${errorMessage}`)
-      console.error('Error abriendo conversacion:', err)
+      logger.error('Error abriendo conversacion:', err)
       return null
     }
   }, [psychologistId])
@@ -256,7 +260,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     setError(null)
 
     try {
-      console.log(`Eliminando conversacion: ${sessionId}`)
+      logger.info(`Eliminando conversacion: ${sessionId}`)
 
       // Get patientId from cached conversation data
       const cachedConv = conversationCache.current.get(sessionId)
@@ -283,11 +287,11 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
       // Limpiar cache
       conversationCache.current.delete(sessionId)
 
-      console.log(`Conversacion eliminada exitosamente`)
+      logger.info(`Conversacion eliminada exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error eliminando conversacion: ${errorMessage}`)
-      console.error('Error eliminando conversacion:', err)
+      logger.error('Error eliminando conversacion:', err)
     }
   }, [psychologistId, allConversations])
 
@@ -298,7 +302,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     setError(null)
 
     try {
-      console.log(`Actualizando titulo de conversacion: ${sessionId} -> ${newTitle}`)
+      logger.info(`Actualizando titulo de conversacion: ${sessionId} -> ${newTitle}`)
 
       // Find the session to get patientId and full data
       const result = await findSessionById(psychologistId, sessionId)
@@ -312,7 +316,7 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
 
         // Save to Firestore
         await saveSessionMetadata(psychologistId, result.patientId, updatedChatState)
-        console.log(`Titulo guardado en Firestore`)
+        logger.info(`Titulo guardado en Firestore`)
       }
 
       // Luego actualizar estado local inmediatamente
@@ -332,11 +336,11 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
         conversationCache.current.set(sessionId, { ...cachedConv, title: newTitle })
       }
 
-      console.log(`Titulo actualizado exitosamente en Firestore y estado local`)
+      logger.info(`Titulo actualizado exitosamente en Firestore y estado local`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error actualizando titulo: ${errorMessage}`)
-      console.error('Error actualizando titulo:', err)
+      logger.error('Error actualizando titulo:', err)
     }
   }, [psychologistId, allConversations])
 

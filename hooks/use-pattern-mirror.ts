@@ -11,6 +11,10 @@ import { getPatternAnalysisStorage, type PatternAnalysisState } from '@/lib/patt
 import type { PatternAnalysis } from '@/lib/clinical-pattern-analyzer';
 import type { ChatMessage } from '@/types/clinical-types';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 export interface UsePatternMirrorReturn {
   // Analysis state
   latestAnalysis: PatternAnalysisState | null;
@@ -69,7 +73,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
     setError(null);
 
     try {
-      console.log(`🔍 [Pattern Mirror Hook] Generating analysis for ${patientName}`);
+      logger.info(`🔍 [Pattern Mirror Hook] Generating analysis for ${patientName}`);
 
       const response = await authenticatedFetch(`/api/patients/${encodeURIComponent(patientId)}/pattern-analysis`, {
         method: 'POST',
@@ -92,7 +96,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
       const data = await response.json();
       const analysisId = data.analysisId;
 
-      console.log(`✅ [Pattern Mirror Hook] Analysis started: ${analysisId}`);
+      logger.info(`✅ [Pattern Mirror Hook] Analysis started: ${analysisId}`);
 
       // Start polling for completion
       startPolling(analysisId);
@@ -101,7 +105,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`❌ [Pattern Mirror Hook] Error generating analysis:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error generating analysis:`, err);
       setError(errorMessage);
       throw err;
     } finally {
@@ -123,11 +127,11 @@ export function usePatternMirror(): UsePatternMirrorReturn {
       const latest = await storage.getLatestAnalysis(patientId);
       setLatestAnalysis(latest);
 
-      console.log(`📊 [Pattern Mirror Hook] Loaded latest analysis for patient ${patientId}:`, latest?.analysisId || 'none');
+      logger.info(`📊 [Pattern Mirror Hook] Loaded latest analysis for patient ${patientId}:`, latest?.analysisId || 'none');
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`❌ [Pattern Mirror Hook] Error loading latest analysis:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error loading latest analysis:`, err);
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -148,11 +152,11 @@ export function usePatternMirror(): UsePatternMirrorReturn {
       const analyses = await storage.getPatientAnalyses(patientId);
       setAllAnalyses(analyses);
 
-      console.log(`📊 [Pattern Mirror Hook] Loaded ${analyses.length} analyses for patient ${patientId}`);
+      logger.info(`📊 [Pattern Mirror Hook] Loaded ${analyses.length} analyses for patient ${patientId}`);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`❌ [Pattern Mirror Hook] Error loading analyses:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error loading analyses:`, err);
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -177,10 +181,10 @@ export function usePatternMirror(): UsePatternMirrorReturn {
         });
       }
 
-      console.log(`👁️ [Pattern Mirror Hook] Marked as viewed: ${analysisId}`);
+      logger.info(`👁️ [Pattern Mirror Hook] Marked as viewed: ${analysisId}`);
 
     } catch (err) {
-      console.error(`❌ [Pattern Mirror Hook] Error marking as viewed:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error marking as viewed:`, err);
     }
   }, [latestAnalysis]);
 
@@ -201,10 +205,10 @@ export function usePatternMirror(): UsePatternMirrorReturn {
         });
       }
 
-      console.log(`🚫 [Pattern Mirror Hook] Marked as dismissed: ${analysisId}`);
+      logger.info(`🚫 [Pattern Mirror Hook] Marked as dismissed: ${analysisId}`);
 
     } catch (err) {
-      console.error(`❌ [Pattern Mirror Hook] Error marking as dismissed:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error marking as dismissed:`, err);
     }
   }, [latestAnalysis]);
 
@@ -233,10 +237,10 @@ export function usePatternMirror(): UsePatternMirrorReturn {
         });
       }
 
-      console.log(`💬 [Pattern Mirror Hook] Feedback submitted: ${analysisId}`, { helpful, comment });
+      logger.info(`💬 [Pattern Mirror Hook] Feedback submitted: ${analysisId}`, { helpful, comment });
 
     } catch (err) {
-      console.error(`❌ [Pattern Mirror Hook] Error submitting feedback:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error submitting feedback:`, err);
     }
   }, [latestAnalysis]);
 
@@ -249,7 +253,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
       clearInterval(pollingIntervalId);
     }
 
-    console.log(`🔄 [Pattern Mirror Hook] Starting polling for ${analysisId}`);
+    logger.info(`🔄 [Pattern Mirror Hook] Starting polling for ${analysisId}`);
 
     const intervalId = setInterval(async () => {
       try {
@@ -262,14 +266,14 @@ export function usePatternMirror(): UsePatternMirrorReturn {
 
         if (analysis.status === 'completed' || analysis.status === 'error') {
           // Analysis finished, stop polling
-          console.log(`✅ [Pattern Mirror Hook] Polling complete. Status: ${analysis.status}`);
+          logger.info(`✅ [Pattern Mirror Hook] Polling complete. Status: ${analysis.status}`);
           setLatestAnalysis(analysis);
           clearInterval(intervalId);
           setPollingIntervalId(null);
         }
 
       } catch (err) {
-        console.error(`❌ [Pattern Mirror Hook] Polling error:`, err);
+        logger.error(`❌ [Pattern Mirror Hook] Polling error:`, err);
       }
     }, 3000); // Poll every 3 seconds
 
@@ -281,7 +285,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
    */
   const stopPolling = useCallback((): void => {
     if (pollingIntervalId) {
-      console.log(`⏹️ [Pattern Mirror Hook] Stopping polling`);
+      logger.info(`⏹️ [Pattern Mirror Hook] Stopping polling`);
       clearInterval(pollingIntervalId);
       setPollingIntervalId(null);
     }
@@ -297,7 +301,7 @@ export function usePatternMirror(): UsePatternMirrorReturn {
       const count = await storage.getPendingReviewCount();
       setPendingCount(count);
     } catch (err) {
-      console.error(`❌ [Pattern Mirror Hook] Error refreshing pending count:`, err);
+      logger.error(`❌ [Pattern Mirror Hook] Error refreshing pending count:`, err);
     }
   }, []);
 

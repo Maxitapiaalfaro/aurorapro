@@ -18,6 +18,10 @@
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Configuración de encriptación
  */
@@ -40,8 +44,8 @@ function getEncryptionKey(): Buffer {
   if (!key) {
     // En desarrollo, generar una clave temporal (NO USAR EN PRODUCCIÓN)
     if (process.env.NODE_ENV === 'development') {
-      console.warn('⚠️ [ENCRYPTION] No AURORA_ENCRYPTION_KEY found, using temporary key for development')
-      console.warn('⚠️ [ENCRYPTION] Set AURORA_ENCRYPTION_KEY in production for data persistence')
+      logger.warn('⚠️ [ENCRYPTION] No AURORA_ENCRYPTION_KEY found, using temporary key for development')
+      logger.warn('⚠️ [ENCRYPTION] Set AURORA_ENCRYPTION_KEY in production for data persistence')
       
       // Generar clave determinística para desarrollo (basada en un seed fijo)
       const devSeed = 'aurora-dev-encryption-seed-do-not-use-in-production'
@@ -50,7 +54,7 @@ function getEncryptionKey(): Buffer {
     
     throw new Error(
       'AURORA_ENCRYPTION_KEY environment variable is required for production. ' +
-      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+      'Generate one with: node -e "logger.info(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
     )
   }
   
@@ -103,7 +107,7 @@ export function encrypt(plaintext: string | Buffer): Buffer {
     return Buffer.concat([iv, authTag, encrypted])
     
   } catch (error) {
-    console.error('❌ [ENCRYPTION] Error encrypting data:', error)
+    logger.error('❌ [ENCRYPTION] Error encrypting data:', error)
     throw new Error('Failed to encrypt data: ' + (error instanceof Error ? error.message : 'Unknown error'))
   }
 }
@@ -150,7 +154,7 @@ export function decrypt(encryptedData: Buffer): string {
     return decrypted.toString('utf8')
     
   } catch (error) {
-    console.error('❌ [ENCRYPTION] Error decrypting data:', error)
+    logger.error('❌ [ENCRYPTION] Error decrypting data:', error)
     
     // Si falla la autenticación, los datos fueron manipulados
     if (error instanceof Error && error.message.includes('Unsupported state or unable to authenticate data')) {
@@ -168,7 +172,7 @@ export function decrypt(encryptedData: Buffer): string {
  * 
  * @example
  * const key = generateEncryptionKey()
- * console.log('Set this as AURORA_ENCRYPTION_KEY:', key)
+ * logger.info('Set this as AURORA_ENCRYPTION_KEY:', key)
  */
 export function generateEncryptionKey(): string {
   const key = randomBytes(ENCRYPTION_CONFIG.keyLength)
@@ -217,15 +221,15 @@ export function verifyEncryptionSetup(): boolean {
     const decrypted = decrypt(encrypted)
     
     if (decrypted !== testData) {
-      console.error('❌ [ENCRYPTION] Encryption verification failed: data mismatch')
+      logger.error('❌ [ENCRYPTION] Encryption verification failed: data mismatch')
       return false
     }
     
-    console.log('✅ [ENCRYPTION] Encryption setup verified successfully')
+    logger.info('✅ [ENCRYPTION] Encryption setup verified successfully')
     return true
     
   } catch (error) {
-    console.error('❌ [ENCRYPTION] Encryption verification failed:', error)
+    logger.error('❌ [ENCRYPTION] Encryption verification failed:', error)
     return false
   }
 }

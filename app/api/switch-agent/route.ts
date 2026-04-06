@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 export async function POST(request: NextRequest) {
   try {
     const { sessionId, newAgent } = await request.json()
     
-    console.log('🔄 API: Cambiando agente...', { sessionId, newAgent })
+    logger.info('🔄 API: Cambiando agente...', { sessionId, newAgent })
     
     const hopeAISystem = await getGlobalOrchestrationSystem()
 
     // Usar la API explícita de cambio de agente del sistema HopeAI
     const updatedState = await hopeAISystem.switchAgent(sessionId, newAgent)
 
-    console.log('✅ API: Agente cambiado exitosamente')
+    logger.info('✅ API: Agente cambiado exitosamente')
 
     return NextResponse.json({
       success: true,
@@ -21,7 +25,7 @@ export async function POST(request: NextRequest) {
       metadata: updatedState.metadata
     })
   } catch (error) {
-    console.error('❌ API Error (Switch Agent):', error)
+    logger.error('❌ API Error (Switch Agent):', error)
     return NextResponse.json(
       { 
         error: 'Error al cambiar agente',

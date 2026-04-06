@@ -1,3 +1,7 @@
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/documents - Retrieve documents for a session
@@ -13,7 +17,7 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    console.log('🔍 API: Retrieving documents for session:', sessionId)
+    logger.info('🔍 API: Retrieving documents for session:', sessionId)
     
     // Lazy import to avoid build-time issues
     const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
@@ -21,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Get documents from session
     const documents = await HopeAISystemSingleton.getPendingFilesForSession(sessionId)
     
-    console.log('✅ API: Retrieved documents:', documents.length)
+    logger.info('✅ API: Retrieved documents:', documents.length)
     
     return NextResponse.json({
       success: true,
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest) {
       count: documents.length
     })
   } catch (error) {
-    console.error('❌ API Error (Get Documents):', error)
+    logger.error('❌ API Error (Get Documents):', error)
     return NextResponse.json(
       { 
         error: 'Error retrieving documents',
@@ -54,7 +58,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
     
-    console.log('🗑️ API: Removing document:', { sessionId, fileId })
+    logger.info('🗑️ API: Removing document:', { sessionId, fileId })
     
     // Lazy import to avoid build-time issues
     const { HopeAISystemSingleton } = await import('@/lib/hopeai-system')
@@ -62,14 +66,14 @@ export async function DELETE(request: NextRequest) {
     // Remove document from session
     await HopeAISystemSingleton.removeDocumentFromSession(sessionId, fileId)
     
-    console.log('✅ API: Document removed successfully')
+    logger.info('✅ API: Document removed successfully')
     
     return NextResponse.json({
       success: true,
       message: 'Document removed from session'
     })
   } catch (error) {
-    console.error('❌ API Error (Delete Document):', error)
+    logger.error('❌ API Error (Delete Document):', error)
     return NextResponse.json(
       { 
         error: 'Error removing document',

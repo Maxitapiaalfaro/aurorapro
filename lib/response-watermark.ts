@@ -7,6 +7,10 @@
 
 import * as Sentry from '@sentry/nextjs';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 export interface WatermarkMetadata {
   sessionId: string;
   userId: string;
@@ -110,7 +114,7 @@ export function logWatermarkedResponse(metadata: WatermarkMetadata): void {
     });
   } catch (error) {
     // Silently fail - watermarking no debe interrumpir el flujo
-    console.warn('Failed to log watermark:', error);
+    logger.warn('Failed to log watermark:', error);
   }
 }
 

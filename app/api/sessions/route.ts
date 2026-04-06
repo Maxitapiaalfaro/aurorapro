@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 // Allow sufficient time for session creation and retrieval
 export const maxDuration = 30
 
@@ -16,7 +20,7 @@ export async function POST(request: NextRequest) {
     const { userId, mode, agent, patientSessionMeta } = await request.json()
     const verifiedUserId = authResult.authenticated ? authResult.uid : userId
 
-    console.log('🔄 API: Creando nueva sesión...', { userId: verifiedUserId, mode, agent })
+    logger.info('🔄 API: Creando nueva sesión...', { userId: verifiedUserId, mode, agent })
 
     const hopeAISystem = await getGlobalOrchestrationSystem()
 
@@ -29,7 +33,7 @@ export async function POST(request: NextRequest) {
       patientSessionMeta
     )
 
-    console.log('✅ API: Sesión creada exitosamente', { sessionId })
+    logger.info('✅ API: Sesión creada exitosamente', { sessionId })
 
     return NextResponse.json({
       success: true,
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('❌ API Error (Create Session): ' + errorMessage)
+    logger.error('❌ API Error (Create Session): ' + errorMessage)
     return NextResponse.json(
       {
         error: 'Error al crear sesión',
@@ -68,13 +72,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('🔄 API: Obteniendo sesiones del usuario:', verifiedUserId)
+    logger.info('🔄 API: Obteniendo sesiones del usuario:', verifiedUserId)
 
     // Obtener sesiones del usuario mediante el singleton de HopeAI
     const hopeAISystem = await getGlobalOrchestrationSystem()
     const sessions = await hopeAISystem.getUserSessions(verifiedUserId)
 
-    console.log('✅ API: Sesiones obtenidas:', sessions.length)
+    logger.info('✅ API: Sesiones obtenidas:', sessions.length)
 
     return NextResponse.json({
       success: true,
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('❌ API Error (Get Sessions): ' + errorMessage)
+    logger.error('❌ API Error (Get Sessions): ' + errorMessage)
     return NextResponse.json(
       {
         error: 'Error al obtener sesiones',

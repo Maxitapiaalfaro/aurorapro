@@ -26,6 +26,10 @@ import {
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 import { getAuth as getAdminAuth, type Auth as AdminAuth } from 'firebase-admin/auth'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // ---------------------------------------------------------------------------
 // Use bracket notation for env vars to bypass Next.js webpack inlining.
 // See google-genai-config.ts for rationale.
@@ -48,11 +52,11 @@ function resolveCredential() {
       const creds = JSON.parse(jsonEnv)
       if (creds && typeof creds === 'object' && creds.private_key) {
         creds.private_key = creds.private_key.replace(/\\n/g, '\n')
-        console.log('[FirebaseAdmin] Using credentials from JSON env var')
+        logger.info('[FirebaseAdmin] Using credentials from JSON env var')
         return cert(creds)
       }
     } catch {
-      console.warn('[FirebaseAdmin] Invalid JSON in credentials env var')
+      logger.warn('[FirebaseAdmin] Invalid JSON in credentials env var')
     }
   }
 
@@ -65,7 +69,7 @@ function resolveCredential() {
     env('FIREBASE_PRIVATE_KEY')
   if (svcEmail && svcKey) {
     const projectId = env('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || env('FIREBASE_PROJECT_ID') || ''
-    console.log(`[FirebaseAdmin] Using credentials from split env vars (project: ${projectId || 'NOT SET'}, key length: ${svcKey.length} chars)`)
+    logger.info(`[FirebaseAdmin] Using credentials from split env vars (project: ${projectId || 'NOT SET'}, key length: ${svcKey.length} chars)`)
     return cert({
       projectId,
       clientEmail: svcEmail,
@@ -76,14 +80,14 @@ function resolveCredential() {
   // 3. Application Default Credentials (GCP/Cloud Run/local gcloud auth)
   const isVercel = !!env('VERCEL') || !!env('VERCEL_ENV')
   if (isVercel) {
-    console.warn(
+    logger.warn(
       '[FirebaseAdmin] ⚠️ No explicit credentials found on Vercel! ' +
       'Set GOOGLE_APPLICATION_CREDENTIALS_JSON (full JSON) or ' +
       'FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY. ' +
       'Falling back to ADC which will likely fail with PERMISSION_DENIED.'
     )
   }
-  console.log('[FirebaseAdmin] Using Application Default Credentials')
+  logger.info('[FirebaseAdmin] Using Application Default Credentials')
   return applicationDefault()
 }
 
@@ -109,7 +113,7 @@ export function getAdminApp(): App {
     projectId,
   })
 
-  console.log(`✅ [FirebaseAdmin] App initialized (project: ${projectId || 'auto-detected'})`)
+  logger.info(`✅ [FirebaseAdmin] App initialized (project: ${projectId || 'auto-detected'})`)
   return _app
 }
 

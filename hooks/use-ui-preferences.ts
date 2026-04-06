@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react"
 import { uiPreferencesStorage, type UIPreferences } from "@/lib/ui-preferences-storage"
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 const DEFAULT_USER_ID = "default_user"
 
 /**
@@ -17,7 +21,7 @@ export function useUIPreferences(userId: string = DEFAULT_USER_ID) {
         const prefs = await uiPreferencesStorage.getPreferences(userId)
         setPreferences(prefs)
       } catch (error) {
-        console.error("Error loading UI preferences:", error)
+        logger.error("Error loading UI preferences:", error)
         // Set default preferences on error
         setPreferences({
           userId,
@@ -51,7 +55,7 @@ export function useUIPreferences(userId: string = DEFAULT_USER_ID) {
         lastUpdated: new Date().toISOString(),
       })
     } catch (error) {
-      console.error("Error updating UI preference:", error)
+      logger.error("Error updating UI preference:", error)
     }
   }
 

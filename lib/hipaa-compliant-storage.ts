@@ -22,6 +22,10 @@ import Database from 'better-sqlite3'
 import { encrypt, decrypt, verifyEncryptionSetup } from './encryption-utils'
 import type { ChatState, ClinicalFile, FichaClinicaState } from '@/types/clinical-types'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('storage')
+
 /**
  * Configuración del storage
  */
@@ -77,7 +81,7 @@ export class HIPAACompliantStorage {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      console.log('✅ [HIPAA Storage] Already initialized')
+      logger.info('✅ [HIPAA Storage] Already initialized')
       return
     }
 
@@ -96,7 +100,7 @@ export class HIPAACompliantStorage {
       const dataDir = join(process.cwd(), 'data')
       if (!existsSync(dataDir)) {
         mkdirSync(dataDir, { recursive: true })
-        console.log('📁 [HIPAA Storage] Created data directory:', dataDir)
+        logger.info('📁 [HIPAA Storage] Created data directory:', dataDir)
       }
 
       // Inicializar SQLite
@@ -116,8 +120,8 @@ export class HIPAACompliantStorage {
       this.startCacheCleanup()
 
       this.initialized = true
-      console.log('✅ [HIPAA Storage] Initialized successfully')
-      console.log('📊 [HIPAA Storage] Config:', {
+      logger.info('✅ [HIPAA Storage] Initialized successfully')
+      logger.info('📊 [HIPAA Storage] Config:', {
         dbPath,
         maxHotCache: STORAGE_CONFIG.maxHotCacheSessions,
         cacheTTL: `${STORAGE_CONFIG.cacheTTLMinutes}min`,
@@ -125,7 +129,7 @@ export class HIPAACompliantStorage {
       })
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Initialization failed:', error)
+      logger.error('❌ [HIPAA Storage] Initialization failed:', error)
       throw error
     }
   }
@@ -207,7 +211,7 @@ export class HIPAACompliantStorage {
         ON audit_log(timestamp DESC);
     `)
 
-    console.log('✅ [HIPAA Storage] Database schema created')
+    logger.info('✅ [HIPAA Storage] Database schema created')
   }
 
   /**
@@ -262,10 +266,10 @@ export class HIPAACompliantStorage {
       // Audit log
       this.logAccess(chatState.sessionId, 'update', chatState.userId)
 
-      console.log(`💾 [HIPAA Storage] Saved session: ${chatState.sessionId}`)
+      logger.info(`💾 [HIPAA Storage] Saved session: ${chatState.sessionId}`)
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error saving session:', error)
+      logger.error('❌ [HIPAA Storage] Error saving session:', error)
       throw error
     }
   }
@@ -286,7 +290,7 @@ export class HIPAACompliantStorage {
         if (age < ttl) {
           // Cache hit válido
           cached._lastAccessed = Date.now()
-          console.log(`⚡ [HIPAA Storage] Cache HIT: ${sessionId}`)
+          logger.info(`⚡ [HIPAA Storage] Cache HIT: ${sessionId}`)
           this.logAccess(sessionId, 'read', cached.userId)
           return cached
         } else {
@@ -296,7 +300,7 @@ export class HIPAACompliantStorage {
       }
 
       // TIER 2: Cargar desde SQLite
-      console.log(`💾 [HIPAA Storage] Cache MISS: ${sessionId}, loading from DB`)
+      logger.info(`💾 [HIPAA Storage] Cache MISS: ${sessionId}, loading from DB`)
       
       const stmt = this.db.prepare(`
         SELECT encrypted_data, user_id FROM chat_sessions WHERE session_id = ?
@@ -304,7 +308,7 @@ export class HIPAACompliantStorage {
       const row = stmt.get(sessionId) as { encrypted_data: Buffer; user_id: string } | undefined
 
       if (!row) {
-        console.log(`❌ [HIPAA Storage] Session not found: ${sessionId}`)
+        logger.info(`❌ [HIPAA Storage] Session not found: ${sessionId}`)
         return null
       }
 
@@ -326,7 +330,7 @@ export class HIPAACompliantStorage {
       return chatState
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error loading session:', error)
+      logger.error('❌ [HIPAA Storage] Error loading session:', error)
       throw error
     }
   }
@@ -347,7 +351,7 @@ export class HIPAACompliantStorage {
 
     if (oldestKey) {
       this.hotCache.delete(oldestKey)
-      console.log(`🗑️ [HIPAA Storage] Evicted from cache: ${oldestKey}`)
+      logger.info(`🗑️ [HIPAA Storage] Evicted from cache: ${oldestKey}`)
     }
   }
 
@@ -371,11 +375,11 @@ export class HIPAACompliantStorage {
       }
 
       if (evicted > 0) {
-        console.log(`🧹 [HIPAA Storage] Cleanup: evicted ${evicted} expired sessions from cache`)
+        logger.info(`🧹 [HIPAA Storage] Cleanup: evicted ${evicted} expired sessions from cache`)
       }
     }, intervalMs)
 
-    console.log(`⏰ [HIPAA Storage] Cache cleanup scheduled every ${STORAGE_CONFIG.cleanupIntervalMinutes} minutes`)
+    logger.info(`⏰ [HIPAA Storage] Cache cleanup scheduled every ${STORAGE_CONFIG.cleanupIntervalMinutes} minutes`)
   }
 
   /**
@@ -405,7 +409,7 @@ export class HIPAACompliantStorage {
         metadata ? JSON.stringify(metadata) : null
       )
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error logging access:', error)
+      logger.error('❌ [HIPAA Storage] Error logging access:', error)
       // No lanzar error para no interrumpir operación principal
     }
   }
@@ -452,7 +456,7 @@ export class HIPAACompliantStorage {
           const decoded = JSON.parse(Buffer.from(pageToken, 'base64').toString())
           offset = decoded.offset || 0
         } catch (error) {
-          console.warn('Invalid page token, starting from beginning')
+          logger.warn('Invalid page token, starting from beginning')
         }
       }
 
@@ -486,7 +490,7 @@ export class HIPAACompliantStorage {
       return { items, nextPageToken, totalCount, hasNextPage }
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting user sessions:', error)
+      logger.error('❌ [HIPAA Storage] Error getting user sessions:', error)
       return { items: [], totalCount: 0, hasNextPage: false }
     }
   }
@@ -508,10 +512,10 @@ export class HIPAACompliantStorage {
       // Audit log
       this.logAccess(sessionId, 'delete', 'system')
 
-      console.log(`🗑️ [HIPAA Storage] Deleted session: ${sessionId}`)
+      logger.info(`🗑️ [HIPAA Storage] Deleted session: ${sessionId}`)
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error deleting session:', error)
+      logger.error('❌ [HIPAA Storage] Error deleting session:', error)
       throw error
     }
   }
@@ -541,10 +545,10 @@ export class HIPAACompliantStorage {
         file.type || null
       )
 
-      console.log(`💾 [HIPAA Storage] Saved clinical file: ${file.id}`)
+      logger.info(`💾 [HIPAA Storage] Saved clinical file: ${file.id}`)
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error saving clinical file:', error)
+      logger.error('❌ [HIPAA Storage] Error saving clinical file:', error)
       throw error
     }
   }
@@ -573,7 +577,7 @@ export class HIPAACompliantStorage {
       })
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting clinical files:', error)
+      logger.error('❌ [HIPAA Storage] Error getting clinical files:', error)
       return []
     }
   }
@@ -594,7 +598,7 @@ export class HIPAACompliantStorage {
       return JSON.parse(decrypted) as ClinicalFile
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting clinical file:', error)
+      logger.error('❌ [HIPAA Storage] Error getting clinical file:', error)
       return null
     }
   }
@@ -609,10 +613,10 @@ export class HIPAACompliantStorage {
       const stmt = this.db.prepare('DELETE FROM clinical_files WHERE file_id = ?')
       stmt.run(fileId)
 
-      console.log(`🗑️ [HIPAA Storage] Deleted clinical file: ${fileId}`)
+      logger.info(`🗑️ [HIPAA Storage] Deleted clinical file: ${fileId}`)
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error deleting clinical file:', error)
+      logger.error('❌ [HIPAA Storage] Error deleting clinical file:', error)
       throw error
     }
   }
@@ -642,10 +646,10 @@ export class HIPAACompliantStorage {
         Date.now()
       )
 
-      console.log(`💾 [HIPAA Storage] Saved ficha clínica: ${ficha.fichaId}`)
+      logger.info(`💾 [HIPAA Storage] Saved ficha clínica: ${ficha.fichaId}`)
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error saving ficha clínica:', error)
+      logger.error('❌ [HIPAA Storage] Error saving ficha clínica:', error)
       throw error
     }
   }
@@ -666,7 +670,7 @@ export class HIPAACompliantStorage {
       return JSON.parse(decrypted) as FichaClinicaState
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting ficha clínica:', error)
+      logger.error('❌ [HIPAA Storage] Error getting ficha clínica:', error)
       return null
     }
   }
@@ -687,7 +691,7 @@ export class HIPAACompliantStorage {
       })
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting fichas clínicas:', error)
+      logger.error('❌ [HIPAA Storage] Error getting fichas clínicas:', error)
       return []
     }
   }
@@ -708,10 +712,10 @@ export class HIPAACompliantStorage {
 
       this.hotCache.clear()
 
-      console.log('🗑️ [HIPAA Storage] All data cleared')
+      logger.info('🗑️ [HIPAA Storage] All data cleared')
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error clearing data:', error)
+      logger.error('❌ [HIPAA Storage] Error clearing data:', error)
       throw error
     }
   }
@@ -733,7 +737,7 @@ export class HIPAACompliantStorage {
       return stmt.all(sessionId, limit) as AuditLogEntry[]
 
     } catch (error) {
-      console.error('❌ [HIPAA Storage] Error getting audit logs:', error)
+      logger.error('❌ [HIPAA Storage] Error getting audit logs:', error)
       return []
     }
   }
@@ -772,7 +776,7 @@ export class HIPAACompliantStorage {
     this.hotCache.clear()
     this.initialized = false
 
-    console.log('✅ [HIPAA Storage] Shutdown complete')
+    logger.info('✅ [HIPAA Storage] Shutdown complete')
   }
 }
 

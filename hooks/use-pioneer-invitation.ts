@@ -11,6 +11,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSessionMetrics } from './use-session-metrics';
 import type { AgentType } from '@/types/clinical-types';
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 interface PioneerInvitationState {
   shown: boolean;
   responded: boolean;
@@ -102,7 +106,7 @@ export function usePioneerInvitation({
         });
       }
     } catch (error) {
-      console.error('❌ Error cargando estado de invitación:', error);
+      logger.error('❌ Error cargando estado de invitación:', error);
     }
   }, [userId]);
 
@@ -113,7 +117,7 @@ export function usePioneerInvitation({
       localStorage.setItem(storageKey, JSON.stringify(state));
       setInvitationState(state);
     } catch (error) {
-      console.error('❌ Error guardando estado de invitación:', error);
+      logger.error('❌ Error guardando estado de invitación:', error);
     }
   }, [userId]);
 
@@ -162,7 +166,7 @@ export function usePioneerInvitation({
     };
     saveInvitationState(newState);
     
-    console.log('📋 Invitación Pioneer Circle marcada como mostrada:', {
+    logger.info('📋 Invitación Pioneer Circle marcada como mostrada:', {
       userId,
       sessionId,
       shownAt: newState.shownAt
@@ -179,7 +183,7 @@ export function usePioneerInvitation({
     };
     saveInvitationState(newState);
     
-    console.log('📝 Respuesta Pioneer Circle registrada:', {
+    logger.info('📝 Respuesta Pioneer Circle registrada:', {
       userId,
       sessionId,
       response,

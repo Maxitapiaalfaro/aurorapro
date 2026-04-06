@@ -23,6 +23,8 @@ import {
   CACHE_SIZE_UNLIMITED,
   type Firestore,
 } from 'firebase/firestore'
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
 
 // ────────────────────────────────────────────────────────────────────────────
 // Firebase Configuration
@@ -104,7 +106,7 @@ function initializeServices() {
       const { getFirestore } = require('firebase/firestore') as typeof import('firebase/firestore')
       db = getFirestore(app)
     } else {
-      console.error('❌ [Firebase] Error inicializando Firestore:', error)
+      logger.error('❌ [Firebase] Error inicializando Firestore:', error)
       throw error
     }
   }

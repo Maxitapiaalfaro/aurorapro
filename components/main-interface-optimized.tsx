@@ -26,6 +26,10 @@ import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-clie
 import { useAuth } from "@/providers/auth-provider"
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
   if (process.env.NODE_ENV !== 'development') return null
@@ -146,7 +150,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   //         const files = await HopeAISystemSingleton.getPendingFilesForSession(systemState.sessionId)
   //         setPendingFiles(files)  // ← ESTO BORRABA LOS ARCHIVOS EN SERVERLESS
   //       } catch (error) {
-  //         console.error('❌ Error cargando archivos pendientes:', error)
+  //         logger.error('❌ Error cargando archivos pendientes:', error)
   //       }
   //     } else {
   //       setPendingFiles([])
@@ -177,7 +181,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Manejar cambio de agente con métricas Sentry
   const handleAgentChange = async (agent: AgentType) => {
     if (systemState.sessionId) {
-      console.log('🔄 Cambiando a agente:', agent)
+      logger.info('🔄 Cambiando a agente:', agent)
       
       // Instrumentación Sentry para cambio de agente
       return Sentry.startSpan(
@@ -199,18 +203,18 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               
               span.setAttribute("switch.success", true)
               span.setStatus({ code: 1, message: "Agent switch successful" })
-              console.log('✅ Agente cambiado exitosamente a:', agent)
+              logger.info('✅ Agente cambiado exitosamente a:', agent)
             } else {
               span.setAttribute("switch.success", false)
               span.setStatus({ code: 2, message: "Agent switch failed" })
-              console.error('❌ Error cambiando agente')
+              logger.error('❌ Error cambiando agente')
             }
             
             return success
           } catch (err) {
             span.setStatus({ code: 2, message: "Agent switch error" })
             Sentry.captureException(err)
-            console.error('❌ Error en cambio de agente:', err)
+            logger.error('❌ Error en cambio de agente:', err)
             return false
           }
         }
@@ -242,14 +246,14 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           if (nonActiveFiles.length > 0) {
             const fileNames = nonActiveFiles.map(f => f.name).join(', ')
             const errorMessage = `No se puede enviar el mensaje. Los siguientes archivos aún están procesándose: ${fileNames}. Por favor, espera a que terminen de procesarse.`
-            console.warn('⚠️ Archivos no listos:', nonActiveFiles)
+            logger.warn('⚠️ Archivos no listos:', nonActiveFiles)
             throw new Error(errorMessage)
           }
           
           const startTime = Date.now()
-          console.log('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
-          console.log('📎 Archivos adjuntos:', pendingFiles.length)
-          console.log('🏥 Contexto del paciente:', {
+          logger.info('📤 Enviando mensaje HopeAI:', message.substring(0, 50) + '...')
+          logger.info('📎 Archivos adjuntos:', pendingFiles.length)
+          logger.info('🏥 Contexto del paciente:', {
             hasSessionMeta: !!systemState.sessionMeta,
             patientRef: systemState.sessionMeta?.patient?.reference || 'None',
             sessionId: systemState.sessionMeta?.sessionId || 'None'
@@ -272,11 +276,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           }
           const allSessionFiles = Array.from(allSessionFilesMap.values())
 
-          console.log('📁 [MainInterface.handleSendMessage] pendingFiles state:', {
+          logger.info('📁 [MainInterface.handleSendMessage] pendingFiles state:', {
             count: pendingFiles.length,
             files: pendingFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
           })
-          console.log('📁 [MainInterface.handleSendMessage] allSessionFiles (pending + history):', {
+          logger.info('📁 [MainInterface.handleSendMessage] allSessionFiles (pending + history):', {
             count: allSessionFiles.length,
             files: allSessionFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
           })
@@ -287,20 +291,20 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           
           // Limpiar archivos pendientes después del envío exitoso
           setPendingFiles([])
-          console.log('🧹 Archivos pendientes limpiados después del envío exitoso')
+          logger.info('🧹 Archivos pendientes limpiados después del envío exitoso')
           
           const responseTime = Date.now() - startTime
           span.setAttribute("message.response_time", responseTime)
           span.setAttribute("message.success", true)
           span.setStatus({ code: 1, message: "Message sent successfully" })
           
-          console.log('✅ Mensaje enviado exitosamente')
+          logger.info('✅ Mensaje enviado exitosamente')
           return response
         } catch (error) {
           span.setAttribute("message.success", false)
           span.setStatus({ code: 2, message: "Message send failed" })
           Sentry.captureException(error)
-          console.error('❌ Error enviando mensaje:', error)
+          logger.error('❌ Error enviando mensaje:', error)
           throw error
         }
       }
@@ -312,7 +316,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     recordResponse(response)
     
     // Log para tracking
-    console.log('🎯 Respuesta Pioneer Circle:', {
+    logger.info('🎯 Respuesta Pioneer Circle:', {
       userId: systemState.userId,
       sessionId: systemState.sessionId,
       response,
@@ -336,7 +340,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Mostrar invitación cuando sea elegible
   const handleShowPioneerInvitation = () => {
     markAsShown()
-    console.log('📋 Invitación Pioneer Circle mostrada')
+    logger.info('📋 Invitación Pioneer Circle mostrada')
   }
 
   // Manejar inicio de conversación con paciente
@@ -344,7 +348,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // La sesión se crea "lazily" cuando el usuario envía el primer mensaje
   const handlePatientConversationStart = async (patient: PatientRecord, initialMessage?: string) => {
     try {
-      console.log('🏥 Preparando conversación con paciente:', patient.displayName)
+      logger.info('🏥 Preparando conversación con paciente:', patient.displayName)
       
       // Limpiar cualquier error previo
       if (patientConversationError) {
@@ -373,7 +377,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
         patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patient, latestFicha)
       } catch (e) {
-        console.warn('⚠️ No se pudo cargar ficha clínica, usando resumen estándar:', e)
+        logger.warn('⚠️ No se pudo cargar ficha clínica, usando resumen estándar:', e)
         patientSummary = PatientSummaryBuilder.getSummary(patient)
       }
 
@@ -393,7 +397,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       // y cree la sesión con el contexto correcto al enviar el primer mensaje
       setSessionMeta(patientSessionMeta)
       
-      console.log('✅ Contexto del paciente preparado (sesión se creará al enviar primer mensaje):', patient.displayName)
+      logger.info('✅ Contexto del paciente preparado (sesión se creará al enviar primer mensaje):', patient.displayName)
       
       // Cerrar sidebar en mobile después de seleccionar paciente
       if (isMobile) {
@@ -401,21 +405,21 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         setMobileNavOpen(false)
       }
     } catch (error) {
-      console.error('❌ Error en handlePatientConversationStart:', error)
+      logger.error('❌ Error en handlePatientConversationStart:', error)
     }
   }
 
   // Manejar limpieza del contexto del paciente
   // Solo disponible cuando NO hay sesión activa (antes del primer mensaje)
   const handleClearPatientContext = () => {
-    console.log('🧹 Limpiando contexto del paciente')
+    logger.info('🧹 Limpiando contexto del paciente')
     // Limpiar archivos pendientes también
     setPendingFiles([])
     // Resetear sistema completo - vuelve a estado inicial sin paciente
     resetSystem()
     // Incrementar trigger para limpiar selección en la librería de pacientes
     setClearPatientSelectionTrigger(prev => prev + 1)
-    console.log('✅ Contexto del paciente removido - listo para conversación general')
+    logger.info('✅ Contexto del paciente removido - listo para conversación general')
   }
 
   // Función de subida de documentos usando HopeAI System con estado reactivo
@@ -431,7 +435,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         if (!sid) throw new Error('No se pudo crear la sesión para subir documento')
         sessionIdForUpload = sid
       } catch (e) {
-        console.error('❌ No se pudo crear sesión para subir documento', e)
+        logger.error('❌ No se pudo crear sesión para subir documento', e)
         throw e
       }
     }
@@ -439,7 +443,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     setIsUploading(true) // ⭐ Bloquear chat mientras se sube archivo
 
     try {
-      console.log('📎 Subiendo documento:', file.name)
+      logger.info('📎 Subiendo documento:', file.name)
 
       // 🔧 FIX: Llamar al endpoint del servidor para que el archivo se guarde en SQLite
       // ANTES: Llamaba directamente a HopeAISystemSingleton.uploadDocument() que guardaba en IndexedDB (cliente)
@@ -467,7 +471,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           ...uploadedFile,
           processingStatus: uploadedFile.status === 'processed' ? 'active' : 'processing'
         }]
-        console.log('📁 [MainInterface.handleUploadDocument] File added to pendingFiles:', {
+        logger.info('📁 [MainInterface.handleUploadDocument] File added to pendingFiles:', {
           fileId: uploadedFile.id,
           fileName: uploadedFile.name,
           totalPendingFiles: newFiles.length
@@ -487,10 +491,10 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         pollFileStatus(uploadedFile.id, uploadedFile.geminiFileId)
       }
 
-      console.log('✅ Documento subido exitosamente:', uploadedFile.name)
+      logger.info('✅ Documento subido exitosamente:', uploadedFile.name)
       return uploadedFile
     } catch (error) {
-      console.error('❌ Error subiendo documento:', error)
+      logger.error('❌ Error subiendo documento:', error)
       throw error
     } finally {
       setIsUploading(false) // ⭐ Desbloquear chat
@@ -525,12 +529,12 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           ))
           
           if (state === 'ACTIVE') {
-            console.log('✅ Archivo procesado y listo:', fileId)
+            logger.info('✅ Archivo procesado y listo:', fileId)
             return
           }
           
           if (state === 'FAILED') {
-            console.error('❌ Archivo falló en procesamiento:', fileId)
+            logger.error('❌ Archivo falló en procesamiento:', fileId)
             setPendingFiles(prev => prev.map(file => 
               file.id === fileId 
                 ? { ...file, processingStatus: 'error' }
@@ -544,7 +548,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         if (attempts < maxAttempts) {
           setTimeout(checkStatus, 2000) // Verificar cada 2 segundos
         } else {
-          console.warn('⚠️ Timeout verificando estado del archivo:', fileId)
+          logger.warn('⚠️ Timeout verificando estado del archivo:', fileId)
           setPendingFiles(prev => prev.map(file => 
             file.id === fileId 
               ? { ...file, processingStatus: 'timeout' }
@@ -552,7 +556,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           ))
         }
       } catch (error) {
-        console.error('❌ Error verificando estado del archivo:', error)
+        logger.error('❌ Error verificando estado del archivo:', error)
         setPendingFiles(prev => prev.map(file => 
           file.id === fileId 
             ? { ...file, processingStatus: 'error' }
@@ -574,29 +578,29 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const handleNewConversation = async () => {
     // La lógica de creación de sesión se maneja completamente en el Sidebar
     // para evitar la creación duplicada de sesiones
-    console.log('🔄 Main: Delegando creación de nueva conversación al Sidebar')
+    logger.info('🔄 Main: Delegando creación de nueva conversación al Sidebar')
   }
 
   // Handle conversation selection from history
   const handleConversationSelect = async (sessionId: string) => {
     try {
-      console.log('🔄 Cargando conversación desde historial:', sessionId)
+      logger.info('🔄 Cargando conversación desde historial:', sessionId)
       // Clear file state when switching sessions
       setPendingFiles([])
       setSessionUploadedFiles([])
       const success = await loadSession(sessionId)
       if (success) {
-        console.log('✅ Conversación cargada exitosamente')
+        logger.info('✅ Conversación cargada exitosamente')
         // Close sidebar and mobile nav on mobile after selecting conversation
         if (isMobile) {
           setSidebarOpen(false)
           setMobileNavOpen(false) // Also close mobile nav
         }
       } else {
-        console.error('❌ Error cargando la conversación')
+        logger.error('❌ Error cargando la conversación')
       }
     } catch (err) {
-      console.error('❌ Error al cargar conversación:', err)
+      logger.error('❌ Error al cargar conversación:', err)
     }
   }
 
@@ -707,9 +711,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     } catch (err: any) {
       // Diferenciar cancelación de otros errores
       if (err.name === 'AbortError') {
-        console.log('✋ Generación de ficha clínica cancelada por el usuario')
+        logger.info('✋ Generación de ficha clínica cancelada por el usuario')
       } else {
-        console.error('❌ Error generando ficha clínica desde chat:', err)
+        logger.error('❌ Error generando ficha clínica desde chat:', err)
       }
     } finally {
       setIsGenerateFichaLoading(false)
@@ -720,7 +724,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   const handleCancelFichaGeneration = () => {
     if (fichaAbortController) {
       fichaAbortController.abort()
-      console.log('🛑 Cancelando generación de ficha clínica...')
+      logger.info('🛑 Cancelando generación de ficha clínica...')
     }
   }
 
@@ -743,9 +747,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       setLastGeneratedFichaId(null)
       setPreviousFichaBackup(null)
       
-      console.log('↩️ Ficha descartada, revertida a la versión anterior')
+      logger.info('↩️ Ficha descartada, revertida a la versión anterior')
     } catch (err) {
-      console.error('❌ Error descartando ficha:', err)
+      logger.error('❌ Error descartando ficha:', err)
     }
   }
 
@@ -767,7 +771,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       const sorted = (items || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
       setFichasClinicasLocal(sorted)
     } catch (e) {
-      console.error('Error loading fichas clínicas:', e)
+      logger.error('Error loading fichas clínicas:', e)
     }
   }
 

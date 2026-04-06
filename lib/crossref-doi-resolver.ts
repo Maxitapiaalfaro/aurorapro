@@ -13,6 +13,10 @@
 import { academicSourceValidator } from './academic-source-validator'
 import type { ValidatedAcademicSource } from './academic-source-validator'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 // ============================================================================
 // TIPOS Y INTERFACES
 // ============================================================================
@@ -244,7 +248,7 @@ export class CrossrefDOIResolver {
 
       return metadata
     } catch (error) {
-      console.error(`[CrossrefResolver] Error resolving DOI ${doi}:`, error)
+      logger.error(`[CrossrefResolver] Error resolving DOI ${doi}:`, error)
       throw error
     }
   }
@@ -340,13 +344,13 @@ export class CrossrefDOIResolver {
 
           results.push(metadata)
         } catch (error) {
-          console.warn('[CrossrefResolver] Error parsing item:', error)
+          logger.warn('[CrossrefResolver] Error parsing item:', error)
         }
       }
 
       return results
     } catch (error) {
-      console.error('[CrossrefResolver] Error searching:', error)
+      logger.error('[CrossrefResolver] Error searching:', error)
       throw error
     }
   }

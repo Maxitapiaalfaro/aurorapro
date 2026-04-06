@@ -13,6 +13,10 @@ import { crossrefDOIResolver } from './crossref-doi-resolver'
 import { academicSourceValidator } from './academic-source-validator'
 import type { ValidatedAcademicSource } from './academic-source-validator'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('api')
+
 interface PubMedArticle {
   pmid: string
   title: string
@@ -58,7 +62,7 @@ export class PubMedResearchTool {
     const cacheKey = `${query}-${maxResults}-${dateRange}-${sortBy}-${language}`
     const cached = this.cache.get(cacheKey)
     if (cached) {
-      console.log('[PubMedTool] Retornando resultados desde caché')
+      logger.info('[PubMedTool] Retornando resultados desde caché')
       return cached
     }
 
@@ -92,7 +96,7 @@ export class PubMedResearchTool {
 
       return articles
     } catch (error) {
-      console.error("Error searching PubMed:", error)
+      logger.error("Error searching PubMed:", error)
       throw new Error("Failed to search PubMed database")
     }
   }
@@ -111,7 +115,7 @@ export class PubMedResearchTool {
           if (isValid) {
             validatedArticles.push(article)
           } else {
-            console.warn(`[PubMedTool] DOI inválido: ${article.doi}`)
+            logger.warn(`[PubMedTool] DOI inválido: ${article.doi}`)
           }
         } catch (error) {
           // Si falla validación, incluir artículo de todas formas
@@ -136,7 +140,7 @@ export class PubMedResearchTool {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[PubMedTool] Intento ${attempt}/${maxRetries} para ${operation}`)
+        logger.info(`[PubMedTool] Intento ${attempt}/${maxRetries} para ${operation}`)
         
         // Crear AbortController para timeout
         const controller = new AbortController()
@@ -164,7 +168,7 @@ export class PubMedResearchTool {
         
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        console.warn(`[PubMedTool] Error en intento ${attempt} para ${operation}:`, lastError.message)
+        logger.warn(`[PubMedTool] Error en intento ${attempt} para ${operation}:`, lastError.message)
         
         // Si es el último intento, lanzar el error
         if (attempt === maxRetries) {
@@ -173,7 +177,7 @@ export class PubMedResearchTool {
         
         // Backoff exponencial: esperar más tiempo entre reintentos
         const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
-        console.log(`[PubMedTool] Esperando ${backoffMs}ms antes del siguiente intento...`)
+        logger.info(`[PubMedTool] Esperando ${backoffMs}ms antes del siguiente intento...`)
         await new Promise(resolve => setTimeout(resolve, backoffMs))
       }
     }
@@ -353,7 +357,7 @@ export class PubMedResearchTool {
           })
         }
       } catch (error) {
-        console.error("Error parsing article:", error)
+        logger.error("Error parsing article:", error)
       }
     })
 
@@ -461,7 +465,7 @@ ${article.abstract.substring(0, 300)}${article.abstract.length > 300 ? "..." : "
         output: formattedResults
       }
     } catch (error) {
-      console.error('[PubMedTool] Error en executeTool:', error)
+      logger.error('[PubMedTool] Error en executeTool:', error)
       
       // Manejo estructurado de diferentes tipos de errores
       if (error instanceof TypeError && error.message.includes('fetch')) {

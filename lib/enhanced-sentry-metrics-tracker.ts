@@ -27,6 +27,8 @@ import {
   EVENT_TYPES,
   DEFAULT_THRESHOLDS
 } from './enhanced-metrics-types';
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('metrics')
 
 class EnhancedSentryMetricsTracker {
   private config: EnhancedTrackerConfig;
@@ -115,7 +117,7 @@ class EnhancedSentryMetricsTracker {
       identity: userIdentity
     });
 
-    console.log('🔍 Usuario identificado');
+    logger.info('🔍 Usuario identificado');
     return userIdentity;
   }
 
@@ -185,7 +187,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { activation: activationMetrics });
 
-    console.log('🚀 Activación rastreada:', { score: activationMetrics.activationScore, isActivated });
+    logger.info('🚀 Activación rastreada:', { score: activationMetrics.activationScore, isActivated });
     return activationMetrics;
   }
 
@@ -265,7 +267,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { engagement: engagementMetrics });
 
-    console.log('💫 Engagement rastreado:', { score: engagementMetrics.engagementScore });
+    logger.info('💫 Engagement rastreado:', { score: engagementMetrics.engagementScore });
     return engagementMetrics;
   }
 
@@ -319,7 +321,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { value: valueMetrics });
 
-    console.log('💎 Valor rastreado:', { score: valueMetrics.valueScore });
+    logger.info('💎 Valor rastreado:', { score: valueMetrics.valueScore });
     return valueMetrics;
   }
 
@@ -371,7 +373,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { retention: retentionMetrics });
 
-    console.log('🔄 Retención analizada:', { daysSinceLast: daysSinceLast, isChurned: retentionMetrics.isChurned });
+    logger.info('🔄 Retención analizada:', { daysSinceLast: daysSinceLast, isChurned: retentionMetrics.isChurned });
     return retentionMetrics;
   }
 
@@ -414,7 +416,7 @@ class EnhancedSentryMetricsTracker {
       });
     }
 
-    console.log('🎯 Evento de conversión:', event.eventType, { value: event.eventValue });
+    logger.info('🎯 Evento de conversión:', event.eventType, { value: event.eventValue });
   }
 
   // ==========================================
@@ -465,7 +467,7 @@ class EnhancedSentryMetricsTracker {
       }
     });
 
-    console.log('📊 PMF calculado:', { period, score: pmfScore });
+    logger.info('📊 PMF calculado:', { period, score: pmfScore });
     return pmfMetrics;
   }
 

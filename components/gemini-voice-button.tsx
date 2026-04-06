@@ -7,6 +7,10 @@ import { cn } from '@/lib/utils'
 import { useGeminiVoiceTranscription } from '@/hooks/use-gemini-voice-transcription'
 import { toast } from '@/hooks/use-toast'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Componente de botón para grabación y transcripción de voz con Gemini
  * 
@@ -82,7 +86,7 @@ export function GeminiVoiceButton({
 
   // Notificar cambios en estado de transcripción
   useEffect(() => {
-    console.log('🔔 GeminiVoiceButton: Notificando isTranscribing =', isTranscribing)
+    logger.info('🔔 GeminiVoiceButton: Notificando isTranscribing =', isTranscribing)
     onTranscribingChange?.(isTranscribing)
   }, [isTranscribing, onTranscribingChange])
 

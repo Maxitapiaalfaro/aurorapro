@@ -3,6 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
+
+import { createLogger } from '@/lib/logger'
+const logger = createLogger('system')
+
 /**
  * Hook para transcripción de voz a texto usando Gemini API
  * 
@@ -110,7 +114,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
         
         // Si fue cancelado, no transcribir
         if (isCancelledRef.current) {
-          console.log('🚫 Grabación cancelada - omitiendo transcripción')
+          logger.info('🚫 Grabación cancelada - omitiendo transcripción')
           return
         }
         
@@ -124,7 +128,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       }
       
       mediaRecorder.onerror = (event: any) => {
-        console.error('Error en MediaRecorder:', event.error)
+        logger.error('Error en MediaRecorder:', event.error)
         setError('Error al grabar audio: ' + event.error?.message || 'Error desconocido')
         setIsRecording(false)
       }
@@ -142,12 +146,12 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       // Timeout de seguridad: 10 minutos (crítico para sesiones clínicas completas)
       const maxRecordingTime = 600000 // 10 minutos = 600,000 ms
       recordingTimeoutRef.current = setTimeout(() => {
-        console.log('⏰ Límite de 10 minutos alcanzado - deteniendo grabación automáticamente')
+        logger.info('⏰ Límite de 10 minutos alcanzado - deteniendo grabación automáticamente')
         stopRecording()
       }, maxRecordingTime)
       
     } catch (err) {
-      console.error('Error al iniciar grabación:', err)
+      logger.error('Error al iniciar grabación:', err)
       
       let errorMessage = 'Error al acceder al micrófono'
       if (err instanceof Error) {
@@ -193,7 +197,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       
       // Verificar si ya fue cancelado antes de hacer el fetch
       if (controller.signal.aborted) {
-        console.log('❌ Cancelado antes de enviar request')
+        logger.info('❌ Cancelado antes de enviar request')
         return
       }
       
@@ -206,7 +210,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       
       // Verificar si fue cancelado después del fetch
       if (controller.signal.aborted) {
-        console.log('❌ Cancelado después de recibir respuesta')
+        logger.info('❌ Cancelado después de recibir respuesta')
         return
       }
       
@@ -219,7 +223,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       
       // Verificar OTRA VEZ antes de procesar datos
       if (controller.signal.aborted) {
-        console.log('❌ Cancelado antes de procesar transcripción')
+        logger.info('❌ Cancelado antes de procesar transcripción')
         return
       }
       
@@ -238,13 +242,13 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
     } catch (err) {
       // Si fue cancelado, no hacer nada (ya se limpió en cancelTranscription)
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Transcripción cancelada por el usuario')
+        logger.info('Transcripción cancelada por el usuario')
         return
       }
       
       // Solo setear error si no fue cancelado
       if (!controller.signal.aborted) {
-        console.error('Error al transcribir:', err)
+        logger.error('Error al transcribir:', err)
         setError(err instanceof Error ? err.message : 'Error al transcribir audio')
         setIsTranscribing(false)
         setDuration(0)
@@ -258,7 +262,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
   }
 
   const cancelRecording = useCallback(() => {
-    console.log('🚫 Cancelando grabación sin transcribir...')
+    logger.info('🚫 Cancelando grabación sin transcribir...')
     
     // Marcar como cancelado ANTES de detener
     isCancelledRef.current = true
@@ -287,28 +291,28 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
     setIsRecording(false)
     setDuration(0)
     setError(null)
-    console.log('✅ Grabación cancelada y descartada')
+    logger.info('✅ Grabación cancelada y descartada')
   }, [isRecording])
 
   const cancelTranscription = useCallback(() => {
-    console.log('🚫 Cancelando transcripción...', { 
+    logger.info('🚫 Cancelando transcripción...', { 
       hasController: !!abortControllerRef.current, 
       isTranscribing 
     })
     
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
-      console.log('✅ AbortController.abort() llamado')
+      logger.info('✅ AbortController.abort() llamado')
     }
     
     // Limpiar estado inmediatamente (esto hace que el overlay desaparezca)
-    console.log('🔄 Llamando setIsTranscribing(false)...')
+    logger.info('🔄 Llamando setIsTranscribing(false)...')
     setIsTranscribing(false)
-    console.log('🔄 Llamando setDuration(0)...')
+    logger.info('🔄 Llamando setDuration(0)...')
     setDuration(0)
-    console.log('🔄 Llamando setError(null)...')
+    logger.info('🔄 Llamando setError(null)...')
     setError(null)
-    console.log('✅ Estado limpiado, isTranscribing ahora debería ser false')
+    logger.info('✅ Estado limpiado, isTranscribing ahora debería ser false')
   }, [isTranscribing])
 
   const resetTranscript = useCallback(() => {
@@ -338,7 +342,7 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && isRecording) {
-        console.warn('⚠️ Página oculta durante grabación - manteniendo grabación activa')
+        logger.warn('⚠️ Página oculta durante grabación - manteniendo grabación activa')
         // NO detenemos la grabación, solo advertimos
         // MediaRecorder continúa grabando en background
       }
@@ -364,13 +368,13 @@ export function useGeminiVoiceTranscription(): VoiceTranscriptionState & VoiceTr
       
       // Si hay transcripción activa, cancelarla
       if (abortControllerRef.current) {
-        console.warn('⚠️ Componente desmontado durante transcripción - cancelando')
+        logger.warn('⚠️ Componente desmontado durante transcripción - cancelando')
         abortControllerRef.current.abort()
       }
       
       // Si hay grabación activa al desmontar, intentar detenerla
       if (mediaRecorderRef.current && isRecording) {
-        console.warn('⚠️ Componente desmontado durante grabación - deteniendo automáticamente')
+        logger.warn('⚠️ Componente desmontado durante grabación - deteniendo automáticamente')
         mediaRecorderRef.current.stop()
       }
     }
