@@ -18,6 +18,7 @@ import { GoogleGenAI, FunctionDeclaration } from '@google/genai';
 import { IntelligentIntentRouter, OrchestrationResult } from './intelligent-intent-router';
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
+import { createLogger } from '@/lib/logger';
 import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-engine';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import { ai } from './google-genai-config';
@@ -83,6 +84,8 @@ interface DynamicOrchestratorConfig {
  * - Patrones de uso del psicólogo
  * - Especialización clínica requerida
  */
+const logger = createLogger('orchestration');
+
 export class DynamicOrchestrator {
   private ai: GoogleGenAI;
   private intentRouter: IntelligentIntentRouter;
@@ -244,7 +247,7 @@ export class DynamicOrchestrator {
 
 **CONTEXTO PARA ORQUESTACIÓN:** El usuario ha adjuntado ${sessionFiles.length} archivo(s): ${fileNames}. Esta información debe considerarse al seleccionar el agente y herramientas apropiados.`;
       
-      console.log(`[DynamicOrchestrator] Context enriched with ${sessionFiles.length} files:`, fileNames);
+      logger.info(`Context enriched with ${sessionFiles.length} files: ${fileNames}`);
     }
     
     session.conversationHistory.push({
@@ -383,7 +386,7 @@ export class DynamicOrchestrator {
     const messageLevel = levels[level];
     
     if (messageLevel >= configLevel) {
-      console.log(`[DynamicOrchestrator:${level.toUpperCase()}] ${message}`);
+      logger[level](message);
     }
   }
 }
