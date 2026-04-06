@@ -1,5 +1,5 @@
 import { ai, aiFiles } from "./google-genai-config"
-import { createAgentDefinitions, GLOBAL_BASE_INSTRUCTION } from "./agents/agent-definitions"
+import { createAgentDefinitions } from "./agents/agent-definitions"
 import { createUserContent } from "@google/genai"
 import { clinicalFileManager, createPartFromUri } from "./clinical-file-manager"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
