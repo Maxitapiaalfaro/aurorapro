@@ -15,6 +15,9 @@ import { EntityExtractionEngine } from './entity-extraction-engine';
 import { ToolRegistry, ClinicalTool, ClinicalDomain } from './tool-registry';
 import { ContextWindowManager, type ContextWindowConfig } from './context-window-manager';
 import type { AgentType } from '@/types/clinical-types';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('orchestration');
 import {
   OperationalMetadata,
   RoutingDecision,
@@ -140,7 +143,7 @@ export class IntelligentIntentRouter {
       };
 
     } catch (error) {
-      console.error('[IntelligentIntentRouter] Error en orquestación:', error);
+      logger.error('[IntelligentIntentRouter] Error en orquestación:', { error });
       return this.createFallbackOrchestration(userInput, sessionContext, `Orchestration error: ${error}`);
     }
   }
@@ -169,7 +172,7 @@ export class IntelligentIntentRouter {
       const optimizedContext = this.convertToLocalContentType(contextResult.processedContext);
 
       if (this.config.enableLogging) {
-        console.log('🔄 Context Window Processing:', {
+        logger.info('🔄 Context Window Processing', {
           originalMessages: sessionContext.length,
           processedMessages: optimizedContext.length,
           tokensEstimated: contextResult.metrics.tokensEstimated,
@@ -200,7 +203,7 @@ export class IntelligentIntentRouter {
         );
 
         if (this.config.enableLogging) {
-          console.log(`[IntentRouter] Solicitud explícita detectada: ${explicitRequest.requestType}`);
+          logger.info(`[IntentRouter] Solicitud explícita detectada: ${explicitRequest.requestType}`);
         }
 
         const routingDecision: RoutingDecision = {
@@ -236,7 +239,7 @@ export class IntelligentIntentRouter {
       );
 
       if (this.config.enableLogging) {
-        console.log(`[IntentRouter] Entidades extraídas: ${entityExtractionResult.entities.length}`);
+        logger.info(`[IntentRouter] Entidades extraídas: ${entityExtractionResult.entities.length}`);
       }
 
       // Step 4: Calculate combined confidence with dynamic threshold
@@ -254,7 +257,7 @@ export class IntelligentIntentRouter {
         combinedConfidence = Math.min(1.0, combinedConfidence + contextualBoost);
         
         if (this.config.enableLogging) {
-          console.log(`🎯 Contextual boost applied: +${(contextualBoost * 100).toFixed(1)}%`);
+          logger.debug(`🎯 Contextual boost applied: +${(contextualBoost * 100).toFixed(1)}%`);
         }
       }
 
@@ -276,11 +279,12 @@ export class IntelligentIntentRouter {
           intentWeight = 0.75; entityWeight = 0.25;
         }
         
-        console.log(`🎯 Análisis de Confianza Optimizado:`);
-        console.log(`   - Intención: ${classificationResult.confidence.toFixed(3)} (${classificationResult.functionName})`);
-        console.log(`   - Entidades: ${entityExtractionResult.confidence.toFixed(3)} (${entityExtractionResult.entities.length} detectadas)`);
-        console.log(`   - Combinada: ${combinedConfidence.toFixed(3)} (${(intentWeight*100)}% intención + ${(entityWeight*100)}% entidades)`);
-        console.log(`   - Umbral Dinámico: ${dynamicThreshold.toFixed(3)}`);
+        logger.debug('🎯 Análisis de Confianza Optimizado', {
+          intent: `${classificationResult.confidence.toFixed(3)} (${classificationResult.functionName})`,
+          entities: `${entityExtractionResult.confidence.toFixed(3)} (${entityExtractionResult.entities.length} detectadas)`,
+          combined: `${combinedConfidence.toFixed(3)} (${(intentWeight*100)}% intención + ${(entityWeight*100)}% entidades)`,
+          dynamicThreshold: dynamicThreshold.toFixed(3)
+        });
       }
       
       // File-aware override for borderline confidence
@@ -298,7 +302,7 @@ export class IntelligentIntentRouter {
           Math.max(combinedConfidence, dynamicThreshold)
         );
         if (this.config.enableLogging) {
-          console.log('📎 [IntentRouter] File-aware override → clinico');
+          logger.info('📎 [IntentRouter] File-aware override → clinico');
         }
         return {
           success: true,
@@ -309,7 +313,7 @@ export class IntelligentIntentRouter {
       }
 
       if (combinedConfidence < dynamicThreshold) {
-        console.warn(`⚠️ Confianza insuficiente para enrutamiento automático: ${combinedConfidence.toFixed(3)} < ${dynamicThreshold.toFixed(3)}`);
+        logger.warn(`⚠️ Confianza insuficiente para enrutamiento automático: ${combinedConfidence.toFixed(3)} < ${dynamicThreshold.toFixed(3)}`);
 
         const routingDecision: RoutingDecision = {
           agent: this.config.fallbackAgent as AgentType,
@@ -392,7 +396,7 @@ export class IntelligentIntentRouter {
       };
 
     } catch (error) {
-      console.error('[IntentRouter] Error en enrutamiento:', error);
+      logger.error('[IntentRouter] Error en enrutamiento:', { error });
       return this.handleFallback(userInput, sessionContext, `Error: ${error}`);
     }
   }
@@ -446,7 +450,7 @@ export class IntelligentIntentRouter {
     reason: string
   ) {
     if (this.config.enableLogging) {
-      console.log(`[IntentRouter] Fallback activado: ${reason}`);
+      logger.info(`[IntentRouter] Fallback activado: ${reason}`);
     }
 
     const fallbackResult = {
@@ -491,7 +495,7 @@ export class IntelligentIntentRouter {
       optimizationApplied: true
     };
 
-    console.log('[IntentRouter] Decisión de enrutamiento optimizada:', {
+    logger.debug('[IntentRouter] Decisión de enrutamiento optimizada', {
       intent: context.detectedIntent,
       confidence: context.confidence,
       qualityMetrics,
