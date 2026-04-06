@@ -273,8 +273,7 @@ export class SSEClient {
                     break
 
                   case 'chunk':
-                    const timestamp = new Date().toISOString()
-                    console.log(`📝 [SSEClient] Chunk recibido en ${timestamp} (${event.chunk.text?.length || 0} chars) - YIELDING`)
+                    console.log(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars) - YIELDING`)
 
                     // ✅ YIELDAR CHUNK INMEDIATAMENTE para streaming real
                     yield {
@@ -387,7 +386,7 @@ export class SSEClient {
               // Procesar evento según tipo
               switch (event.type) {
                 case 'bullet':
-                  console.log('🎯 [SSEClient] Bullet recibido:', event.bullet.content.substring(0, 50) + '...')
+                  console.log('🎯 [SSEClient] Bullet recibido')
                   if (callbacks.onBullet) {
                     callbacks.onBullet(event.bullet)
                   }
@@ -408,8 +407,7 @@ export class SSEClient {
                   break
 
                 case 'chunk':
-                  const timestamp = new Date().toISOString()
-                  console.log(`📝 [SSEClient] Chunk recibido en ${timestamp} (${event.chunk.text?.length || 0} chars): "${event.chunk.text?.substring(0, 50)}..."`)
+                  console.log(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars)`)
                   if (callbacks.onChunk) {
                     callbacks.onChunk(event.chunk)
                   }
@@ -442,7 +440,6 @@ export class SSEClient {
               }
             } catch (parseError) {
               console.error('❌ [SSEClient] Error parseando evento:', parseError)
-              console.error('Datos del evento:', eventData)
             }
           }
         }

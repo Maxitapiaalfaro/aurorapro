@@ -124,6 +124,26 @@ const SENSITIVE_PATTERNS = [
   /dynamic[_-]?orchestrator/i,
 ]
 
+// 🔒 HIPAA §164.514: Patrones PHI/PII clínica que deben redactarse SIEMPRE
+// (aplican en TODOS los entornos, no solo producción — PII nunca debe estar en logs)
+// Fuente: lib/security/tool-permissions.ts PHI_PATTERNS
+const PHI_REDACTION_PATTERNS: Array<{ name: string; pattern: RegExp; replacement: string }> = [
+  // RUT chileno (12.345.678-9 o 12345678-9)
+  { name: 'RUT', pattern: /\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/gi, replacement: '[RUT-REDACTED]' },
+  // SSN
+  { name: 'SSN', pattern: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[SSN-REDACTED]' },
+  // Email
+  { name: 'email', pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: '[EMAIL-REDACTED]' },
+  // Teléfono (formatos internacionales)
+  { name: 'phone', pattern: /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b/g, replacement: '[PHONE-REDACTED]' },
+  // Fecha de nacimiento explícita
+  { name: 'DOB', pattern: /\b(?:nacido|born|DOB|fecha de nacimiento|f\.?\s?nac)[:\s]+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/gi, replacement: '[DOB-REDACTED]' },
+  // Dirección postal
+  { name: 'address', pattern: /\b(?:calle|av\.|avenida|pasaje|street|avenue)\s+[A-Za-záéíóú\s]+\s+\d+/gi, replacement: '[ADDRESS-REDACTED]' },
+  // Nombre de paciente en contexto clínico
+  { name: 'patient-name', pattern: /\b(?:paciente|cliente|patient)[:\s]+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\b/g, replacement: '[PATIENT-NAME-REDACTED]' },
+]
+
 // 🔒 Palabras clave de arquitectura propietaria que deben sanitizarse
 const PROPRIETARY_KEYWORDS = [
   'DynamicOrchestrator',
@@ -173,16 +193,30 @@ function shouldLogToConsole(level: LogLevel): boolean {
 }
 
 /**
- * 🔒 SEGURIDAD: Sanitiza información sensible de strings
+ * 🔒 HIPAA: Redacta PHI/PII clínica de cualquier string.
+ * Aplica en TODOS los entornos — información de pacientes nunca debe estar en logs.
+ */
+export function redactPHI(str: string): string {
+  let redacted = str
+  for (const { pattern, replacement } of PHI_REDACTION_PATTERNS) {
+    redacted = redacted.replace(pattern, replacement)
+  }
+  return redacted
+}
+
+/**
+ * 🔒 SEGURIDAD: Sanitiza información sensible de strings.
+ * PHI redaction aplica siempre; IP/path redaction solo en producción.
  */
 function sanitizeString(str: string): string {
+  // PHI se redacta SIEMPRE (HIPAA aplica en todos los entornos)
+  let sanitized = redactPHI(str)
+
   if (!isProduction) {
-    return str // En desarrollo, mostrar todo
+    return sanitized // En desarrollo, solo redactar PHI
   }
 
-  let sanitized = str
-
-  // Reemplazar patrones sensibles
+  // Reemplazar patrones sensibles (IP protection — solo producción)
   SENSITIVE_PATTERNS.forEach(pattern => {
     sanitized = sanitized.replace(pattern, '[REDACTED]')
   })
@@ -200,27 +234,28 @@ function sanitizeString(str: string): string {
 }
 
 /**
- * 🔒 SEGURIDAD: Sanitiza objetos de contexto
+ * 🔒 SEGURIDAD: Sanitiza objetos de contexto.
+ * PHI redaction aplica siempre; deep sanitization en producción.
  */
 function sanitizeContext(context?: Record<string, any>): Record<string, any> | undefined {
-  if (!context || !isProduction) {
+  if (!context) {
     return context
   }
 
   const sanitized: Record<string, any> = {}
 
   for (const [key, value] of Object.entries(context)) {
-    // Omitir completamente claves sensibles
-    if (SENSITIVE_PATTERNS.some(pattern => pattern.test(key))) {
+    // En producción: omitir completamente claves sensibles
+    if (isProduction && SENSITIVE_PATTERNS.some(pattern => pattern.test(key))) {
       sanitized[key] = '[REDACTED]'
       continue
     }
 
-    // Sanitizar valores string
+    // Sanitizar valores string (PHI siempre, IP solo en producción)
     if (typeof value === 'string') {
       sanitized[key] = sanitizeString(value)
     } else if (typeof value === 'object' && value !== null) {
-      sanitized[key] = '[OBJECT]' // No exponer estructura de objetos
+      sanitized[key] = isProduction ? '[OBJECT]' : value
     } else {
       sanitized[key] = value
     }
@@ -283,16 +318,16 @@ class Logger {
    */
   warn(message: string, context?: Record<string, any>): void {
     this.log('warn', message, context)
-    
-    // En producción, enviar warnings a Sentry
+
+    // En producción, enviar warnings a Sentry (con PHI redactada)
     if (isProduction) {
-      Sentry.captureMessage(message, {
+      Sentry.captureMessage(redactPHI(message), {
         level: 'warning',
         tags: {
           category: this.category,
           environment: process.env.NODE_ENV
         },
-        extra: context
+        extra: sanitizeContext(context)
       })
     }
   }
@@ -302,8 +337,8 @@ class Logger {
    */
   error(message: string, error?: Error | unknown, context?: Record<string, any>): void {
     this.log('error', message, context)
-    
-    // Siempre enviar errores a Sentry
+
+    // Siempre enviar errores a Sentry (con PHI redactada)
     if (error instanceof Error) {
       Sentry.captureException(error, {
         tags: {
@@ -311,12 +346,12 @@ class Logger {
           environment: process.env.NODE_ENV
         },
         extra: {
-          message,
-          ...context
+          message: redactPHI(message),
+          ...sanitizeContext(context)
         }
       })
     } else {
-      Sentry.captureMessage(message, {
+      Sentry.captureMessage(redactPHI(message), {
         level: 'error',
         tags: {
           category: this.category,
@@ -324,7 +359,7 @@ class Logger {
         },
         extra: {
           error,
-          ...context
+          ...sanitizeContext(context)
         }
       })
     }

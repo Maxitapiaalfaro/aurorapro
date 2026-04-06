@@ -3,15 +3,10 @@
 ## Active Tasks
 <!-- Format: - [ ] Task description | Priority: H/M/L | Status: pending/in-progress/done -->
 
-### P2: Orchestration Dead Code Purge (HIGH — do before decomposition)
-- [ ] Delete `hopeai-orchestration-bridge.ts` (501 lines, migration complete) | Priority: H | Status: pending
-- [ ] Delete bullet generation system (~600 lines in dynamic-orchestrator.ts) | Priority: H | Status: pending
-- [ ] Delete recommendations engine (~400 lines in dynamic-orchestrator.ts) | Priority: M | Status: pending
-- [ ] Delete user-preferences-manager.ts (~315 lines, feeds disabled recs) | Priority: M | Status: pending
-- [ ] Delete edge-case forced routing (~400 lines in intelligent-intent-router.ts) | Priority: M | Status: pending
-- [ ] Delete empty files: `search-query-middleware.ts`, `academic-search-enhancer.ts` | Priority: L | Status: pending
+### P2: Orchestration Dead Code Purge — COMPLETE (2026-04-06)
+- [x] ALL ITEMS COMPLETE — see Completed Tasks section
 
-### P3: Decompose `clinical-agent-router.ts` → `lib/agents/` (HIGH)
+### P3: Decompose `clinical-agent-router.ts` → `lib/agents/` (HIGH — NEXT)
 - [ ] Extract agent prompt templates (~1,400 lines) to `lib/agents/agent-definitions.ts` | Priority: H | Status: pending
 - [ ] Extract streaming handler to `lib/agents/streaming-handler.ts` | Priority: M | Status: pending
 - [ ] Align session manager with Firestore paths | Priority: M | Status: pending
@@ -31,9 +26,22 @@
 - [ ] Decompose after P2-P5 simplify dependencies (also enables server-side storage file elimination) | Priority: L | Status: pending
 
 ### P7: Observability & Performance (LOW)
-- [ ] Replace 30+ console.log calls with structured telemetry | Priority: M | Status: pending
+- [x] PII/PHI redaction in logger + Sentry (Gap P0.2) | Priority: H | Status: done
+- [ ] Replace remaining ~300 console.log calls with structured logger | Priority: M | Status: pending
 - [ ] Consolidate 5 metrics modules into unified tracker | Priority: L | Status: pending
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
+
+### Gap Analysis: Clinical Memory (P2.1)
+- [x] Create `types/memory-types.ts` (ClinicalMemory types) | Priority: H | Status: done
+- [x] Create `lib/clinical-memory-system.ts` (CRUD + relevance search) | Priority: H | Status: done
+- [ ] Wire into `hopeai-system.ts` (after P2 merges) | Priority: M | Status: pending
+- [ ] Add memory extraction at session end | Priority: M | Status: pending
+
+### Server-Side Subcollection Alignment (Phase 4a)
+- [x] Add `addMessage()` to `firestore-storage-adapter.ts` | Priority: H | Status: done
+- [x] Strip `history[]` from session doc, write to subcollection | Priority: H | Status: done
+- [x] `loadChatSession()` reads from subcollection + legacy fallback | Priority: H | Status: done
+- [x] Pass-through in `server-storage-adapter.ts` | Priority: H | Status: done
 
 ## Completed Tasks
 <!-- Move completed items here with date -->
@@ -47,13 +55,38 @@
 - [x] 2026-04-06: **P0 — Firebase Auth Integration** (COMPLETE)
   - `providers/auth-provider.tsx`, `components/auth-gate.tsx`, `lib/security/firebase-auth-verify.ts`
   - 4 API routes secured, `demo_user` hardcodes removed, sign-out in header
-- [x] 2026-04-06: **P1 — Firebase+IndexedDB Offline-First Migration** (COMPLETE)
+- [x] 2026-04-06: **P1 — Firestore Offline-First Migration** (COMPLETE)
   - Created `lib/firestore-client-storage.ts` (545 lines) — replaces 3 client-side storage files (~1,195 lines deleted)
   - Deleted: `clinical-context-storage.ts`, `patient-persistence.ts`, `client-context-persistence.ts`
-  - Migrated: 5 hooks, 5 components, server-side patient reads (firebase-admin)
   - Messages as Firestore subcollection (O(1) writes), `onSnapshot` real-time subscriptions
-  - `firestore.rules` created with psychologist-scoped access + collectionGroup rule
-  - Server-side files (`server-storage-adapter.ts`, `hipaa-compliant-storage.ts`, `server-storage-memory.ts`) intentionally kept — still used by server pipeline
+  - `firestore.rules` created (not yet deployed)
+  - Server-side files intentionally kept — future P6 target
+- [x] 2026-04-06: **P2 — Orchestration Dead Code Purge** (COMPLETE)
+  - **12 files deleted**: `hopeai-orchestration-bridge.ts`, `user-preferences-manager.ts`, `index.ts`, `orchestration-singleton.ts`, `orchestrator-monitoring.ts`, `search-query-middleware.ts`, `academic-search-enhancer.ts`, 4 `/api/orchestration/` routes, `examples/orchestration-setup.ts`
+  - **1 file cleaned**: `dynamic-orchestrator.ts` (1,092→452 lines, -640 lines)
+  - `intelligent-intent-router.ts` already clean (1,538 lines — dead code removed in prior session)
+  - **3 files surgically edited**: `hopeai-system.ts` (dead re-export + getUserAnalytics), `pioneer-circle/route.ts` (unused import), `admin-auth.ts` (dead orchestration routes)
+  - Total removed: ~3,838 lines of dead/disabled code
+  - Verification: zero new TypeScript errors (4 pre-existing remain unchanged), zero dangling imports
+- [x] 2026-04-06: **Gap P0.2 — PII/PHI Filtering in Logs** (COMPLETE)
+  - Extended `lib/logger.ts` with `PHI_REDACTION_PATTERNS` (RUT, SSN, email, phone, DOB, address, patient names)
+  - `redactPHI()` applies in ALL environments (HIPAA compliance), exported for reuse
+  - `sanitizeContext()` now redacts PHI in all envs (not just production)
+  - Sentry `warn()` and `error()` calls now redact PHI before sending
+  - Added `beforeBreadcrumb` + PHI redaction to `beforeSend` in all 3 Sentry configs (server, edge, client)
+  - Removed PII from highest-risk console.log calls: patient names, userIds, service account emails
+  - Files modified: `logger.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation-client.ts`, `clinical-pattern-analyzer.ts`, `firestore-storage-adapter.ts`, `enhanced-sentry-metrics-tracker.ts`, `firebase-admin-config.ts`, `clinical-agent-router.ts`, `sse-client.ts`
+- [x] 2026-04-06: **Phase 4a — Server-Side Messages Subcollection** (COMPLETE)
+  - Added `addMessage()` to `firestore-storage-adapter.ts` (O(1) per message, matches client-side)
+  - `saveChatSession()` strips `history[]` from session doc, writes messages to subcollection in batches
+  - `loadChatSession()` reads from `messages` subcollection with legacy inline fallback
+  - Pass-through `addMessage()` added to `server-storage-adapter.ts`
+- [x] 2026-04-06: **Gap P2.1 — Clinical Memory System Foundation** (COMPLETE)
+  - Created `types/memory-types.ts` (ClinicalMemory, ClinicalMemoryCategory, ClinicalMemoryQueryOptions)
+  - Created `lib/clinical-memory-system.ts` — CRUD (save, get, update, deactivate) + keyword relevance search
+  - Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
+  - Spanish stop-words tokenizer, combined scoring (60% keyword, 20% relevance, 20% confidence)
+  - Uses safe logger (no console.log), firebase-admin SDK, immutable field protection
 
 ## Review Notes
 <!-- Post-task review observations -->

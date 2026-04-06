@@ -2826,7 +2826,7 @@ Como especialista en evidencia científica, puedes utilizar este material para i
     // 4. CONTEXTO DEL CASO CLÍNICO (si hay paciente)
     if (enrichedContext.patient_reference) {
       contextSections.push(this.buildClinicalCaseContextSection(enrichedContext))
-      console.log(`🏥 [ClinicalRouter] Clinical case context included for patient: ${enrichedContext.patient_reference}`)
+      console.log(`🏥 [ClinicalRouter] Clinical case context included`)
     }
 
     // 5. ENTIDADES EXTRAÍDAS (si están disponibles)

@@ -20,9 +20,6 @@ import {
   OperationalMetadata,
   RoutingDecision,
   RoutingReason,
-  EdgeCaseDetectionResult,
-  EdgeCaseDetectionConfig,
-  DEFAULT_EDGE_CASE_CONFIG
 } from '@/types/operational-metadata';
 
 // Tipos para el contexto de selección de herramientas
@@ -398,24 +395,6 @@ export class IntelligentIntentRouter {
         });
       }
 
-      // Paso 0.5: METADATA-INFORMED ROUTING - Detección de casos límite
-      // 🚨 EDGE CASE FORCED ROUTING: DISABLED
-      // Edge case detection was routing all messages containing sensitive keywords
-      // (risk, stress, sensitive content) directly to clinico before the intent
-      // classifier could analyze the full context. This caused clinical supervision
-      // requests (e.g. "diagnóstico diferencial") to be misrouted to the documentalist.
-      // The intent router's classification step now handles routing for all messages,
-      // allowing proper context-based discrimination.
-      if (operationalMetadata) {
-        // Log edge case signals for observability, but do NOT override routing
-        const edgeCaseRisk = this.isEdgeCaseRisk(operationalMetadata);
-        const edgeCaseStress = this.isEdgeCaseStress(operationalMetadata);
-        const edgeCaseSensitive = this.isEdgeCaseSensitiveContent(userInput, operationalMetadata);
-
-        if (edgeCaseRisk || edgeCaseStress || edgeCaseSensitive) {
-          console.log(`ℹ️ [IntentRouter] Edge case signals detected (risk=${edgeCaseRisk}, stress=${edgeCaseStress}, sensitive=${edgeCaseSensitive}) - proceeding with standard classification`);
-        }
-      }
 
       // Paso 1: Detectar si es una solicitud explícita de cambio de agente
       const explicitRequest = this.detectExplicitAgentRequest(userInput);
@@ -1128,51 +1107,7 @@ ${(() => {
       return { isExplicit: true, requestType: 'academico' };
     }
     
-    // DESHABILITADO: Patrones contextuales que usurpaban al orquestador
-    // La lógica contextual debe ser manejada por el análisis semántico del orquestador
-    /*
-    // Verificar patrones contextuales implícitos
-    if (contextualActivationPatterns.some(pattern => pattern.test(input))) {
-      // Buscar referencias contextuales a agentes en el historial
-      const contextualRefs = this.contextWindowManager.getContextualReferences();
-      const agentReferences = contextualRefs.filter(ref => 
-        ref.type === 'agent_mention' && ref.relevance > 0.6
-      );
-      
-      if (agentReferences.length > 0) {
-        // Determinar el agente más relevante mencionado recientemente
-        const mostRelevantRef = agentReferences[0]; // Ya están ordenados por relevancia
-        const agentType = this.extractAgentTypeFromReference(mostRelevantRef.content);
-        
-        if (agentType) {
-          return { isExplicit: true, requestType: agentType };
-        }
-      }
-    }
-    */
-    
     return { isExplicit: false, requestType: '' };
-  }
-  
-  /**
-   * Extrae el tipo de agente de una referencia contextual
-   */
-  private extractAgentTypeFromReference(referenceContent: string): string | null {
-    const content = referenceContent.toLowerCase();
-    
-    if (content.includes('especialista en documentación') || content.includes('documentación') || content.includes('clínico') || content.includes('clinical')) {
-      return 'clinico';
-    }
-    
-    if (content.includes('investigador') || content.includes('académico') || content.includes('academic')) {
-      return 'academico';
-    }
-    
-    if (content.includes('supervisor clínico') || content.includes('supervisor') || content.includes('socrático') || content.includes('socratic')) {
-      return 'socratico';
-    }
-    
-    return null;
   }
   
 
@@ -1532,189 +1467,6 @@ ${(() => {
     };
   }
 
-  /**
-   * EDGE CASE DETECTION: Detecta casos límite por RIESGO
-   * Casos límite de riesgo deben enrutarse al agente clínico (más robusto)
-   */
-  private isEdgeCaseRisk(metadata: OperationalMetadata): boolean {
-    return (
-      metadata.risk_level === 'critical' ||
-      metadata.risk_level === 'high' ||
-      metadata.risk_flags_active.length > 0 ||
-      metadata.requires_immediate_attention
-    );
-  }
-
-  /**
-   * EDGE CASE DETECTION: Detecta casos límite por ESTRÉS del sistema
-   * Ping-pong extremo o sesiones muy extendidas requieren agente robusto
-   */
-  private isEdgeCaseStress(
-    metadata: OperationalMetadata,
-    config: EdgeCaseDetectionConfig = DEFAULT_EDGE_CASE_CONFIG
-  ): boolean {
-    const { stress } = config;
-
-    return (
-      metadata.consecutive_switches > stress.max_consecutive_switches ||
-      metadata.session_duration_minutes > stress.max_session_duration_minutes ||
-      (metadata.time_of_day === 'night' &&
-       metadata.session_duration_minutes > stress.night_session_threshold_minutes)
-    );
-  }
-
-  /**
-   * EDGE CASE DETECTION: Detecta casos límite por CONTENIDO SENSIBLE
-   * Keywords sensibles + contexto de riesgo = caso límite
-   */
-  private isEdgeCaseSensitiveContent(
-    userInput: string,
-    metadata: OperationalMetadata,
-    config: EdgeCaseDetectionConfig = DEFAULT_EDGE_CASE_CONFIG
-  ): boolean {
-    const { risk } = config;
-    const inputLower = userInput.toLowerCase();
-
-    // Detectar keywords críticas
-    const hasCriticalKeyword = risk.critical_keywords.some(keyword =>
-      inputLower.includes(keyword.toLowerCase())
-    );
-
-    // Detectar keywords de alto riesgo
-    const hasHighRiskKeyword = risk.high_risk_keywords.some(keyword =>
-      inputLower.includes(keyword.toLowerCase())
-    );
-
-    // Si requiere contexto, verificar que haya risk flags activos
-    if (risk.require_context_for_detection) {
-      return (hasCriticalKeyword || hasHighRiskKeyword) && (
-        metadata.risk_flags_active.length > 0 ||
-        metadata.risk_level === 'high' ||
-        metadata.risk_level === 'critical'
-      );
-    }
-
-    // Si no requiere contexto, cualquier keyword crítica es suficiente
-    return hasCriticalKeyword;
-  }
-
-  /**
-   * INTELLIGENT ROUTING: Selecciona agente con detección de casos límite
-   * Fallback a socratico (agente general), escalamiento a clínico en casos límite
-   */
-  private selectAgentWithIntelligentRouting(
-    classificationResult: IntentClassificationResult,
-    operationalMetadata: OperationalMetadata,
-    userInput: string,
-    config: EdgeCaseDetectionConfig = DEFAULT_EDGE_CASE_CONFIG
-  ): RoutingDecision {
-    const detectedFactors: string[] = [];
-
-    // 1. DETECCIÓN: Caso límite por riesgo crítico → Clínico
-    if (this.isEdgeCaseRisk(operationalMetadata)) {
-      console.log('🚨 EDGE CASE DETECTED: Risk critical → Routing to clinico');
-      detectedFactors.push('risk_level_' + operationalMetadata.risk_level);
-      if (operationalMetadata.risk_flags_active.length > 0) {
-        detectedFactors.push(...operationalMetadata.risk_flags_active.map(flag => 'risk_flag_' + flag));
-      }
-      if (operationalMetadata.requires_immediate_attention) {
-        detectedFactors.push('requires_immediate_attention');
-      }
-
-      return {
-        agent: 'clinico',
-        confidence: 1.0,
-        reason: RoutingReason.CRITICAL_RISK_OVERRIDE,
-        metadata_factors: detectedFactors,
-        is_edge_case: true,
-        edge_case_type: 'risk'
-      };
-    }
-
-    // 2. DETECCIÓN: Caso límite por escenario de estrés → Clínico
-    if (this.isEdgeCaseStress(operationalMetadata, config)) {
-      console.log('⚠️ EDGE CASE DETECTED: Stress scenario → Routing to clinico');
-      if (operationalMetadata.consecutive_switches > config.stress.max_consecutive_switches) {
-        detectedFactors.push(`consecutive_switches_${operationalMetadata.consecutive_switches}`);
-      }
-      if (operationalMetadata.session_duration_minutes > config.stress.max_session_duration_minutes) {
-        detectedFactors.push(`session_duration_${operationalMetadata.session_duration_minutes}min`);
-      }
-      if (operationalMetadata.time_of_day === 'night') {
-        detectedFactors.push('night_session');
-      }
-
-      return {
-        agent: 'clinico',
-        confidence: 1.0,
-        reason: RoutingReason.STRESS_OVERRIDE,
-        metadata_factors: detectedFactors,
-        is_edge_case: true,
-        edge_case_type: 'stress'
-      };
-    }
-
-    // 3. DETECCIÓN: Caso límite por contenido sensible → Clínico
-    if (this.isEdgeCaseSensitiveContent(userInput, operationalMetadata, config)) {
-      console.log('⚠️ EDGE CASE DETECTED: Sensitive content → Routing to clinico');
-      detectedFactors.push('sensitive_keyword_detected');
-      if (operationalMetadata.risk_flags_active.length > 0) {
-        detectedFactors.push(...operationalMetadata.risk_flags_active.map(flag => 'risk_flag_' + flag));
-      }
-
-      return {
-        agent: 'clinico',
-        confidence: 1.0,
-        reason: RoutingReason.SENSITIVE_CONTENT_OVERRIDE,
-        metadata_factors: detectedFactors,
-        is_edge_case: true,
-        edge_case_type: 'sensitive_content'
-      };
-    }
-
-    // 4. CLASIFICACIÓN NORMAL: Alta confianza → Usar clasificación
-    if (classificationResult.confidence >= config.confidence.high_confidence_threshold) {
-      const agent = this.mapFunctionToAgent(classificationResult.functionName);
-      detectedFactors.push('high_confidence_classification');
-      detectedFactors.push(`confidence_${(classificationResult.confidence * 100).toFixed(0)}pct`);
-
-      return {
-        agent,
-        confidence: classificationResult.confidence,
-        reason: RoutingReason.HIGH_CONFIDENCE_CLASSIFICATION,
-        metadata_factors: detectedFactors,
-        is_edge_case: false
-      };
-    }
-
-    // 5. FALLBACK: Baja confianza o ambigüedad → Socratico (agente general)
-    if (classificationResult.confidence < config.confidence.high_confidence_threshold ||
-        classificationResult.requiresClarification) {
-      console.log(`ℹ️ FALLBACK: Low confidence (${classificationResult.confidence.toFixed(2)}) → Defaulting to socratico`);
-      detectedFactors.push('low_confidence');
-      detectedFactors.push(`confidence_${(classificationResult.confidence * 100).toFixed(0)}pct`);
-      if (classificationResult.requiresClarification) {
-        detectedFactors.push('requires_clarification');
-      }
-
-      return {
-        agent: 'socratico',
-        confidence: classificationResult.confidence,
-        reason: RoutingReason.FALLBACK_LOW_CONFIDENCE,
-        metadata_factors: detectedFactors,
-        is_edge_case: false
-      };
-    }
-
-    // 6. DEFAULT: Socratico
-    return {
-      agent: 'socratico',
-      confidence: 0.5,
-      reason: RoutingReason.FALLBACK_AMBIGUOUS_QUERY,
-      metadata_factors: ['default_fallback'],
-      is_edge_case: false
-    };
-  }
 
   /**
    * Helper: Mapea function name a agent type

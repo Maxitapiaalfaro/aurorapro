@@ -1,38 +1,49 @@
 import 'server-only'
 
 /**
- * Firestore Storage Adapter — Phase 2: Server-side Persistent Storage
+ * Firestore Storage Adapter — Phase 2.1: Messages Subcollection
  *
- * Replaces MemoryServerStorage with Firestore (firebase-admin) for durable,
- * cloud-persistent session storage. Implements the same interface so it can
- * be used as a drop-in replacement in ServerStorageAdapter.
+ * Server-side Firestore storage using firebase-admin SDK.
+ * Messages are stored in a subcollection matching the client-side pattern
+ * in firestore-client-storage.ts for real-time sync compatibility.
  *
  * Multi-tenant Firestore hierarchy:
  *   psychologists/{psychologistId}/patients/{patientId}/sessions/{sessionId}
+ *   psychologists/{psychologistId}/patients/{patientId}/sessions/{sessionId}/messages/{messageId}
  *   psychologists/{psychologistId}/clinical_files/{fileId}
  *   psychologists/{psychologistId}/patients/{patientId}/fichas/{fichaId}
  *
  * When no patient selector exists yet, uses DEFAULT_PATIENT_ID = 'default_patient'.
  *
  * @module lib/firestore-storage-adapter
- * @version 1.0.0 — Phase 2: Firestore Migration
+ * @version 2.0.0 — Messages subcollection (matches client-side pattern)
  */
 
 import type {
   ChatState,
+  ChatMessage,
   ClinicalFile,
   FichaClinicaState,
   PaginationOptions,
   PaginatedResponse,
 } from '@/types/clinical-types'
 import { getAdminApp } from './firebase-admin-config'
-import { getFirestore, type Firestore, type DocumentData, type Query } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, type Firestore, type DocumentData, type Query } from 'firebase-admin/firestore'
+import { createLogger } from '@/lib/logger'
+
+const logger = createLogger('storage')
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
 // ────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_PATIENT_ID = 'default_patient'
+
+/**
+ * Firestore batch writes are limited to 500 operations.
+ * We use this to chunk message writes in saveChatSession().
+ */
+const FIRESTORE_BATCH_LIMIT = 500
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers: Date serialization
@@ -85,23 +96,22 @@ export class FirestoreStorageAdapter {
     try {
       // A lightweight read of a non-existent document — costs nothing but proves auth works
       await this.db.collection('_health').doc('probe').get()
-      console.log('✅ [Firestore] Initialized — Admin SDK persistent cloud storage active (credentials verified)')
+      logger.info('Initialized — Admin SDK persistent cloud storage active (credentials verified)')
     } catch (probeError: any) {
       const code = probeError?.code ?? probeError?.details ?? ''
       const msg = probeError?.message ?? ''
       if (code === 7 || msg.includes('PERMISSION_DENIED') || msg.includes('Missing or insufficient permissions')) {
-        console.error(
-          '🚨 [Firestore] PERMISSION_DENIED during connectivity probe!\n' +
-          '   This means the Admin SDK credentials do not have Firestore access.\n' +
-          '   ➤ Ensure the service account has the "Cloud Datastore User" IAM role.\n' +
-          '   ➤ Verify FIREBASE_PROJECT_ID matches the Firestore project.\n' +
-          '   ➤ Verify FIREBASE_CLIENT_EMAIL belongs to the correct project.\n' +
-          '   ➤ Check that firebase-admin is in serverExternalPackages (next.config.mjs).\n' +
-          '   Error:', msg
+        logger.error(
+          'PERMISSION_DENIED during connectivity probe! ' +
+          'Ensure the service account has the "Cloud Datastore User" IAM role. ' +
+          'Verify FIREBASE_PROJECT_ID matches the Firestore project. ' +
+          'Verify FIREBASE_CLIENT_EMAIL belongs to the correct project. ' +
+          'Check that firebase-admin is in serverExternalPackages (next.config.mjs).',
+          probeError
         )
       } else {
         // Non-permission errors (network, etc.) — log but don't block init
-        console.warn('⚠️ [Firestore] Connectivity probe failed (non-critical):', msg)
+        logger.warn('Connectivity probe failed (non-critical)', { error: msg })
       }
     }
   }
@@ -109,7 +119,7 @@ export class FirestoreStorageAdapter {
   async shutdown(): Promise<void> {
     // firebase-admin manages its own connection pool; nothing to close.
     this.initialized = false
-    console.log('🧹 [Firestore] Shutdown (connection pool managed by firebase-admin)')
+    logger.info('Shutdown (connection pool managed by firebase-admin)')
   }
 
   // ─── Path helpers ────────────────────────────────────────────────────────
@@ -138,6 +148,14 @@ export class FirestoreStorageAdapter {
   }
 
   /**
+   * Messages subcollection: .../sessions/{sessionId}/messages/{messageId}
+   * Matches the client-side path in firestore-client-storage.ts.
+   */
+  private messagesColRef(userId: string, patientId: string, sessionId: string) {
+    return this.sessionDocRef(userId, patientId, sessionId).collection('messages')
+  }
+
+  /**
    * Clinical files path: psychologists/{userId}/clinical_files/{fileId}
    */
   private clinicalFileDocRef(userId: string, fileId: string) {
@@ -163,6 +181,42 @@ export class FirestoreStorageAdapter {
 
   // ─── Chat Sessions ──────────────────────────────────────────────────────
 
+  /**
+   * Add a single message to the messages subcollection.
+   * O(1) per message — matches the client-side addMessage() pattern.
+   *
+   * The session doc's metadata.lastUpdated is touched via serverTimestamp()
+   * so that real-time listeners and pagination queries reflect the change.
+   */
+  async addMessage(
+    userId: string,
+    patientId: string,
+    sessionId: string,
+    message: ChatMessage
+  ): Promise<void> {
+    if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
+
+    const msgRef = this.messagesColRef(userId, patientId, sessionId).doc(message.id)
+    await msgRef.set(message)
+
+    // Touch the session's lastUpdated timestamp
+    const sessRef = this.sessionDocRef(userId, patientId, sessionId)
+    await sessRef.set(
+      { metadata: { lastUpdated: FieldValue.serverTimestamp() } },
+      { merge: true }
+    )
+
+    logger.debug('Added message to subcollection', {
+      sessionId,
+      messageId: message.id,
+      role: message.role,
+    })
+  }
+
+  /**
+   * Save a chat session. Messages are written to the subcollection
+   * (matching the client-side pattern) and stripped from the session document.
+   */
   async saveChatSession(chatState: ChatState): Promise<void> {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
 
@@ -174,17 +228,49 @@ export class FirestoreStorageAdapter {
     chatState.metadata.createdAt = new Date(chatState.metadata.createdAt)
     chatState.metadata.lastUpdated = new Date(chatState.metadata.lastUpdated)
 
+    // Extract messages — they go to the subcollection, not inline
+    const messages = chatState.history || []
+    const { history: _history, ...sessionWithoutHistory } = chatState
+
     // Store a flat _userId and _patientId at the doc root for index queries
     const docData: DocumentData = {
-      ...chatState,
+      ...sessionWithoutHistory,
       _userId: userId,
       _patientId: patientId,
     }
 
     await ref.set(docData, { merge: true })
-    console.log(`💾 [Firestore] Saved session: ${chatState.sessionId} (user: ${userId}, patient: ${patientId})`)
+
+    // Write messages to subcollection in batches (max 500 per batch)
+    if (messages.length > 0) {
+      const db = this.getDb()
+      for (let i = 0; i < messages.length; i += FIRESTORE_BATCH_LIMIT) {
+        const chunk = messages.slice(i, i + FIRESTORE_BATCH_LIMIT)
+        const batch = db.batch()
+        for (const msg of chunk) {
+          const msgRef = this.messagesColRef(userId, patientId, chatState.sessionId).doc(msg.id)
+          batch.set(msgRef, msg)
+        }
+        await batch.commit()
+      }
+      logger.debug('Wrote messages to subcollection', {
+        sessionId: chatState.sessionId,
+        count: messages.length,
+      })
+    }
+
+    logger.info('Saved session', {
+      sessionId: chatState.sessionId,
+      userId,
+      patientId,
+      messageCount: messages.length,
+    })
   }
 
+  /**
+   * Load a chat session with messages from the subcollection.
+   * Falls back to inline history[] for legacy sessions that haven't been migrated.
+   */
   async loadChatSession(sessionId: string): Promise<ChatState | null> {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
 
@@ -197,8 +283,25 @@ export class FirestoreStorageAdapter {
 
     if (snapshot.empty) return null
 
-    const data = snapshot.docs[0]!.data()
-    return reviveDates(data) as ChatState
+    const sessionDoc = snapshot.docs[0]!
+    const data = reviveDates(sessionDoc.data()) as ChatState
+
+    // Try loading messages from subcollection first
+    const msgsSnapshot = await sessionDoc.ref
+      .collection('messages')
+      .orderBy('timestamp', 'asc')
+      .get()
+
+    if (!msgsSnapshot.empty) {
+      // Subcollection messages found — use them
+      data.history = msgsSnapshot.docs.map(d => reviveDates(d.data()) as ChatMessage)
+    } else if (!data.history || data.history.length === 0) {
+      // No subcollection messages and no inline history
+      data.history = []
+    }
+    // else: keep the inline history from the doc (legacy fallback)
+
+    return data
   }
 
   async getUserSessions(userId: string): Promise<ChatState[]> {
@@ -267,6 +370,9 @@ export class FirestoreStorageAdapter {
     return { items, nextPageToken, totalCount, hasNextPage }
   }
 
+  /**
+   * Delete a session and all its messages in the subcollection.
+   */
   async deleteChatSession(sessionId: string): Promise<void> {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
 
@@ -277,8 +383,26 @@ export class FirestoreStorageAdapter {
       .get()
 
     if (!snapshot.empty) {
-      await snapshot.docs[0]!.ref.delete()
-      console.log(`🗑️ [Firestore] Deleted session: ${sessionId}`)
+      const sessionRef = snapshot.docs[0]!.ref
+
+      // Delete all messages in the subcollection first
+      const msgsSnapshot = await sessionRef.collection('messages').get()
+      if (!msgsSnapshot.empty) {
+        const db = this.getDb()
+        for (let i = 0; i < msgsSnapshot.docs.length; i += FIRESTORE_BATCH_LIMIT) {
+          const chunk = msgsSnapshot.docs.slice(i, i + FIRESTORE_BATCH_LIMIT)
+          const batch = db.batch()
+          chunk.forEach(d => batch.delete(d.ref))
+          await batch.commit()
+        }
+      }
+
+      // Delete the session document
+      await sessionRef.delete()
+      logger.info('Deleted session and messages', {
+        sessionId,
+        messagesDeleted: msgsSnapshot.empty ? 0 : msgsSnapshot.docs.length,
+      })
     }
   }
 
@@ -304,7 +428,7 @@ export class FirestoreStorageAdapter {
     }
 
     await ref.set(docData, { merge: true })
-    console.log(`💾 [Firestore] Saved clinical file: ${file.id} (owner: ${userId})`)
+    logger.info('Saved clinical file', { fileId: file.id, userId })
   }
 
   async getClinicalFiles(sessionId?: string): Promise<ClinicalFile[]> {
@@ -345,11 +469,11 @@ export class FirestoreStorageAdapter {
 
     if (!snapshot.empty) {
       await snapshot.docs[0]!.ref.delete()
-      console.log(`🗑️ [Firestore] Deleted clinical file: ${fileId}`)
+      logger.info('Deleted clinical file', { fileId })
     }
   }
 
-  // ─── Fichas Clínicas ────────────────────────────────────────────────────
+  // ─── Fichas Clinicas ────────────────────────────────────────────────────
 
   async saveFichaClinica(ficha: FichaClinicaState): Promise<void> {
     if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
@@ -368,7 +492,7 @@ export class FirestoreStorageAdapter {
     }
 
     await ref.set(docData, { merge: true })
-    console.log(`💾 [Firestore] Saved ficha clínica: ${ficha.fichaId} (patient: ${ficha.pacienteId})`)
+    logger.info('Saved ficha clinica', { fichaId: ficha.fichaId, pacienteId: ficha.pacienteId })
   }
 
   async getFichaClinicaById(fichaId: string): Promise<FichaClinicaState | null> {
@@ -401,7 +525,7 @@ export class FirestoreStorageAdapter {
   async clearAllData(): Promise<void> {
     // Safety: in production, this should be restricted.
     // For now, log a warning and no-op.
-    console.warn('⚠️ [Firestore] clearAllData() called — no-op in Firestore adapter for safety')
+    logger.warn('clearAllData() called — no-op in Firestore adapter for safety')
   }
 
   getStorageStats() {

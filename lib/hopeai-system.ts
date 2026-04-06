@@ -129,10 +129,8 @@ export class HopeAISystem {
           console.log('🔧 [HopeAISystem] Creating dynamic orchestrator...')
           const orch = new DynamicOrchestrator(clinicalAgentRouter, {
             enableAdaptiveLearning: false,
-            enableRecommendations: false,
-            asyncRecommendations: false,          // 🚀 Performance optimization
-            toolContinuityThreshold: 3,         // 🛠️ Smart tool persistence
-            dominantTopicsUpdateInterval: 5,    // 📊 Optimized update frequency
+            toolContinuityThreshold: 3,
+            dominantTopicsUpdateInterval: 5,
             maxToolsPerSession: 20,
             confidenceThreshold: 0.75,
             sessionTimeoutMinutes: 60,
@@ -852,8 +850,6 @@ export class HopeAISystem {
             confidence: orchestrationResult.confidence,
             extractedEntities: [],
             isExplicitRequest: false,
-            // 🎯 Información adicional del orchestrator
-            recommendations: orchestrationResult.recommendations,
             contextualTools: orchestrationResult.contextualTools,
             sessionContext: orchestrationResult.sessionContext,
             // 🏥 PATIENT CONTEXT: Preserve patient context from enrichedSessionContext
@@ -865,8 +861,7 @@ export class HopeAISystem {
         console.log(`[HopeAI] 🎯 Advanced orchestration result:`, {
           selectedAgent: orchestrationResult.selectedAgent,
           confidence: orchestrationResult.confidence,
-          toolsSelected: orchestrationResult.contextualTools.length,
-          hasRecommendations: !!orchestrationResult.recommendations
+          toolsSelected: orchestrationResult.contextualTools.length
         })
         
         // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
@@ -1665,31 +1660,6 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   }
 
   /**
-   * Get comprehensive user analytics and insights
-   */
-  async getUserAnalytics(userId: string): Promise<any> {
-    if (!this._initialized) await this.initialize()
-    
-    if (this.useAdvancedOrchestration && this.dynamicOrchestrator) {
-      return await this.dynamicOrchestrator.getUserAnalytics(userId)
-    }
-    
-    // Fallback for systems without advanced orchestration
-    return {
-      totalSessions: 0,
-      favoriteAgent: 'socratico',
-      topTools: [],
-      learningTrends: [],
-      efficiency: 0,
-      sessionInsights: {
-        averageLength: 0,
-        dominantTopics: [],
-        toolEffectiveness: {}
-      }
-    }
-  }
-
-  /**
    * Enable or disable advanced orchestration features
    */
   setAdvancedOrchestration(enabled: boolean): void {
@@ -1992,6 +1962,3 @@ export async function getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> 
   return instance.getFilesByIds(fileIds)
 }
 
-// Re-export control de orquestación del bridge para endpoints de métricas/alerts
-// Evita importaciones directas de lib/orchestration-singleton en rutas críticas
-export { getGlobalOrchestrationSystem as getBridgeOrchestrationSystem } from './orchestration-singleton'

@@ -171,10 +171,6 @@ export function requireAdminAuth(
 export function isProtectedEndpoint(pathname: string): boolean {
   const protectedPaths = [
     '/api/system-status',
-    '/api/orchestration/health',
-    '/api/orchestration/metrics',
-    '/api/orchestration/reports',
-    '/api/orchestration/alerts',
   ];
   
   // Health check básico NO requiere auth (para monitoring externo)

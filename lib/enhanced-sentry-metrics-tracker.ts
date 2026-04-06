@@ -115,7 +115,7 @@ class EnhancedSentryMetricsTracker {
       identity: userIdentity
     });
 
-    console.log('🔍 Usuario identificado:', userIdentity);
+    console.log('🔍 Usuario identificado');
     return userIdentity;
   }
 
@@ -185,7 +185,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { activation: activationMetrics });
 
-    console.log('🚀 Activación rastreada:', { userId, score: activationMetrics.activationScore, isActivated });
+    console.log('🚀 Activación rastreada:', { score: activationMetrics.activationScore, isActivated });
     return activationMetrics;
   }
 
@@ -265,7 +265,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { engagement: engagementMetrics });
 
-    console.log('💫 Engagement rastreado:', { userId, score: engagementMetrics.engagementScore });
+    console.log('💫 Engagement rastreado:', { score: engagementMetrics.engagementScore });
     return engagementMetrics;
   }
 
@@ -319,7 +319,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { value: valueMetrics });
 
-    console.log('💎 Valor rastreado:', { userId, score: valueMetrics.valueScore });
+    console.log('💎 Valor rastreado:', { score: valueMetrics.valueScore });
     return valueMetrics;
   }
 
@@ -371,7 +371,7 @@ class EnhancedSentryMetricsTracker {
     // Actualizar métricas del usuario
     this.updateUserMetrics(userId, { retention: retentionMetrics });
 
-    console.log('🔄 Retención analizada:', { userId, daysSinceLast: daysSinceLast, isChurned: retentionMetrics.isChurned });
+    console.log('🔄 Retención analizada:', { daysSinceLast: daysSinceLast, isChurned: retentionMetrics.isChurned });
     return retentionMetrics;
   }
 
@@ -414,7 +414,7 @@ class EnhancedSentryMetricsTracker {
       });
     }
 
-    console.log('🎯 Evento de conversión:', event.eventType, { userId: event.userId, value: event.eventValue });
+    console.log('🎯 Evento de conversión:', event.eventType, { value: event.eventValue });
   }
 
   // ==========================================

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { trackConversion } from '@/lib/enhanced-sentry-metrics-tracker'
-import { getGlobalOrchestrationSystem } from '@/lib/orchestration-singleton'
+
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import type { AgentType } from '@/types/clinical-types'
 

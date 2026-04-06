@@ -6,10 +6,16 @@
 > Base de análisis: Código fuente de Aurora (repositorio actual) y código fuente de referencia de Claude Code (en `docs/architecture/claude/claude-code-main`).
 
 > **Estado actualizado (2026-04-06):**
-> - Las 8 recomendaciones (P0.1–P2.3) permanecen **abiertas**. Estas prioridades son independientes del stack P0-P7 del proyecto.
+> - **5 recomendaciones YA IMPLEMENTADAS** (3 descubiertas en auditoría, 2 completadas hoy):
+>   - **P0.1 (Permisos de herramientas):** `lib/security/tool-permissions.ts` + `checkToolPermission()` integrado en `clinical-agent-router.ts`. Herramientas tienen `securityCategory` en metadata.
+>   - **P0.2 (PII en logs):** COMPLETADO. `lib/logger.ts` ahora tiene `PHI_REDACTION_PATTERNS` (RUT, SSN, email, teléfono, DOB, dirección, nombres de pacientes). `redactPHI()` aplica en TODOS los entornos. `beforeBreadcrumb` + `beforeSend` con redacción PHI en los 3 configs Sentry (server, edge, client). Console.log de alto riesgo PII corregidos en 6 archivos.
+>   - **P1.1 (Compactación reactiva):** `lib/context-window-manager.ts` tiene `compactReactively()` + `isContextExhaustedError()`, integrado en `clinical-agent-router.ts`.
+>   - **P1.2 (Límite concurrencia):** `lib/utils/tool-orchestrator.ts` implementa `executeToolsSafely()` con `maxConcurrent: 3`, particionamiento read/write.
+>   - **P2.1 (Memoria inter-sesión):** FUNDACIÓN COMPLETADA. `types/memory-types.ts` (tipos) + `lib/clinical-memory-system.ts` (CRUD + búsqueda por relevancia keyword). Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`. Pendiente: wiring a `hopeai-system.ts` y extracción automática al final de sesión.
+> - **3 recomendaciones pendientes:** P1.3 (Zod schemas — parcialmente implementado en `tool-input-schemas.ts`), P2.2 (delegación paralela), P2.3 (hooks).
 > - **Contexto relevante completado:** Firebase Auth (HTTP-level auth en todas las API routes) y Firestore offline-first migration (3 archivos IndexedDB eliminados, reemplazados por `lib/firestore-client-storage.ts`).
 > - Firebase Auth mitiga parcialmente P0.1 (autenticación HTTP, no permisos de herramientas a nivel de modelo).
-> - La persistencia en Firestore con subcollection de mensajes habilita parcialmente P2.1 (datos inter-sesión existen, pero no hay extracción semántica automática).
+> - Server-side messages subcollection alignment completado: `firestore-storage-adapter.ts` ahora escribe mensajes a subcollection (O(1)), lee con fallback legacy.
 > - Archivos eliminados: `clinical-context-storage.ts`, `patient-persistence.ts`, `client-context-persistence.ts`. Las referencias a estos archivos en este documento son históricas.
 > - Archivos servidor (`hipaa-compliant-storage.ts`, `server-storage-adapter.ts`, `server-storage-memory.ts`) siguen en uso.
 

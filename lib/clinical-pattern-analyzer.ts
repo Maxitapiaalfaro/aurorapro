@@ -221,7 +221,7 @@ export class ClinicalPatternAnalyzer {
           span?.setAttribute('session.count', sessionHistory.length);
           span?.setAttribute('trigger.reason', triggerReason);
 
-      console.log(`🔍 [Análisis Longitudinal] Starting analysis for ${patientName} (${sessionHistory.length} sessions)`);
+      console.log(`🔍 [Análisis Longitudinal] Starting analysis (${sessionHistory.length} sessions)`);
 
       // Step 1: Extract clinical domains from conversation history
       const domainAnalysis = await this.extractClinicalDomains(sessionHistory);
@@ -265,7 +265,7 @@ export class ClinicalPatternAnalyzer {
         meta
       };
 
-      console.log(`✅ [Análisis Longitudinal] Analysis complete for ${patientName}:`, {
+      console.log(`✅ [Análisis Longitudinal] Analysis complete:`, {
         exploredDomains: exploredDomains.length,
         unexploredDomains: unexploredDomains.length,
         reflectiveQuestions: reflectiveQuestions.length
@@ -274,7 +274,7 @@ export class ClinicalPatternAnalyzer {
       return analysis;
 
         } catch (error) {
-          console.error(`❌ [Análisis Longitudinal] Analysis failed for ${patientName}:`, error);
+          console.error(`❌ [Análisis Longitudinal] Analysis failed:`, error);
           Sentry.captureException(error, {
             tags: {
               component: 'clinical-pattern-analyzer',

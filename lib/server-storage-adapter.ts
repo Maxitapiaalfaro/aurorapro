@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { ChatState, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
+import type { ChatState, ChatMessage, ClinicalFile, FichaClinicaState } from "@/types/clinical-types"
 
 // Dynamic import para evitar que better-sqlite3 se incluya en el bundle del cliente
 type HIPAAStorage = any
@@ -89,6 +89,24 @@ export class ServerStorageAdapter {
     }
 
     await storage.saveChatSession(updatedState)
+  }
+
+  /**
+   * Add a single message to the messages subcollection (pass-through).
+   * Only supported when the backend is FirestoreStorageAdapter.
+   * Other backends silently no-op since they don't have subcollections.
+   */
+  async addMessage(
+    userId: string,
+    patientId: string,
+    sessionId: string,
+    message: ChatMessage
+  ): Promise<void> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    const storage = await this.ensureStorage()
+    if (typeof storage.addMessage === 'function') {
+      await storage.addMessage(userId, patientId, sessionId, message)
+    }
   }
 
   async loadChatSession(sessionId: string): Promise<ChatState | null> {
