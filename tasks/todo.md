@@ -6,10 +6,12 @@
 ### P2: Orchestration Dead Code Purge — COMPLETE (2026-04-06)
 - [x] ALL ITEMS COMPLETE — see Completed Tasks section
 
-### P3: Decompose `clinical-agent-router.ts` → `lib/agents/` (HIGH — NEXT)
-- [ ] Extract agent prompt templates (~1,400 lines) to `lib/agents/agent-definitions.ts` | Priority: H | Status: pending
-- [ ] Extract streaming handler to `lib/agents/streaming-handler.ts` | Priority: M | Status: pending
-- [ ] Align session manager with Firestore paths | Priority: M | Status: pending
+### P3: Decompose `clinical-agent-router.ts` → `lib/agents/` — COMPLETE (2026-04-06)
+- [x] Extract agent prompt templates (~1,413 lines) to `lib/agents/agent-definitions.ts` | Priority: H | Status: done
+- [x] Extract streaming handler (~987 lines) to `lib/agents/streaming-handler.ts` | Priority: H | Status: done
+- [x] Extract message context builder (~210 lines) to `lib/agents/message-context-builder.ts` | Priority: M | Status: done
+- [x] Router reduced from 3,248 → 706 lines (78% reduction) | Status: done
+- [ ] Align session manager with Firestore paths | Priority: M | Status: pending (moved to P4)
 
 ### P4: Orchestration Simplification (MEDIUM)
 - [ ] Remove DynamicOrchestrator bridge dependency (after P2 bridge deletion) | Priority: M | Status: pending
@@ -87,6 +89,13 @@
   - Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
   - Spanish stop-words tokenizer, combined scoring (60% keyword, 20% relevance, 20% confidence)
   - Uses safe logger (no console.log), firebase-admin SDK, immutable field protection
+- [x] 2026-04-06: **P3 — Decompose `clinical-agent-router.ts` → `lib/agents/`** (COMPLETE)
+  - **3 new modules**: `agent-definitions.ts` (1,413 lines), `streaming-handler.ts` (987 lines), `message-context-builder.ts` (210 lines)
+  - Router reduced from 3,248 → 706 lines (**78% reduction**)
+  - `agent-definitions.ts`: GLOBAL_BASE_INSTRUCTION + createAgentDefinitions() factory (socratico, clinico, academico)
+  - `streaming-handler.ts`: handleStreamingWithTools, handleNonStreamingWithTools, text extraction, grounding URL validation
+  - `message-context-builder.ts`: 9 context-building functions (buildEnhancedMessage, getRoleMetadata, addAgentTransitionContext, etc.)
+  - Verification: zero new TypeScript errors, all imports updated
 
 ## Review Notes
 <!-- Post-task review observations -->
