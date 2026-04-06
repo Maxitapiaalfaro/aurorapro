@@ -17,6 +17,9 @@ import { ContextWindowManager, type ContextWindowConfig, type ContextProcessingR
 import { INTENT_FUNCTION_DECLARATIONS, VALID_INTENT_FUNCTIONS, AGENT_DISPLAY_NAMES } from './intent-declarations';
 import type { Content, IntentClassificationResult, RouterConfig, EnrichedContext, ToolSelectionContext } from './routing-types';
 import type { OperationalMetadata } from '@/types/operational-metadata';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('orchestration');
 
 /**
  * Retries an async operation with exponential backoff on 429 (RESOURCE_EXHAUSTED) errors.
@@ -41,7 +44,7 @@ export async function withRetry<T>(
       }
 
       const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
-      console.warn(`⏳ [${label}] 429 rate limit hit, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+      logger.warn(`429 rate limit hit, retrying in ${delayMs}ms`, { label, attempt: attempt + 1, maxRetries, delayMs });
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -92,7 +95,7 @@ export async function classifyIntentAndExtractEntities(
     }), 'classifyIntentAndExtractEntities', config.maxRetries);
 
     if (!result.candidates || result.candidates.length === 0 || !result.functionCalls || result.functionCalls.length === 0) {
-      console.warn('⚠️ No se recibieron function calls en la respuesta combinada');
+      logger.warn('No function calls received in combined response');
       return {
         intentResult: null,
         entityResult: {
@@ -131,13 +134,13 @@ export async function classifyIntentAndExtractEntities(
     const entityResult = await entityExtractor.processFunctionCallsPublic(entityCalls, startTime);
 
     if (config.enableLogging) {
-      console.log(`⚡ Combined orchestration: intent=${intentResult?.functionName || 'none'} (${(intentResult?.confidence || 0).toFixed(2)}), entities=${entityResult.entities.length} in ${Date.now() - startTime}ms`);
+      logger.debug('Combined orchestration completed', { intent: intentResult?.functionName || 'none', confidence: (intentResult?.confidence || 0).toFixed(2), entityCount: entityResult.entities.length, durationMs: Date.now() - startTime });
     }
 
     return { intentResult, entityResult };
 
   } catch (error) {
-    console.error('[IntentClassifier] Error en clasificación combinada: ' + (error instanceof Error ? error.message : String(error)));
+    logger.error('Error in combined classification', { error: error instanceof Error ? error.message : String(error) });
     return {
       intentResult: null,
       entityResult: {
@@ -186,27 +189,27 @@ export async function classifyIntent(
     }), 'classifyIntent', config.maxRetries);
 
     if (!result.candidates || result.candidates.length === 0) {
-      console.warn('⚠️ No se recibieron candidatos en la respuesta');
+      logger.warn('No candidates received in response');
       return null;
     }
 
     const candidate = result.candidates[0];
     if (candidate.finishReason !== 'STOP') {
-      console.warn(`⚠️ Respuesta incompleta del modelo: ${candidate.finishReason}`);
+      logger.warn('Incomplete model response', { finishReason: candidate.finishReason });
       return null;
     }
 
     const functionCalls = result.functionCalls;
 
     if (!functionCalls || functionCalls.length === 0) {
-      console.warn('⚠️ No se recibieron function calls en la respuesta');
+      logger.warn('No function calls received in response');
       return null;
     }
 
     const functionCall = functionCalls[0];
 
     if (!validateFunctionCall(functionCall)) {
-      console.warn('⚠️ Function call con estructura inválida:', functionCall);
+      logger.warn('Function call with invalid structure', { functionCall });
       return null;
     }
 
@@ -219,7 +222,7 @@ export async function classifyIntent(
       requiresClarification: confidence < 0.7
     };
   } catch (error) {
-    console.error('[IntentClassifier] Error en clasificación:', error);
+    logger.error('Error in intent classification', { error: error instanceof Error ? error.message : String(error) });
     return null;
   }
 }
