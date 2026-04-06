@@ -68,6 +68,8 @@ import { cn } from "@/lib/utils"
 import { usePatientLibrary } from "@/hooks/use-patient-library"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/providers/auth-provider"
+import { listUserSessions } from "@/lib/firestore-client-storage"
 import type { PatientRecord } from "@/types/clinical-types"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
@@ -81,28 +83,25 @@ import { getAgentVisualConfigSafe } from "@/config/agent-visual-config"
 function PatientSessionCount({ patient }: { patient: PatientRecord }) {
   const [sessionCount, setSessionCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const { systemState } = useHopeAISystem()
+  const { psychologistId } = useAuth()
 
   useEffect(() => {
     const loadSessionCount = async () => {
+      if (!psychologistId) return
       try {
         setLoading(true)
-        const { clinicalStorage } = await import('@/lib/clinical-context-storage')
-        await clinicalStorage.initialize()
-        
-        const allSessions = await clinicalStorage.getUserSessions(systemState.userId)
-        const patientSessions = allSessions.filter(session => 
-          session.clinicalContext?.patientId === patient.id
+
+        const result = await listUserSessions(psychologistId, { pageSize: 200 })
+        const patientSessions = result.items.filter(session =>
+          session.patientId === patient.id
         )
-        
-        // Count user messages across all sessions
+
+        // Use messageCount from SessionSummary when available, otherwise count sessions
         let userMessageCount = 0
         patientSessions.forEach(session => {
-          if (session.history) {
-            userMessageCount += session.history.filter(msg => msg.role === 'user').length
-          }
+          userMessageCount += session.messageCount ?? 1
         })
-        
+
         setSessionCount(userMessageCount)
       } catch (err) {
         console.error('Error loading session count:', err)
@@ -110,9 +109,9 @@ function PatientSessionCount({ patient }: { patient: PatientRecord }) {
         setLoading(false)
       }
     }
-    
+
     loadSessionCount()
-  }, [patient.id, systemState.userId])
+  }, [patient.id, psychologistId])
 
   if (loading) return null
 

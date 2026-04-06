@@ -21,7 +21,8 @@ import { parseMarkdown } from "@/lib/markdown-parser"
 import { toast } from "@/hooks/use-toast"
 import { FileUploadButton } from "@/components/file-upload-button"
 import { MessageFileAttachments } from "@/components/message-file-attachments"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
+import { getClinicalFile } from "@/lib/firestore-client-storage"
+import { useAuth } from "@/providers/auth-provider"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
@@ -181,6 +182,7 @@ function FichaClinicaDisabledButton({
 }
 
 export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, processingStatus }: ChatInterfaceProps) {
+  const { psychologistId } = useAuth()
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
@@ -253,16 +255,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
   // Load files for messages with fileReferences
   useEffect(() => {
+    if (!psychologistId) return
     const loadMessageFiles = async () => {
       const newMessageFiles: Record<string, ClinicalFile[]> = {}
-      
+
       for (const message of currentSession?.history || []) {
         if (message.fileReferences && message.fileReferences.length > 0) {
           try {
-            // Client-side file retrieval using IndexedDB storage
+            // Client-side file retrieval using Firestore storage
             const files: ClinicalFile[] = []
             for (const fileId of message.fileReferences) {
-              const file = await clinicalStorage.getClinicalFileById(fileId)
+              const file = await getClinicalFile(psychologistId, fileId)
               if (file && file.status === 'processed') {
                 files.push(file)
               }
@@ -275,12 +278,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           }
         }
       }
-      
+
       setMessageFiles(newMessageFiles)
     }
 
     loadMessageFiles()
-  }, [currentSession?.history])
+  }, [currentSession?.history, psychologistId])
 
   // Auto-scroll ÚNICO cuando el usuario envía un mensaje
   // Solo se activa una vez por mensaje del usuario, no bloquea al usuario durante el streaming

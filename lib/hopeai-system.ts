@@ -5,12 +5,33 @@ import { createIntelligentIntentRouter, type EnrichedContext } from "./intellige
 import { DynamicOrchestrator } from "./dynamic-orchestrator"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { trackAgentSwitch } from "./sentry-metrics-tracker"
-import { getPatientPersistence } from "./patient-persistence"
+import { getAdminApp } from './firebase-admin-config'
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore'
 import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, ReasoningBullet } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet } from "@/types/clinical-types"
 import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
+
+/** Load a PatientRecord from Firestore (server-side, using firebase-admin). */
+async function loadPatientFromFirestore(userId: string, patientId: string): Promise<PatientRecord | null> {
+  try {
+    const adminDb = getAdminFirestore(getAdminApp())
+    const snap = await adminDb
+      .collection('psychologists').doc(userId)
+      .collection('patients').doc(patientId)
+      .get()
+    if (!snap.exists) return null
+    const data = snap.data() as any
+    // Revive Timestamps to Dates
+    if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate()
+    if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate()
+    return data as PatientRecord
+  } catch (err) {
+    console.warn(`⚠️ [Firestore] Failed to load patient ${patientId}:`, err)
+    return null
+  }
+}
 
 export class HopeAISystem {
   private _initialized = false
@@ -305,8 +326,7 @@ export class HopeAISystem {
 
     if (patientReference) {
       try {
-        const patientPersistence = getPatientPersistence();
-        const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+        const patientRecord = await loadPatientFromFirestore(userId, patientReference);
 
         if (patientRecord) {
           // Extraer risk flags desde tags del paciente
@@ -387,8 +407,7 @@ export class HopeAISystem {
 
     if (patientReference) {
       try {
-        const patientPersistence = getPatientPersistence();
-        const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+        const patientRecord = await loadPatientFromFirestore(userId, patientReference);
 
         if (patientRecord) {
           patientSummaryAvailable = !!patientRecord.summaryCache;
@@ -677,8 +696,7 @@ export class HopeAISystem {
         console.log(`🏥 [HopeAI] Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
       } else if (patientReference) {
         try {
-          const patientPersistence = getPatientPersistence();
-          const patientRecord = await patientPersistence.loadPatientRecord(patientReference);
+          const patientRecord = await loadPatientFromFirestore(currentState.userId, patientReference);
 
           if (patientRecord) {
             // 🎯 OPTIMIZACIÓN: Detectar si es el primer mensaje con este paciente
@@ -1762,8 +1780,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
 
     try {
       // Get patient info
-      const patientPersistence = getPatientPersistence()
-      const patient = await patientPersistence.loadPatientRecord(patientId)
+      const patient = await loadPatientFromFirestore(chatState.userId, patientId)
 
       if (!patient) {
         console.warn(`⚠️ [Análisis Longitudinal] Patient not found: ${patientId}`)

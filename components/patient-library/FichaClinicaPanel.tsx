@@ -35,6 +35,7 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { toast } from "@/hooks/use-toast"
 import { parseMarkdown } from "@/lib/markdown-parser"
+import { listUserSessions, loadSessionWithMessages } from "@/lib/firestore-client-storage"
 import type { FichaClinicaState, PatientRecord } from "@/types/clinical-types"
 
 interface FichaClinicaPanelProps {
@@ -190,31 +191,34 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
         variant: "default"
       })
 
-      // Get ALL saved sessions for this patient from storage
-      const { clinicalStorage } = await import('@/lib/clinical-context-storage')
-      const { useHopeAISystem } = await import('@/hooks/use-hopeai-system')
-      
-      await clinicalStorage.initialize()
-      
-      // Get system state for userId
+      // Get ALL saved sessions for this patient from Firestore
       const userId = psychologistId ?? ''
+      if (!userId) {
+        toast({
+          title: "Error de autenticación",
+          description: "No se pudo identificar al psicólogo. Intenta iniciar sesión nuevamente.",
+          variant: "destructive"
+        })
+        return
+      }
 
-      const allSessions = await clinicalStorage.getUserSessions(userId)
-      
+      const result = await listUserSessions(userId, { pageSize: 200 })
+
       // Filter sessions that belong to this patient
-      const patientSessions = allSessions.filter(session => 
-        session.clinicalContext?.patientId === patient.id
+      const patientSessionSummaries = result.items.filter(session =>
+        session.patientId === patient.id
       )
 
-      console.log('📊 [Análisis Longitudinal] Found patient sessions:', patientSessions.length)
+      console.log('📊 [Análisis Longitudinal] Found patient sessions:', patientSessionSummaries.length)
 
-      // Combine all messages from all patient sessions
+      // Load full session history for each patient session
       const allMessages: any[] = []
-      patientSessions.forEach(session => {
-        if (session.history && session.history.length > 0) {
-          allMessages.push(...session.history)
+      for (const summary of patientSessionSummaries) {
+        const fullSession = await loadSessionWithMessages(userId, summary.patientId, summary.sessionId)
+        if (fullSession?.history && fullSession.history.length > 0) {
+          allMessages.push(...fullSession.history)
         }
-      })
+      }
 
       // Count user messages (each represents a session interaction)
       const userMessageCount = allMessages.filter(msg => msg.role === 'user').length

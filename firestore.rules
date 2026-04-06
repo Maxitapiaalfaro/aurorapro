@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Psychologist-scoped data — only the authenticated psychologist can access their own subtree.
+    match /psychologists/{psychologistId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == psychologistId;
+    }
+
+    // CollectionGroup queries for sessions (needed for findSessionById)
+    match /{path=**}/sessions/{sessionId} {
+      allow read: if request.auth != null && resource.data._userId == request.auth.uid;
+    }
+
+    // Health check probe (admin SDK bypasses rules)
+    match /_health/{doc} {
+      allow read, write: if false;
+    }
+  }
+}

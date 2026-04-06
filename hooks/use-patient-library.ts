@@ -1,9 +1,16 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useAuth } from "@/providers/auth-provider"
+import {
+  savePatient,
+  loadPatient,
+  getAllPatients,
+  deletePatient as deletePatientFromFirestore,
+  getFichasByPatient,
+  saveFicha,
+} from "@/lib/firestore-client-storage"
 import type { PatientRecord, FichaClinicaState } from "@/types/clinical-types"
-import { getPatientPersistence } from "@/lib/patient-persistence"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
 import { PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 
 export interface UsePatientLibraryReturn {
@@ -14,7 +21,7 @@ export interface UsePatientLibraryReturn {
   searchQuery: string
   filteredPatients: PatientRecord[]
   selectedPatient: PatientRecord | null
-  
+
   // Actions
   loadPatients: () => Promise<void>
   createPatient: (patient: Omit<PatientRecord, "id" | "createdAt" | "updatedAt">) => Promise<PatientRecord>
@@ -23,13 +30,13 @@ export interface UsePatientLibraryReturn {
   searchPatients: (query: string) => void
   selectPatient: (patient: PatientRecord | null) => void
   refreshPatientSummary: (patientId: string) => Promise<void>
-  // Ficha clínica
+  // Ficha clinica
   generateFichaClinica: (patientId: string, fichaId: string, sessionState: any) => Promise<void>
   loadFichasClinicas: (patientId: string) => Promise<FichaClinicaState[]>
   fichasClinicas: FichaClinicaState[]
   beginFichaPolling: (patientId: string, intervalMs?: number) => void
   stopFichaPolling: () => void
-  
+
   // Utilities
   getPatientCount: () => number
   clearError: () => void
@@ -40,6 +47,7 @@ export interface UsePatientLibraryReturn {
  * Provides CRUD operations and search functionality for patient records
  */
 export function usePatientLibrary(): UsePatientLibraryReturn {
+  const { psychologistId } = useAuth()
   const [patients, setPatients] = useState<PatientRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,33 +55,34 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null)
   const [fichasClinicas, setFichasClinicas] = useState<FichaClinicaState[]>([])
   const fichaPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  
-  const persistence = getPatientPersistence()
 
-  // Initialize persistence on mount
+  // Initialize on mount — load patients when psychologistId is available
   useEffect(() => {
-    const initializePersistence = async () => {
+    if (!psychologistId) return
+
+    const initializePatients = async () => {
       try {
-        await persistence.initialize()
-        await loadPatients()
+        await loadPatientsInternal()
       } catch (err) {
-        console.error("Failed to initialize patient persistence:", err)
+        console.error("Failed to initialize patient library:", err)
         setError("Failed to initialize patient library")
       }
     }
 
-    initializePersistence()
-  }, [])
+    initializePatients()
+  }, [psychologistId])
 
   /**
-   * Load all patients from storage
+   * Internal load patients (uses psychologistId from closure)
    */
-  const loadPatients = useCallback(async () => {
+  const loadPatientsInternal = useCallback(async () => {
+    if (!psychologistId) return
+
     setIsLoading(true)
     setError(null)
-    
+
     try {
-      const loadedPatients = await persistence.getAllPatients()
+      const loadedPatients = await getAllPatients(psychologistId)
       setPatients(loadedPatients)
     } catch (err) {
       console.error("Failed to load patients:", err)
@@ -81,7 +90,14 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [persistence])
+  }, [psychologistId])
+
+  /**
+   * Load all patients from storage
+   */
+  const loadPatients = useCallback(async () => {
+    await loadPatientsInternal()
+  }, [loadPatientsInternal])
 
   /**
    * Create a new patient record
@@ -89,8 +105,10 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   const createPatient = useCallback(async (
     patientData: Omit<PatientRecord, "id" | "createdAt" | "updatedAt">
   ): Promise<PatientRecord> => {
+    if (!psychologistId) throw new Error("Not authenticated")
+
     setError(null)
-    
+
     try {
       const now = new Date()
       const newPatient: PatientRecord = {
@@ -105,23 +123,25 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         newPatient.summaryCache = PatientSummaryBuilder.buildAndCache(newPatient)
       }
 
-      await persistence.savePatientRecord(newPatient)
-      await loadPatients() // Refresh the list
-      
+      await savePatient(psychologistId, newPatient)
+      await loadPatientsInternal() // Refresh the list
+
       return newPatient
     } catch (err) {
       console.error("Failed to create patient:", err)
       setError("Failed to create patient")
       throw err
     }
-  }, [persistence, loadPatients])
+  }, [psychologistId, loadPatientsInternal])
 
   /**
    * Update an existing patient record
    */
   const updatePatient = useCallback(async (patient: PatientRecord) => {
+    if (!psychologistId) throw new Error("Not authenticated")
+
     setError(null)
-    
+
     try {
       const updatedPatient = {
         ...patient,
@@ -133,9 +153,9 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         updatedPatient.summaryCache = PatientSummaryBuilder.buildAndCache(updatedPatient)
       }
 
-      await persistence.savePatientRecord(updatedPatient)
-      await loadPatients() // Refresh the list
-      
+      await savePatient(psychologistId, updatedPatient)
+      await loadPatientsInternal() // Refresh the list
+
       // Update selected patient if it's the one being updated
       if (selectedPatient?.id === patient.id) {
         setSelectedPatient(updatedPatient)
@@ -145,18 +165,20 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setError("Failed to update patient")
       throw err
     }
-  }, [persistence, loadPatients, selectedPatient])
+  }, [psychologistId, loadPatientsInternal, selectedPatient])
 
   /**
    * Delete a patient record
    */
-  const deletePatient = useCallback(async (patientId: string) => {
+  const handleDeletePatient = useCallback(async (patientId: string) => {
+    if (!psychologistId) throw new Error("Not authenticated")
+
     setError(null)
-    
+
     try {
-      await persistence.deletePatientRecord(patientId)
-      await loadPatients() // Refresh the list
-      
+      await deletePatientFromFirestore(psychologistId, patientId)
+      await loadPatientsInternal() // Refresh the list
+
       // Clear selection if deleted patient was selected
       if (selectedPatient?.id === patientId) {
         setSelectedPatient(null)
@@ -166,12 +188,12 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setError("Failed to delete patient")
       throw err
     }
-  }, [persistence, loadPatients, selectedPatient])
+  }, [psychologistId, loadPatientsInternal, selectedPatient])
 
   /**
    * Search patients by query
    */
-  const searchPatients = useCallback((query: string) => {
+  const searchPatientsHandler = useCallback((query: string) => {
     setSearchQuery(query)
   }, [])
 
@@ -186,43 +208,53 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
    * Refresh patient summary cache
    */
   const refreshPatientSummary = useCallback(async (patientId: string) => {
+    if (!psychologistId) throw new Error("Not authenticated")
+
     setError(null)
-    
+
     try {
-      const patient = await persistence.loadPatientRecord(patientId)
+      const patient = await loadPatient(psychologistId, patientId)
       if (!patient) {
         throw new Error("Patient not found")
       }
 
       const newSummaryCache = PatientSummaryBuilder.buildAndCache(patient)
-      await persistence.updatePatientSummaryCache(patientId, newSummaryCache)
-      await loadPatients() // Refresh the list
+      // Load patient, update summaryCache, then save
+      const updatedPatient = {
+        ...patient,
+        summaryCache: newSummaryCache,
+        updatedAt: new Date()
+      }
+      await savePatient(psychologistId, updatedPatient)
+      await loadPatientsInternal() // Refresh the list
     } catch (err) {
       console.error("Failed to refresh patient summary:", err)
       setError("Failed to refresh patient summary")
       throw err
     }
-  }, [persistence, loadPatients])
+  }, [psychologistId, loadPatientsInternal])
 
-  // --- Ficha clínica API integration ---
+  // --- Ficha clinica API integration ---
   const generateFichaClinica = useCallback(async (patientId: string, fichaId: string, sessionState: any) => {
+    if (!psychologistId) throw new Error("Not authenticated")
+
     try {
-      // Cargar la última ficha existente para continuidad clínica
-      const fichasExistentes = await clinicalStorage.getFichasClinicasByPaciente(patientId)
+      // Cargar la ultima ficha existente para continuidad clinica
+      const fichasExistentes = await getFichasByPatient(psychologistId, patientId)
       const ultimaFicha = fichasExistentes
         .filter(f => f.estado === 'completado')
         .sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
-      
+
       const { patientForm, conversationSummary, ...sessionStateCore } = sessionState || {}
       const res = await fetch(`/api/patients/${encodeURIComponent(patientId)}/ficha`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          fichaId, 
-          sessionState: sessionStateCore, 
-          patientForm, 
+        body: JSON.stringify({
+          fichaId,
+          sessionState: sessionStateCore,
+          patientForm,
           conversationSummary,
-          previousFichaContent: ultimaFicha?.contenido // Incluir ficha anterior para continuidad
+          previousFichaContent: ultimaFicha?.contenido
         })
       })
       const data = await res.json()
@@ -241,7 +273,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         historialVersiones: []
       }
       try {
-        await clinicalStorage.saveFichaClinica(placeholder)
+        await saveFicha(psychologistId, patientId, placeholder)
         // Actualizar estado local de fichas para reflejar progreso inmediato
         setFichasClinicas(prev => {
           const map = new Map(prev.map(i => [i.fichaId, i]))
@@ -249,46 +281,47 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
           return Array.from(map.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
         })
       } catch (persistErr) {
-        console.warn('No se pudo persistir placeholder de ficha en IndexedDB:', persistErr)
+        console.warn('No se pudo persistir placeholder de ficha en Firestore:', persistErr)
       }
-      // Guardar resultado final en IndexedDB y estado local (cliente como fuente de verdad)
+      // Guardar resultado final en Firestore y estado local
       if (data.ficha) {
         try {
           const completed: FichaClinicaState = {
             ...data.ficha,
             ultimaActualizacion: new Date(data.ficha.ultimaActualizacion)
           }
-          await clinicalStorage.saveFichaClinica(completed)
+          await saveFicha(psychologistId, patientId, completed)
           setFichasClinicas(prev => {
             const map = new Map(prev.map(i => [i.fichaId, i]))
             map.set(completed.fichaId, completed)
             return Array.from(map.values()).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
           })
         } catch (persistFinalErr) {
-          console.warn('No se pudo persistir ficha final en IndexedDB:', persistFinalErr)
+          console.warn('No se pudo persistir ficha final en Firestore:', persistFinalErr)
         }
       }
     } catch (err) {
-      console.error('Failed to generate ficha clínica:', err)
-      setError('Failed to generate ficha clínica')
+      console.error('Failed to generate ficha clinica:', err)
+      setError('Failed to generate ficha clinica')
       throw err
     }
-  }, [])
+  }, [psychologistId])
 
   const loadFichasClinicas = useCallback(async (patientId: string): Promise<FichaClinicaState[]> => {
-    // Cliente como única fuente de verdad: cargar solo desde IndexedDB
+    if (!psychologistId) return []
+
     try {
-      const localItems = await clinicalStorage.getFichasClinicasByPaciente(patientId)
-      const sorted = (localItems || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
+      const items = await getFichasByPatient(psychologistId, patientId)
+      const sorted = (items || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
       setFichasClinicas(sorted)
       return sorted
     } catch (localErr) {
-      console.warn('No se pudieron cargar fichas locales:', localErr)
-      setError('Failed to load fichas clínicas')
+      console.warn('No se pudieron cargar fichas:', localErr)
+      setError('Failed to load fichas clinicas')
       setFichasClinicas([])
       return []
     }
-  }, [])
+  }, [psychologistId])
 
   const beginFichaPolling = useCallback((patientId: string, intervalMs = 3000) => {
     if (fichaPollRef.current) return
@@ -332,7 +365,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   }, [])
 
   // Filter patients based on search query
-  const filteredPatients = searchQuery.trim() 
+  const filteredPatients = searchQuery.trim()
     ? patients.filter(patient => {
         const query = searchQuery.toLowerCase()
         return (
@@ -352,20 +385,20 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     searchQuery,
     filteredPatients,
     selectedPatient,
-    
+
     // Actions
     loadPatients,
     createPatient,
     updatePatient,
-    deletePatient,
-    searchPatients,
+    deletePatient: handleDeletePatient,
+    searchPatients: searchPatientsHandler,
     selectPatient,
     refreshPatientSummary,
     generateFichaClinica,
     loadFichasClinicas,
     beginFichaPolling,
     stopFichaPolling,
-    
+
     // Utilities
     getPatientCount,
     clearError
@@ -385,25 +418,23 @@ function generatePatientId(): string {
  * Hook for managing a single patient record
  */
 export function usePatientRecord(patientId: string | null) {
+  const { psychologistId } = useAuth()
   const [patient, setPatient] = useState<PatientRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
-  const persistence = getPatientPersistence()
 
   useEffect(() => {
-    if (!patientId) {
+    if (!patientId || !psychologistId) {
       setPatient(null)
       return
     }
 
-    const loadPatient = async () => {
+    const loadPatientData = async () => {
       setIsLoading(true)
       setError(null)
-      
+
       try {
-        await persistence.initialize()
-        const loadedPatient = await persistence.loadPatientRecord(patientId)
+        const loadedPatient = await loadPatient(psychologistId, patientId)
         setPatient(loadedPatient)
       } catch (err) {
         console.error("Failed to load patient:", err)
@@ -413,8 +444,8 @@ export function usePatientRecord(patientId: string | null) {
       }
     }
 
-    loadPatient()
-  }, [patientId, persistence])
+    loadPatientData()
+  }, [patientId, psychologistId])
 
   return {
     patient,

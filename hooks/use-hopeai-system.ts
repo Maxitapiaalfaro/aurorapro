@@ -1,9 +1,17 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
 import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
-import { ClientContextPersistence } from '@/lib/client-context-persistence'
+import {
+  findSessionById,
+  saveSessionMetadata,
+  addMessage as addFirestoreMessage,
+  loadSessionWithMessages,
+  getClinicalFile,
+  getClinicalFilesBySession,
+  resolvePatientId,
+  listUserSessions,
+} from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
 import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 import { useAuth } from '@/providers/auth-provider'
@@ -134,9 +142,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     try {
       setSystemState(prev => ({ ...prev, isLoading: true, error: null }))
 
-      // Load session from client-side IndexedDB storage
-      const chatState = await clinicalStorage.loadChatSession(sessionId)
-      
+      // Load session from Firestore (with offline cache)
+      const result = psychologistId ? await findSessionById(psychologistId, sessionId) : null
+      const chatState = result?.session ?? null
+
       if (!chatState) {
         throw new Error(`Sesión no encontrada: ${sessionId}`)
       }
@@ -152,13 +161,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       // Priority 2: Reconstruct sessionMeta if session has patient context but no sessionMeta
       else if (chatState.clinicalContext?.patientId) {
         try {
-          const { getPatientPersistence } = await import('@/lib/patient-persistence')
+          const { loadPatient } = await import('@/lib/firestore-client-storage')
           const { PatientContextComposer } = await import('@/lib/patient-summary-builder')
           const { PatientSummaryBuilder } = await import('@/lib/patient-summary-builder')
 
-          const persistence = getPatientPersistence()
-          await persistence.initialize()
-          const patient = await persistence.loadPatientRecord(chatState.clinicalContext.patientId)
+          const patient = psychologistId ? await loadPatient(psychologistId, chatState.clinicalContext.patientId!) : null
 
           if (patient) {
             console.log(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
@@ -178,7 +185,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
             // 🏥 FIX: Save reconstructed sessionMeta back to storage
             chatState.sessionMeta = sessionMetaToUse
-            await clinicalStorage.saveChatSession(chatState)
+            if (psychologistId) {
+              const pid = resolvePatientId(chatState)
+              await saveSessionMetadata(psychologistId, pid, chatState)
+            }
             console.log(`💾 Reconstructed sessionMeta saved to storage`)
           } else {
             console.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
@@ -218,18 +228,20 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Función para intentar restaurar la sesión más reciente
   const attemptSessionRestoration = useCallback(async () => {
     try {
-      const persistence = ClientContextPersistence.getInstance()
-      const recentSession = await persistence.getMostRecentSession()
-      
-      if (recentSession) {
-        console.log('🔄 Intentando restaurar sesión más reciente:', recentSession.sessionId)
-        
+      if (!psychologistId) return false
+
+      const recent = await listUserSessions(psychologistId, { pageSize: 1, sortBy: 'lastUpdated', sortOrder: 'desc' })
+      const mostRecent = recent.items[0]
+
+      if (mostRecent) {
+        console.log('🔄 Intentando restaurar sesión más reciente:', mostRecent.sessionId)
+
         // Verificar que la sesión sea válida y no muy antigua (ej: menos de 24 horas)
-         const sessionAge = Date.now() - new Date(recentSession.metadata.lastUpdated).getTime()
+        const sessionAge = Date.now() - new Date(mostRecent.lastUpdated).getTime()
         const maxAge = 24 * 60 * 60 * 1000 // 24 horas en milisegundos
-        
+
         if (sessionAge < maxAge) {
-          const success = await loadSession(recentSession.sessionId, true) // Permitir carga durante inicialización
+          const success = await loadSession(mostRecent.sessionId, true) // Permitir carga durante inicialización
           if (success) {
             console.log('✅ Sesión más reciente restaurada exitosamente')
             return true // Indicar que se restauró una sesión
@@ -247,11 +259,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       // No lanzamos el error para no interrumpir la inicialización
     }
     return false // No se restauró ninguna sesión
-  }, [loadSession])
+  }, [loadSession, psychologistId])
 
   // Inicialización del sistema HopeAI (sin dependencias para evitar re-inicializaciones)
   useEffect(() => {
-    // Client-side storage (clinicalStorage / IndexedDB) auto-initializes on first use.
+    // Client-side storage uses Firestore with offline persistence.
     // No server-side HopeAISystem needed — messages are sent via /api/send-message.
     setSystemState(prev => ({
       ...prev,
@@ -391,18 +403,21 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         console.log('✅ SessionMeta actualizado con sessionId:', newSessionId)
         console.log('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
 
-        // 🏥 FIX: Also persist the updated sessionMeta to client storage immediately
+        // 🏥 FIX: Also persist the updated sessionMeta to Firestore immediately
         try {
-          const currentState = await clinicalStorage.loadChatSession(newSessionId)
-          if (currentState) {
-            currentState.sessionMeta = updatedSessionMeta
-            currentState.clinicalContext = {
-              ...currentState.clinicalContext,
-              patientId: updatedSessionMeta.patient.reference,
-              confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
+          if (psychologistId) {
+            const result = await findSessionById(psychologistId, newSessionId)
+            if (result) {
+              const { session: currentState, patientId: pid } = result
+              currentState.sessionMeta = updatedSessionMeta
+              currentState.clinicalContext = {
+                ...currentState.clinicalContext,
+                patientId: updatedSessionMeta.patient.reference,
+                confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
+              }
+              await saveSessionMetadata(psychologistId, pid, currentState)
+              console.log('💾 SessionMeta persisted to Firestore after lazy session creation')
             }
-            await clinicalStorage.saveChatSession(currentState)
-            console.log('💾 SessionMeta persisted to storage after lazy session creation')
           }
         } catch (error) {
           console.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
@@ -453,58 +468,45 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
       })
 
-      // 💾 Persistencia inmediata en IndexedDB para no perder el mensaje del usuario en un reload
+      // 💾 Persist user message to Firestore (best-effort, non-blocking for UI)
       try {
-        // Use loadChatSession (returns null) instead of getChatState (throws) so new sessions
-        // that only exist on the server can be created in IndexedDB with defaults
-        const existingState = await clinicalStorage.loadChatSession(sessionIdToUse!)
-        const updatedState: ChatState = {
-          ...(existingState || {
-            sessionId: sessionIdToUse!,
-            userId: systemState.userId || 'anonymous',
-            mode: systemState.mode || 'clinical_supervision',
-            activeAgent: systemState.activeAgent,
-            history: [],
-            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+        if (psychologistId) {
+          const patientId = resolvePatientId({
             clinicalContext: {
+              patientId: systemState.sessionMeta?.patient?.reference,
               sessionType: systemState.mode || 'clinical_supervision',
               confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
-              patientId: systemState.sessionMeta?.patient?.reference
             },
-            // 🏥 FIX: Persist sessionMeta in IndexedDB as well
-            sessionMeta: systemState.sessionMeta
-          }),
-          history: [...((existingState?.history) || []), userMessage],
-          metadata: {
-            ...((existingState?.metadata) || { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] }),
-            lastUpdated: new Date(),
-            fileReferences: Array.from(new Set([...(existingState?.metadata?.fileReferences || []), ...(userMessage.fileReferences || [])]))
-          },
-          // 🏥 FIX: Ensure sessionMeta is preserved if already exists or add if new
-          sessionMeta: existingState?.sessionMeta || systemState.sessionMeta
-        }
-        await clinicalStorage.saveChatSession(updatedState)
-        console.log('💾 [IndexedDB] Mensaje de usuario persistido inmediatamente:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
-      } catch (persistError) {
-        console.error('❌ [IndexedDB] Error al persistir el mensaje del usuario:', persistError)
-      }
+            sessionMeta: systemState.sessionMeta,
+          })
 
-      // 💾 Also persist to localStorage via ClientContextPersistence for cross-reload restoration
-      try {
-        const persistence = ClientContextPersistence.getInstance()
-        const currentHistory = [...historyRef.current, userMessage]
-        await persistence.saveOptimizedContext(
-          sessionIdToUse!,
-          systemState.activeAgent,
-          currentHistory,
-          {
-            usageMetadata: { totalMessages: currentHistory.length, averageResponseTime: 0, compressionRatio: 1.0, modalityUsage: {} },
-            modalityDetails: { textTokens: 0, audioTokens: 0, videoTokens: 0 }
+          // Check if session doc exists; if not, create it
+          const existingResult = await findSessionById(psychologistId, sessionIdToUse!)
+          if (!existingResult) {
+            // New session — create the session document
+            const newSession: ChatState = {
+              sessionId: sessionIdToUse!,
+              userId: systemState.userId || psychologistId,
+              mode: systemState.mode || 'clinical_supervision',
+              activeAgent: systemState.activeAgent,
+              history: [],
+              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
+              clinicalContext: {
+                sessionType: systemState.mode || 'clinical_supervision',
+                confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
+                patientId: systemState.sessionMeta?.patient?.reference
+              },
+              sessionMeta: systemState.sessionMeta
+            }
+            await saveSessionMetadata(psychologistId, patientId, newSession)
           }
-        )
-        console.log('💾 [localStorage] Mensaje de usuario persistido en ClientContextPersistence')
-      } catch (localStorageError) {
-        console.warn('⚠️ [localStorage] No se pudo persistir mensaje de usuario:', localStorageError)
+
+          // Add the user message as individual document
+          await addFirestoreMessage(psychologistId, patientId, sessionIdToUse!, userMessage)
+          console.log('💾 [Firestore] Mensaje de usuario persistido:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
+        }
+      } catch (persistError) {
+        console.error('❌ [Firestore] Error al persistir el mensaje del usuario:', persistError)
       }
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
@@ -545,16 +547,12 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
 
         try {
-          const { ClinicalContextStorage } = await import('@/lib/clinical-context-storage')
-          const storage = ClinicalContextStorage.getInstance()
-          await storage.initialize()
-
           let loadedFiles: any[] = []
 
           // Try loading by specific file IDs first (most reliable)
-          if (fileIdsToLoad.length > 0) {
+          if (fileIdsToLoad.length > 0 && psychologistId) {
             console.log('📁 [Client] Loading files by ID:', fileIdsToLoad)
-            const filePromises = fileIdsToLoad.map(id => storage.getClinicalFileById(id))
+            const filePromises = fileIdsToLoad.map(id => getClinicalFile(psychologistId, id))
             const filesResults = await Promise.all(filePromises)
             loadedFiles = filesResults.filter(f => f !== null)
             console.log('📁 [Client] Loaded by ID:', {
@@ -565,9 +563,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
 
           // If no files loaded by ID, try loading by sessionId
-          if (loadedFiles.length === 0 && sessionIdToUse) {
+          if (loadedFiles.length === 0 && sessionIdToUse && psychologistId) {
             console.log('📁 [Client] No files loaded by ID, trying by sessionId:', sessionIdToUse)
-            loadedFiles = await storage.getClinicalFiles(sessionIdToUse)
+            loadedFiles = await getClinicalFilesBySession(psychologistId, sessionIdToUse)
             console.log('📁 [Client] Loaded by sessionId:', {
               count: loadedFiles.length,
               files: loadedFiles.map(f => ({ id: f.id, name: f.name, status: f.status }))
@@ -575,9 +573,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
 
           // Last resort: load ALL recent processed files and filter by recency
-          if (loadedFiles.length === 0) {
+          if (loadedFiles.length === 0 && psychologistId) {
             console.log('📁 [Client] No files found by ID or sessionId, loading all recent files...')
-            const allFiles = await storage.getClinicalFiles()
+            const allFiles = await getClinicalFilesBySession(psychologistId, sessionIdToUse || '')
             // Get files uploaded in the last 5 minutes that are processed
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
             const recentFiles = allFiles.filter(f =>
@@ -671,25 +669,20 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         })
 
-        // 💾 Persistir actualización del agente para el último mensaje de usuario en IndexedDB
+        // 💾 Persistir actualización del agente para el último mensaje de usuario en Firestore
         void (async () => {
           try {
-            const existingState = await clinicalStorage.loadChatSession(sessionIdToUse!)
-            if (existingState) {
-              const updatedHistory = existingState.history.map(m =>
-                m.id === localUserMessageId ? { ...m, agent: routingInfo.targetAgent as AgentType } : m
-              )
-              const updatedState: ChatState = {
-                ...existingState,
-                activeAgent: routingInfo.targetAgent as AgentType,
-                history: updatedHistory,
-                metadata: { ...existingState.metadata, lastUpdated: new Date() }
-              }
-              await clinicalStorage.saveChatSession(updatedState)
-              console.log('💾 [IndexedDB] Agente del mensaje de usuario actualizado en persistencia')
+            if (!psychologistId) return
+            const result = await findSessionById(psychologistId, sessionIdToUse!)
+            if (result) {
+              const { session: existingState, patientId: pid } = result
+              existingState.activeAgent = routingInfo.targetAgent as AgentType
+              existingState.metadata = { ...existingState.metadata, lastUpdated: new Date() }
+              await saveSessionMetadata(psychologistId, pid, existingState)
+              console.log('💾 [Firestore] Agente del mensaje de usuario actualizado en persistencia')
             }
           } catch (e) {
-            console.warn('⚠️ [IndexedDB] No se pudo actualizar el agente en persistencia:', e)
+            console.warn('⚠️ [Firestore] No se pudo actualizar el agente en persistencia:', e)
           }
         })()
       }
@@ -992,9 +985,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
     if (!targetSessionId) {
       try {
-        const persistence = ClientContextPersistence.getInstance()
-        const recent = await persistence.getMostRecentSession()
-        targetSessionId = recent?.sessionId || null
+        if (psychologistId) {
+          const recent = await listUserSessions(psychologistId, { pageSize: 1, sortBy: 'lastUpdated', sortOrder: 'desc' })
+          targetSessionId = recent.items[0]?.sessionId || null
+        }
       } catch (e) {
         // ignore
       }
@@ -1048,50 +1042,19 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     console.log('✅ Respuesta de streaming agregada al historial')
     console.log('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
-    // 💾 Persist to IndexedDB (best-effort, non-blocking for UI)
+    // 💾 Persist AI response to Firestore (best-effort, non-blocking for UI)
     try {
-      const existingState = await clinicalStorage.loadChatSession(targetSessionId)
-      if (existingState) {
-        // Idempotency: check if last message already has identical content
-        const normalize = (s?: string) => (s || '').replace(/\s+/g, ' ').trim()
-        const lastMessage = existingState.history[existingState.history.length - 1]
-        if (lastMessage && lastMessage.role === 'model' && normalize(lastMessage.content) === normalize(responseContent)) {
-          // Merge extras into existing message
-          if (groundingUrls && groundingUrls.length > 0) (lastMessage as any).groundingUrls = groundingUrls
-          if (bulletsToAttach.length > 0 && !(lastMessage as any).reasoningBullets?.length) {
-            (lastMessage as any).reasoningBullets = [...bulletsToAttach]
-          }
-          if (executionTimelineForThisResponse && !(lastMessage as any).executionTimeline) {
-            (lastMessage as any).executionTimeline = executionTimelineForThisResponse
-          }
-        } else {
-          existingState.history.push(aiMessage)
-        }
-        existingState.metadata.lastUpdated = new Date()
-        await clinicalStorage.saveChatSession(existingState)
+      if (psychologistId) {
+        await addFirestoreMessage(
+          psychologistId,
+          resolvePatientId({ sessionMeta: systemState.sessionMeta, clinicalContext: { sessionType: 'clinical_supervision', confidentialityLevel: 'high' } }),
+          targetSessionId,
+          aiMessage
+        )
       }
-      console.log('💾 [IndexedDB] Respuesta AI persistida en IndexedDB con executionTimeline')
+      console.log('💾 [Firestore] Respuesta AI persistida con executionTimeline')
     } catch (persistError) {
-      console.warn('⚠️ [IndexedDB] No se pudo persistir respuesta AI:', persistError)
-    }
-
-    // 💾 Persist to localStorage via ClientContextPersistence for cross-reload restoration
-    try {
-      const persistence = ClientContextPersistence.getInstance()
-      // Use historyRef for the latest history value, then append the new AI message
-      const updatedHistory = [...historyRef.current, aiMessage]
-      await persistence.saveOptimizedContext(
-        targetSessionId,
-        agent,
-        updatedHistory,
-        {
-          usageMetadata: { totalMessages: updatedHistory.length, averageResponseTime: 0, compressionRatio: 1.0, modalityUsage: {} },
-          modalityDetails: { textTokens: 0, audioTokens: 0, videoTokens: 0 }
-        }
-      )
-      console.log('💾 [localStorage] Historial persistido en ClientContextPersistence')
-    } catch (localStorageError) {
-      console.warn('⚠️ [localStorage] No se pudo persistir historial:', localStorageError)
+      console.warn('⚠️ [Firestore] No se pudo persistir respuesta AI:', persistError)
     }
   }, [systemState.sessionId, currentMessageBullets])
 

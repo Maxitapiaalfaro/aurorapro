@@ -1,11 +1,18 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useAuth } from "@/providers/auth-provider"
 import { useOptimizedContext } from "./use-optimized-context"
-import { ClientContextPersistence } from "@/lib/client-context-persistence"
-import type { AgentType, ClinicalMode, ChatMessage } from "@/types/clinical-types"
+import {
+  listUserSessions,
+  findSessionById,
+  saveSessionMetadata,
+  loadSessionWithMessages,
+  resolvePatientId,
+} from "@/lib/firestore-client-storage"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState } from "@/types/clinical-types"
 
-// Interfaz para el estado de la sesión optimizada
+// Interfaz para el estado de la sesion optimizada
 interface OptimizedSessionState {
   sessionId: string | null
   userId: string
@@ -25,28 +32,29 @@ interface OptimizedSessionState {
 }
 
 interface UseHopeAIOptimizedReturn {
-  // Estado de la sesión
+  // Estado de la sesion
   sessionState: OptimizedSessionState
-  
-  // Gestión de sesiones
+
+  // Gestion de sesiones
   createOptimizedSession: (userId: string, mode: ClinicalMode, agent: AgentType) => Promise<string | null>
   loadOptimizedSession: (sessionId: string) => Promise<boolean>
-  
-  // Comunicación optimizada
+
+  // Comunicacion optimizada
   sendMessage: (message: string, useStreaming?: boolean) => Promise<any>
   switchAgent: (newAgent: AgentType) => Promise<boolean>
-  
+
   // Acceso al contexto
   getCuratedHistory: () => ChatMessage[]
   getComprehensiveHistory: () => ChatMessage[]
   getPerformanceReport: () => any
-  
+
   // Control de estado
   clearError: () => void
   resetSession: () => void
 }
 
 export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
+  const { psychologistId } = useAuth()
   const {
     contextState,
     createOptimizedChat,
@@ -76,54 +84,74 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
     }
   })
 
-  const contextPersistence = useRef(ClientContextPersistence.getInstance())
+  // Track the current patientId for the active session
+  const currentPatientId = useRef<string>('default_patient')
   const sessionStartTime = useRef<Date | null>(null)
 
-  // Inicialización del sistema optimizado
+  // Inicializacion del sistema optimizado
   useEffect(() => {
+    if (!psychologistId) return
+
     const initializeOptimizedSystem = async () => {
       try {
         setSessionState(prev => ({ ...prev, isLoading: true }))
 
-        // Intentar restaurar la sesión más reciente
-        const mostRecentSession = await contextPersistence.current.getMostRecentSession()
-        
-        if (mostRecentSession) {
-          console.log('🔄 Restaurando sesión más reciente:', mostRecentSession.sessionId)
-          
-          // Recrear el chat optimizado con el historial existente
-          await createOptimizedChat(
-            mostRecentSession.activeAgent,
-            mostRecentSession.comprehensiveHistory
+        // Intentar restaurar la sesion mas reciente via Firestore
+        const result = await listUserSessions(psychologistId, {
+          pageSize: 1,
+          sortBy: 'lastUpdated',
+          sortOrder: 'desc'
+        })
+
+        if (result.items.length > 0) {
+          const mostRecentSummary = result.items[0]
+          console.log('Restaurando sesion mas reciente:', mostRecentSummary.sessionId)
+
+          // Load full session with messages
+          const fullSession = await loadSessionWithMessages(
+            psychologistId,
+            mostRecentSummary.patientId,
+            mostRecentSummary.sessionId
           )
 
-          // Actualizar estado de la sesión
-          setSessionState(prev => ({
-            ...prev,
-            sessionId: mostRecentSession.sessionId,
-            activeAgent: mostRecentSession.activeAgent,
-            isInitialized: true,
-            isLoading: false,
-            performanceMetrics: {
-              ...prev.performanceMetrics,
-              totalInteractions: mostRecentSession.metadata.usageMetadata.totalMessages,
-              averageResponseTime: mostRecentSession.metadata.usageMetadata.averageResponseTime,
-              compressionRatio: mostRecentSession.metadata.usageMetadata.compressionRatio,
-              modalityUsage: mostRecentSession.metadata.usageMetadata.modalityUsage
-            }
-          }))
+          if (fullSession) {
+            currentPatientId.current = mostRecentSummary.patientId
 
-          sessionStartTime.current = new Date(mostRecentSession.metadata.createdAt)
-          
-          console.log('✅ Sesión restaurada exitosamente')
+            // Recrear el chat optimizado con el historial existente
+            await createOptimizedChat(
+              fullSession.activeAgent,
+              fullSession.history || []
+            )
+
+            // Actualizar estado de la sesion
+            setSessionState(prev => ({
+              ...prev,
+              sessionId: fullSession.sessionId,
+              activeAgent: fullSession.activeAgent,
+              isInitialized: true,
+              isLoading: false,
+              performanceMetrics: {
+                ...prev.performanceMetrics,
+                totalInteractions: fullSession.history?.length || 0,
+              }
+            }))
+
+            sessionStartTime.current = fullSession.metadata?.createdAt
+              ? new Date(fullSession.metadata.createdAt)
+              : new Date()
+
+            console.log('Sesion restaurada exitosamente')
+          } else {
+            console.log('No hay sesiones previas, sistema listo para nueva sesion')
+            setSessionState(prev => ({ ...prev, isInitialized: true, isLoading: false }))
+          }
         } else {
-          console.log('ℹ️ No hay sesiones previas, sistema listo para nueva sesión')
+          console.log('No hay sesiones previas, sistema listo para nueva sesion')
           setSessionState(prev => ({ ...prev, isInitialized: true, isLoading: false }))
         }
 
-        // Limpiar sesiones antiguas en segundo plano
-        contextPersistence.current.cleanupOldSessions().catch(console.warn)
-        
+        // No cleanup needed — Firestore manages its own data lifecycle
+
       } catch (error) {
         console.error('Error inicializando sistema optimizado:', error)
         setSessionState(prev => ({
@@ -136,23 +164,25 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
     }
 
     initializeOptimizedSystem()
-  }, [])
+  }, [psychologistId])
 
-  // Crear nueva sesión optimizada
+  // Crear nueva sesion optimizada
   const createOptimizedSession = useCallback(async (
     userId: string,
     mode: ClinicalMode,
     agent: AgentType
   ): Promise<string | null> => {
+    if (!psychologistId) return null
+
     try {
       setSessionState(prev => ({ ...prev, isLoading: true, error: null }))
 
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      
+
       // Crear chat optimizado con SDK nativo
       await createOptimizedChat(agent, [])
-      
-      // Actualizar estado de la sesión
+
+      // Actualizar estado de la sesion
       setSessionState(prev => ({
         ...prev,
         sessionId,
@@ -171,117 +201,123 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
       }))
 
       sessionStartTime.current = new Date()
+      currentPatientId.current = 'default_patient'
 
-      // Guardar contexto inicial
-      await contextPersistence.current.saveOptimizedContext(
+      // Guardar contexto inicial en Firestore
+      const initialSession = {
         sessionId,
-        agent,
-        [],
-        {
-          usageMetadata: {
-            totalMessages: 0,
-            averageResponseTime: 0,
-            compressionRatio: 1.0,
-            modalityUsage: { text: 0, audio: 0, video: 0 }
-          },
-          modalityDetails: {
-            textTokens: 0,
-            audioTokens: 0,
-            videoTokens: 0
-          }
-        }
-      )
+        userId,
+        mode,
+        activeAgent: agent,
+        history: [],
+        metadata: {
+          createdAt: new Date(),
+          lastUpdated: new Date(),
+        },
+        clinicalContext: {
+          patientId: currentPatientId.current,
+        },
+      } as unknown as ChatState
 
-      console.log('✅ Sesión optimizada creada:', sessionId)
+      await saveSessionMetadata(psychologistId, currentPatientId.current, initialSession)
+
+      console.log('Sesion optimizada creada:', sessionId)
       return sessionId
     } catch (error) {
-      console.error('Error creando sesión optimizada:', error)
+      console.error('Error creando sesion optimizada:', error)
       setSessionState(prev => ({
         ...prev,
-        error: 'Error al crear la sesión optimizada',
+        error: 'Error al crear la sesion optimizada',
         isLoading: false
       }))
       return null
     }
-  }, [createOptimizedChat])
+  }, [psychologistId, createOptimizedChat])
 
-  // Cargar sesión optimizada existente
+  // Cargar sesion optimizada existente
   const loadOptimizedSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    if (!psychologistId) return false
+
     try {
       setSessionState(prev => ({ ...prev, isLoading: true, error: null }))
 
-      const savedContext = await contextPersistence.current.loadOptimizedContext(sessionId)
-      
-      if (!savedContext) {
-        throw new Error('Sesión no encontrada')
+      const result = await findSessionById(psychologistId, sessionId)
+
+      if (!result) {
+        throw new Error('Sesion no encontrada')
       }
+
+      const { session: savedSession, patientId } = result
+      currentPatientId.current = patientId
 
       // Recrear chat optimizado con historial
       await createOptimizedChat(
-        savedContext.activeAgent,
-        savedContext.comprehensiveHistory
+        savedSession.activeAgent,
+        savedSession.history || []
       )
 
       // Actualizar estado
       setSessionState(prev => ({
         ...prev,
-        sessionId: savedContext.sessionId,
-        activeAgent: savedContext.activeAgent,
+        sessionId: savedSession.sessionId,
+        activeAgent: savedSession.activeAgent,
         isLoading: false,
         performanceMetrics: {
           ...prev.performanceMetrics,
-          totalInteractions: savedContext.metadata.usageMetadata.totalMessages,
-          averageResponseTime: savedContext.metadata.usageMetadata.averageResponseTime,
-          compressionRatio: savedContext.metadata.usageMetadata.compressionRatio,
-          modalityUsage: savedContext.metadata.usageMetadata.modalityUsage
+          totalInteractions: savedSession.history?.length || 0,
         }
       }))
 
-      sessionStartTime.current = new Date(savedContext.metadata.createdAt)
-      
-      console.log('✅ Sesión cargada exitosamente:', sessionId)
+      sessionStartTime.current = savedSession.metadata?.createdAt
+        ? new Date(savedSession.metadata.createdAt)
+        : new Date()
+
+      console.log('Sesion cargada exitosamente:', sessionId)
       return true
     } catch (error) {
-      console.error('Error cargando sesión:', error)
+      console.error('Error cargando sesion:', error)
       setSessionState(prev => ({
         ...prev,
-        error: 'Error al cargar la sesión',
+        error: 'Error al cargar la sesion',
         isLoading: false
       }))
       return false
     }
-  }, [createOptimizedChat])
+  }, [psychologistId, createOptimizedChat])
 
-  // Enviar mensaje optimizado con métricas avanzadas
+  // Enviar mensaje optimizado con metricas avanzadas
   const sendMessage = useCallback(async (
     message: string,
     useStreaming = true
   ): Promise<any> => {
     if (!sessionState.sessionId) {
-      throw new Error('No hay sesión activa')
+      throw new Error('No hay sesion activa')
+    }
+    if (!psychologistId) {
+      throw new Error('Not authenticated')
     }
 
     try {
       setSessionState(prev => ({ ...prev, isLoading: true, error: null }))
 
       const startTime = Date.now()
-      
-      // Enviar mensaje a través del contexto optimizado
+
+      // Enviar mensaje a traves del contexto optimizado
       const { response, usageMetadata } = await sendOptimizedMessage(message, useStreaming)
-      
+
       const endTime = Date.now()
       const responseTime = endTime - startTime
 
-      // Actualizar métricas de rendimiento
+      // Actualizar metricas de rendimiento
       const updatedMetrics = {
-        sessionAge: sessionStartTime.current ? 
+        sessionAge: sessionStartTime.current ?
           Math.floor((Date.now() - sessionStartTime.current.getTime()) / 60000) : 0,
         totalInteractions: sessionState.performanceMetrics.totalInteractions + 1,
         averageResponseTime: (
           (sessionState.performanceMetrics.averageResponseTime * sessionState.performanceMetrics.totalInteractions + responseTime) /
           (sessionState.performanceMetrics.totalInteractions + 1)
         ),
-        tokenEfficiency: usageMetadata.totalTokens > 0 ? 
+        tokenEfficiency: usageMetadata.totalTokens > 0 ?
           (usageMetadata.responseTokens / usageMetadata.totalTokens) : 0,
         modalityUsage: {
           ...sessionState.performanceMetrics.modalityUsage,
@@ -296,23 +332,25 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
         performanceMetrics: updatedMetrics
       }))
 
-      // Guardar contexto optimizado con métricas extendidas
-      await contextPersistence.current.saveOptimizedContext(
-        sessionState.sessionId,
-        sessionState.activeAgent,
-        getContextCuratedHistory(),
-        {
-          usageMetadata: {
-            totalMessages: updatedMetrics.totalInteractions,
-            averageResponseTime: updatedMetrics.averageResponseTime,
-            compressionRatio: updatedMetrics.compressionRatio,
-            modalityUsage: updatedMetrics.modalityUsage
-          },
-          modalityDetails: contextState.modalityDetails
-        }
-      )
+      // Save session metadata to Firestore
+      const sessionData: ChatState = {
+        sessionId: sessionState.sessionId,
+        userId: sessionState.userId,
+        mode: sessionState.mode,
+        activeAgent: sessionState.activeAgent,
+        history: getContextCuratedHistory(),
+        metadata: {
+          createdAt: sessionStartTime.current || new Date(),
+          lastUpdated: new Date(),
+        },
+        clinicalContext: {
+          patientId: currentPatientId.current,
+        },
+      } as unknown as ChatState
 
-      console.log('✅ Mensaje enviado y contexto guardado', {
+      await saveSessionMetadata(psychologistId, currentPatientId.current, sessionData)
+
+      console.log('Mensaje enviado y contexto guardado', {
         responseTime,
         tokenEfficiency: updatedMetrics.tokenEfficiency,
         compressionRatio: updatedMetrics.compressionRatio
@@ -328,12 +366,15 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
       }))
       throw error
     }
-  }, [sessionState, sendOptimizedMessage, getContextCuratedHistory, getUsageMetadata, contextState.modalityDetails])
+  }, [psychologistId, sessionState, sendOptimizedMessage, getContextCuratedHistory, getUsageMetadata, contextState.modalityDetails])
 
   // Cambiar agente con transferencia optimizada de contexto
   const switchAgent = useCallback(async (newAgent: AgentType): Promise<boolean> => {
     if (!sessionState.sessionId) {
-      throw new Error('No hay sesión activa')
+      throw new Error('No hay sesion activa')
+    }
+    if (!psychologistId) {
+      throw new Error('Not authenticated')
     }
 
     try {
@@ -342,7 +383,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
       // Transferir contexto al nuevo agente
       await transferContextToAgent(newAgent)
 
-      // Actualizar métricas de rendimiento
+      // Actualizar metricas de rendimiento
       const updatedMetrics = {
         ...sessionState.performanceMetrics,
         compressionRatio: getUsageMetadata().compressionRatio,
@@ -356,23 +397,25 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
         performanceMetrics: updatedMetrics
       }))
 
-      // Guardar contexto optimizado con metadatos actualizados
-      await contextPersistence.current.saveOptimizedContext(
-        sessionState.sessionId,
-        newAgent,
-        getContextCuratedHistory(),
-        {
-          usageMetadata: {
-            totalMessages: updatedMetrics.totalInteractions,
-            averageResponseTime: updatedMetrics.averageResponseTime,
-            compressionRatio: updatedMetrics.compressionRatio,
-            modalityUsage: updatedMetrics.modalityUsage
-          },
-          modalityDetails: contextState.modalityDetails
-        }
-      )
+      // Save updated session metadata to Firestore
+      const sessionData: ChatState = {
+        sessionId: sessionState.sessionId,
+        userId: sessionState.userId,
+        mode: sessionState.mode,
+        activeAgent: newAgent,
+        history: getContextCuratedHistory(),
+        metadata: {
+          createdAt: sessionStartTime.current || new Date(),
+          lastUpdated: new Date(),
+        },
+        clinicalContext: {
+          patientId: currentPatientId.current,
+        },
+      } as unknown as ChatState
 
-      console.log('✅ Agente cambiado exitosamente:', newAgent)
+      await saveSessionMetadata(psychologistId, currentPatientId.current, sessionData)
+
+      console.log('Agente cambiado exitosamente:', newAgent)
       return true
     } catch (error) {
       console.error('Error cambiando agente:', error)
@@ -383,7 +426,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
       }))
       return false
     }
-  }, [sessionState, transferContextToAgent, getContextCuratedHistory, getUsageMetadata, contextState.modalityDetails])
+  }, [psychologistId, sessionState, transferContextToAgent, getContextCuratedHistory, getUsageMetadata, contextState.modalityDetails])
 
   // Obtener reporte de rendimiento completo
   const getPerformanceReport = useCallback(() => {
@@ -420,7 +463,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
   // Utilidades de acceso
   const getCuratedHistory = useCallback(() => getContextCuratedHistory(), [getContextCuratedHistory])
   const getComprehensiveHistory = useCallback(() => getContextComprehensiveHistory(), [getContextComprehensiveHistory])
-  
+
   const clearError = useCallback(() => {
     setSessionState(prev => ({ ...prev, error: null }))
   }, [])
@@ -445,6 +488,7 @@ export function useHopeAIOptimized(): UseHopeAIOptimizedReturn {
       }
     })
     sessionStartTime.current = null
+    currentPatientId.current = 'default_patient'
   }, [resetContext])
 
   return {

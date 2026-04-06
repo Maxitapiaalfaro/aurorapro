@@ -208,32 +208,17 @@ declare global {
   var __hopeai_storage_adapter__: ServerStorageAdapter | undefined
 }
 
-// Función para obtener el adaptador de almacenamiento correcto
+// Función para obtener el adaptador de almacenamiento (server-side only)
 export async function getStorageAdapter() {
-  const isServer = isServerEnvironment()
-  console.log('🔍 [getStorageAdapter] Environment check:', {
-    isServer,
-    hasWindow: typeof window !== 'undefined',
-    nodeEnv: process.env.NODE_ENV
-  })
-
-  if (isServer) {
-    console.log('🖥️ [getStorageAdapter] Running on SERVER - using SQLite storage')
-    // Usar singleton global verdadero para mantener el estado entre llamadas API
-    if (!globalThis.__hopeai_storage_adapter__) {
-      console.log('🔧 [getStorageAdapter] Creating new ServerStorageAdapter instance (Singleton Global)')
-      globalThis.__hopeai_storage_adapter__ = new ServerStorageAdapter()
-      await globalThis.__hopeai_storage_adapter__.initialize()
-    } else {
-      console.log('♻️ [getStorageAdapter] Reusing existing ServerStorageAdapter instance (Singleton Global)')
-    }
-    return globalThis.__hopeai_storage_adapter__
+  // This module is server-only. Client-side code uses firestore-client-storage.ts directly.
+  console.log('🖥️ [getStorageAdapter] Running on SERVER')
+  // Usar singleton global verdadero para mantener el estado entre llamadas API
+  if (!globalThis.__hopeai_storage_adapter__) {
+    console.log('🔧 [getStorageAdapter] Creating new ServerStorageAdapter instance (Singleton Global)')
+    globalThis.__hopeai_storage_adapter__ = new ServerStorageAdapter()
+    await globalThis.__hopeai_storage_adapter__.initialize()
   } else {
-    console.log('🌐 [getStorageAdapter] Running on CLIENT - using IndexedDB storage')
-    // En el cliente, usar el almacenamiento original con IndexedDB
-    const { clinicalStorage } = require('./clinical-context-storage')
-    // Asegurar que el storage del cliente esté inicializado
-    await clinicalStorage.initialize()
-    return clinicalStorage
+    console.log('♻️ [getStorageAdapter] Reusing existing ServerStorageAdapter instance (Singleton Global)')
   }
+  return globalThis.__hopeai_storage_adapter__
 }

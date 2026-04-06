@@ -1,8 +1,15 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
+import { useAuth } from "@/providers/auth-provider"
+import {
+  listUserSessions,
+  findSessionById,
+  loadSessionWithMessages,
+  deleteSession,
+} from "@/lib/firestore-client-storage"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
+import type { SessionSummary } from "@/lib/firestore-client-storage"
 
 interface ConversationSummary {
   sessionId: string
@@ -13,6 +20,7 @@ interface ConversationSummary {
   mode: ClinicalMode
   messageCount: number
   preview: string
+  patientId: string
 }
 
 interface UseConversationHistoryReturn {
@@ -22,24 +30,25 @@ interface UseConversationHistoryReturn {
   error: string | null
   hasNextPage: boolean
   totalCount: number
-  
-  // Gestión de conversaciones
+
+  // Gestion de conversaciones
   loadConversations: (userId: string) => Promise<void>
   loadMoreConversations: () => Promise<void>
   openConversation: (sessionId: string) => Promise<ChatState | null>
   deleteConversation: (sessionId: string) => Promise<void>
   searchConversations: (query: string) => ConversationSummary[]
-  
+
   // Filtros
   filterByAgent: (agent: AgentType | 'all') => ConversationSummary[]
   filterByMode: (mode: ClinicalMode | 'all') => ConversationSummary[]
-  
+
   // Utilidades
   clearError: () => void
   refreshConversations: () => Promise<void>
 }
 
 export function useConversationHistory(): UseConversationHistoryReturn {
+  const { psychologistId } = useAuth()
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [allConversations, setAllConversations] = useState<ConversationSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -50,48 +59,39 @@ export function useConversationHistory(): UseConversationHistoryReturn {
   const [totalCount, setTotalCount] = useState(0)
   const [nextPageToken, setNextPageToken] = useState<string | undefined>()
   const [searchQuery, setSearchQuery] = useState<string>('')
-  
+
   // Cache para evitar recargas innecesarias
   const conversationCache = useRef<Map<string, ConversationSummary>>(new Map())
   const lastLoadedUserId = useRef<string | null>(null)
 
-  // Función para convertir ChatState a ConversationSummary
-  const createConversationSummary = useCallback((chatState: ChatState): ConversationSummary => {
-    const lastUserMessage = chatState.history
-      .filter(msg => msg.role === 'user')
-      .pop()
-    
-    const lastMessage = chatState.history[chatState.history.length - 1]
-    
-    // Generar título inteligente basado en el primer mensaje del usuario
-    const firstUserMessage = chatState.history.find(msg => msg.role === 'user')
-    const title = firstUserMessage 
-      ? firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '')
-      : `Sesión ${chatState.activeAgent}`
-    
-    // Crear preview del último intercambio
-    const preview = lastMessage
-      ? `${lastMessage.role === 'user' ? 'Tú' : 'HopeAI'}: ${lastMessage.content.substring(0, 100)}${lastMessage.content.length > 100 ? '...' : ''}`
+  // Funcion para convertir SessionSummary a ConversationSummary
+  const createConversationSummary = useCallback((summary: SessionSummary): ConversationSummary => {
+    const title = summary.title || `Sesion ${summary.activeAgent}`
+    const preview = summary.messageCount
+      ? `${summary.messageCount} mensajes`
       : 'Sin mensajes'
 
     return {
-      sessionId: chatState.sessionId,
+      sessionId: summary.sessionId,
       title,
-      lastMessage: lastMessage?.content || '',
-      lastUpdated: chatState.metadata.lastUpdated,
-      activeAgent: chatState.activeAgent,
-      mode: chatState.mode,
-      messageCount: chatState.history.length,
-      preview
+      lastMessage: '',
+      lastUpdated: summary.lastUpdated,
+      activeAgent: summary.activeAgent as AgentType,
+      mode: summary.mode as ClinicalMode,
+      messageCount: summary.messageCount || 0,
+      preview,
+      patientId: summary.patientId,
     }
   }, [])
 
-  // Cargar conversaciones del usuario con paginación
-  const loadConversations = useCallback(async (userId: string, resetCache: boolean = true) => {
+  // Cargar conversaciones del usuario con paginacion
+  const loadConversations = useCallback(async (_userId: string, resetCache: boolean = true) => {
+    if (!psychologistId) return
+
     setIsLoading(true)
     setError(null)
-    setCurrentUserId(userId)
-    
+    setCurrentUserId(_userId)
+
     if (resetCache) {
       conversationCache.current.clear()
       setConversations([])
@@ -100,45 +100,45 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     }
 
     try {
-      console.log(`🔄 Cargando conversaciones paginadas para usuario: ${userId}`)
-      
+      console.log(`Cargando conversaciones paginadas para usuario: ${_userId}`)
+
       const paginationOptions: PaginationOptions = {
-        pageSize: 20, // Tamaño de página optimizado según el SDK
+        pageSize: 20,
         sortBy: 'lastUpdated',
         sortOrder: 'desc'
       }
-      
-      const result = await clinicalStorage.getUserSessionsPaginated(userId, paginationOptions)
-      
-      console.log(`📊 Cargada página con ${result.items.length} conversaciones de ${result.totalCount} totales`)
-      
+
+      const result = await listUserSessions(psychologistId, paginationOptions)
+
+      console.log(`Cargada pagina con ${result.items.length} conversaciones de ${result.totalCount} totales`)
+
       const summaries = result.items.map(createConversationSummary)
-      
+
       // Actualizar cache
       summaries.forEach((summary: ConversationSummary) => {
         conversationCache.current.set(summary.sessionId, summary)
       })
-      
+
       setAllConversations(summaries)
       setConversations(summaries)
       setHasNextPage(result.hasNextPage)
       setTotalCount(result.totalCount)
       setNextPageToken(result.nextPageToken)
-      lastLoadedUserId.current = userId
-      
-      console.log(`✅ Primera página de conversaciones cargada exitosamente`)
+      lastLoadedUserId.current = _userId
+
+      console.log(`Primera pagina de conversaciones cargada exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error cargando conversaciones: ${errorMessage}`)
-      console.error('❌ Error cargando conversaciones:', err)
+      console.error('Error cargando conversaciones:', err)
     } finally {
       setIsLoading(false)
     }
-  }, [createConversationSummary])
+  }, [psychologistId, createConversationSummary])
 
-  // Cargar más conversaciones (lazy loading)
+  // Cargar mas conversaciones (lazy loading)
   const loadMoreConversations = useCallback(async () => {
-    if (!currentUserId || !hasNextPage || !nextPageToken || isLoadingMore) {
+    if (!psychologistId || !currentUserId || !hasNextPage || !nextPageToken || isLoadingMore) {
       return
     }
 
@@ -146,106 +146,133 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     setError(null)
 
     try {
-      console.log(`🔄 Cargando más conversaciones...`)
-      
+      console.log(`Cargando mas conversaciones...`)
+
       const paginationOptions: PaginationOptions = {
         pageSize: 20,
         pageToken: nextPageToken,
         sortBy: 'lastUpdated',
         sortOrder: 'desc'
       }
-      
-      const result = await clinicalStorage.getUserSessionsPaginated(currentUserId, paginationOptions)
-      
-      console.log(`📊 Cargadas ${result.items.length} conversaciones adicionales`)
-      
+
+      const result = await listUserSessions(psychologistId, paginationOptions)
+
+      console.log(`Cargadas ${result.items.length} conversaciones adicionales`)
+
       const newSummaries = result.items.map(createConversationSummary)
-      
+
       // Actualizar cache
       newSummaries.forEach((summary: ConversationSummary) => {
         conversationCache.current.set(summary.sessionId, summary)
       })
-      
+
       // Combinar con conversaciones existentes
       const updatedConversations = [...allConversations, ...newSummaries]
-      
+
       setAllConversations(updatedConversations)
-      setConversations(searchQuery ? 
-        updatedConversations.filter(conv => 
+      setConversations(searchQuery ?
+        updatedConversations.filter(conv =>
           conv.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
         ) : updatedConversations
       )
       setHasNextPage(result.hasNextPage)
       setNextPageToken(result.nextPageToken)
-      
-      console.log(`✅ Conversaciones adicionales cargadas exitosamente`)
+
+      console.log(`Conversaciones adicionales cargadas exitosamente`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error cargando más conversaciones: ${errorMessage}`)
-      console.error('❌ Error cargando más conversaciones:', err)
+      setError(`Error cargando mas conversaciones: ${errorMessage}`)
+      console.error('Error cargando mas conversaciones:', err)
     } finally {
       setIsLoadingMore(false)
     }
-  }, [currentUserId, hasNextPage, nextPageToken, isLoadingMore, allConversations, createConversationSummary, searchQuery])
+  }, [psychologistId, currentUserId, hasNextPage, nextPageToken, isLoadingMore, allConversations, createConversationSummary, searchQuery])
 
-  // Abrir conversación específica
+  // Abrir conversacion especifica
   const openConversation = useCallback(async (sessionId: string): Promise<ChatState | null> => {
+    if (!psychologistId) return null
+
     try {
       setError(null)
-      
-      const chatState = await clinicalStorage.loadChatSession(sessionId)
-      
-      if (!chatState) {
-        throw new Error(`Conversación no encontrada: ${sessionId}`)
+
+      const result = await findSessionById(psychologistId, sessionId)
+
+      if (!result) {
+        throw new Error(`Conversacion no encontrada: ${sessionId}`)
       }
-      
-      console.log(`✅ Conversación cargada: ${sessionId}`)
+
+      // Load full session with messages
+      const chatState = await loadSessionWithMessages(psychologistId, result.patientId, sessionId)
+
+      if (!chatState) {
+        throw new Error(`Conversacion no encontrada: ${sessionId}`)
+      }
+
+      console.log(`Conversacion cargada: ${sessionId}`)
       return chatState
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error abriendo conversación: ${errorMessage}`)
-      console.error('❌ Error abriendo conversación:', err)
+      setError(`Error abriendo conversacion: ${errorMessage}`)
+      console.error('Error abriendo conversacion:', err)
       return null
     }
-  }, [])
+  }, [psychologistId])
 
-  // Eliminar conversación
+  // Eliminar conversacion
   const deleteConversation = useCallback(async (sessionId: string) => {
+    if (!psychologistId) return
+
     try {
       setError(null)
-      
-      await clinicalStorage.deleteChatSession(sessionId)
-      
+
+      // Get patientId from cached conversation data
+      const cachedConv = conversationCache.current.get(sessionId)
+      let patientId: string
+
+      if (cachedConv?.patientId) {
+        patientId = cachedConv.patientId
+      } else {
+        // Fallback: look up the session to get patientId
+        const found = await findSessionById(psychologistId, sessionId)
+        if (!found) {
+          throw new Error(`Conversacion no encontrada para eliminar: ${sessionId}`)
+        }
+        patientId = found.patientId
+      }
+
+      await deleteSession(psychologistId, patientId, sessionId)
+
       // Actualizar la lista local
       const updatedConversations = allConversations.filter(conv => conv.sessionId !== sessionId)
       setAllConversations(updatedConversations)
       setConversations(updatedConversations)
-      
-      console.log(`✅ Conversación eliminada: ${sessionId}`)
+      conversationCache.current.delete(sessionId)
+
+      console.log(`Conversacion eliminada: ${sessionId}`)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-      setError(`Error eliminando conversación: ${errorMessage}`)
-      console.error('❌ Error eliminando conversación:', err)
+      setError(`Error eliminando conversacion: ${errorMessage}`)
+      console.error('Error eliminando conversacion:', err)
     }
-  }, [allConversations])
+  }, [psychologistId, allConversations])
 
   // Buscar conversaciones
   const searchConversations = useCallback((query: string): ConversationSummary[] => {
     setSearchQuery(query)
-    
+
     if (!query.trim()) {
       setConversations(allConversations)
       return allConversations
     }
-    
+
     const lowercaseQuery = query.toLowerCase()
-    const filtered = allConversations.filter(conv => 
+    const filtered = allConversations.filter(conv =>
       conv.title.toLowerCase().includes(lowercaseQuery) ||
       conv.lastMessage.toLowerCase().includes(lowercaseQuery) ||
       conv.preview.toLowerCase().includes(lowercaseQuery)
     )
-    
+
     setConversations(filtered)
     return filtered
   }, [allConversations])
@@ -272,9 +299,9 @@ export function useConversationHistory(): UseConversationHistoryReturn {
 
   // Refrescar conversaciones con debouncing
   const refreshConversations = useCallback(async () => {
-    // Prevenir múltiples refreshes simultáneos
+    // Prevenir multiples refreshes simultaneos
     if (isRefreshing) {
-      console.log('⚠️ Refresh ya en progreso, ignorando solicitud duplicada')
+      console.log('Refresh ya en progreso, ignorando solicitud duplicada')
       return
     }
 
@@ -288,11 +315,11 @@ export function useConversationHistory(): UseConversationHistoryReturn {
       if (currentUserId) {
         try {
           setIsRefreshing(true)
-          console.log('🔄 Iniciando refresh debounced de conversaciones')
-          await loadConversations(currentUserId, true) // Resetear cache
-          console.log('✅ Refresh de conversaciones completado')
+          console.log('Iniciando refresh debounced de conversaciones')
+          await loadConversations(currentUserId, true)
+          console.log('Refresh de conversaciones completado')
         } catch (error) {
-          console.error('❌ Error en refresh de conversaciones:', error)
+          console.error('Error en refresh de conversaciones:', error)
         } finally {
           setIsRefreshing(false)
         }

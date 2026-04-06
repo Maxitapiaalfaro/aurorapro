@@ -10,7 +10,8 @@ import { signOut } from "firebase/auth"
 import { auth } from "@/lib/firebase-config"
 import type { PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
+import { getFichasByPatient } from "@/lib/firestore-client-storage"
+import { useAuth } from "@/providers/auth-provider"
 import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
@@ -26,6 +27,7 @@ interface HeaderProps {
 
 export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, hasActiveSession = false }: HeaderProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
+  const { psychologistId } = useAuth()
   const patientId = sessionMeta?.patient?.reference
   const { patient } = usePatientRecord(patientId || null)
   
@@ -79,10 +81,10 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   
   // Cargar fichas clínicas del paciente
   useEffect(() => {
-    if (patientId) {
-      clinicalStorage.getFichasClinicasByPaciente(patientId)
+    if (patientId && psychologistId) {
+      getFichasByPatient(psychologistId, patientId)
         .then(items => {
-          const sorted = items.sort((a, b) => 
+          const sorted = items.sort((a, b) =>
             new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime()
           )
           setFichas(sorted)
@@ -94,7 +96,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
     } else {
       setFichas([])
     }
-  }, [patientId])
+  }, [patientId, psychologistId])
 
   return (
     <header className="sticky top-0 left-0 right-0 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-border backdrop-blur-sm bg-background/95">

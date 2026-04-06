@@ -22,7 +22,8 @@ import { usePatientRecord } from "@/hooks/use-patient-library"
 import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 import { PatientContextComposer, PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
-import { clinicalStorage } from "@/lib/clinical-context-storage"
+import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-client-storage"
+import { useAuth } from "@/providers/auth-provider"
 
 // Componente de métricas de rendimiento (opcional, para desarrollo)
 function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
@@ -42,6 +43,7 @@ function PerformanceMetrics({ performanceReport }: { performanceReport: any }) {
 }
 
 export function MainInterfaceOptimized({ showDebugElements = true }: { showDebugElements?: boolean }) {
+  const { psychologistId } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarActiveTab, setSidebarActiveTab] = useState<'conversations' | 'patients'>('conversations')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -362,7 +364,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       // Generar resumen del paciente priorizando ficha clínica más reciente si existe
       let patientSummary: string
       try {
-        const fichas = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
+        const fichas = psychologistId
+          ? await getFichasByPatient(psychologistId, patient.id)
+          : []
         const latestFicha = fichas
           .filter((f: FichaClinicaState) => f.estado === 'completado')
           .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
@@ -637,8 +641,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       if (!systemState.sessionId || !patient) return
       
       // Cargar la última ficha existente para continuidad clínica
-      await clinicalStorage.initialize()
-      const fichasExistentes = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
+      const fichasExistentes = psychologistId
+        ? await getFichasByPatient(psychologistId, patient.id)
+        : []
       const ultimaFicha = fichasExistentes
         .filter(f => f.estado === 'completado')
         .sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
@@ -687,10 +692,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Error generando ficha clínica')
       }
-      // Persist to IndexedDB (client-side only)
-      if (data.ficha) {
-        await clinicalStorage.initialize()
-        await clinicalStorage.saveFichaClinica({
+      // Persist to Firestore
+      if (data.ficha && psychologistId) {
+        await saveFicha(psychologistId, patient.id, {
           ...data.ficha,
           ultimaActualizacion: new Date(data.ficha.ultimaActualizacion)
         })
@@ -720,17 +724,15 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   const handleDiscardFichaAndRevert = async () => {
-    if (!patient || !lastGeneratedFichaId) return
-    
+    if (!patient || !lastGeneratedFichaId || !psychologistId) return
+
     try {
-      await clinicalStorage.initialize()
-      
-      // Eliminar la ficha recién generada de IndexedDB
-      await clinicalStorage.deleteFichaClinica(lastGeneratedFichaId)
-      
-      // Si había una ficha anterior, asegurarse de que esté en IndexedDB
+      // Eliminar la ficha recién generada de Firestore
+      await deleteFicha(psychologistId, patient.id, lastGeneratedFichaId)
+
+      // Si había una ficha anterior, asegurarse de que esté en Firestore
       if (previousFichaBackup) {
-        await clinicalStorage.saveFichaClinica(previousFichaBackup)
+        await saveFicha(psychologistId, patient.id, previousFichaBackup)
       }
       
       // Refrescar la lista
@@ -758,14 +760,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   const refreshFichaList = async () => {
-    if (!patient) return
+    if (!patient || !psychologistId) return
     try {
-      await clinicalStorage.initialize()
-      const items = await clinicalStorage.getFichasClinicasByPaciente(patient.id)
+      const items = await getFichasByPatient(psychologistId, patient.id)
       const sorted = (items || []).sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())
       setFichasClinicasLocal(sorted)
     } catch (e) {
-      console.error('Error loading fichas clínicas (IndexedDB):', e)
+      console.error('Error loading fichas clínicas:', e)
     }
   }
 
