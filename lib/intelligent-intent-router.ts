@@ -265,8 +265,8 @@ export class IntelligentIntentRouter {
     // Inicializar Context Window Manager con configuración optimizada
     const contextConfig: Partial<ContextWindowConfig> = {
       maxExchanges: 10, // Mantener últimos 4 intercambios para contexto óptimo
-      triggerTokens: 8000,
-      targetTokens: 4000,
+      triggerTokens: 25000,
+      targetTokens: 10000,
       enableLogging: config.enableLogging || true
     };
     this.contextWindowManager = new ContextWindowManager(contextConfig);
@@ -691,11 +691,11 @@ export class IntelligentIntentRouter {
                 mode: FunctionCallingConfigMode.ANY
               }
             },
-            temperature: 0.0,
+            temperature: 1.0,
             topP: 0.1,
             topK: 1,
             seed: 42,
-            maxOutputTokens: 600
+            maxOutputTokens: 1000
           }
         }), 'classifyIntentAndExtractEntities');
   
