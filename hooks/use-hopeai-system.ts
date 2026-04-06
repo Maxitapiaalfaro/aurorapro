@@ -5,7 +5,6 @@ import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, Rea
 import {
   findSessionById,
   saveSessionMetadata,
-  addMessage as addFirestoreMessage,
   loadSessionWithMessages,
   getClinicalFile,
   getClinicalFilesBySession,
@@ -437,8 +436,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         // ARQUITECTURA OPTIMIZADA: Solo usar fileReferences con IDs
         fileReferences: attachedFiles?.map(file => file.id) || []
       }
-      const localUserMessageId = userMessage.id
-
       // NUEVA FUNCIONALIDAD: Limpiar bullets temporales del mensaje anterior
       setCurrentMessageBullets([])
       
@@ -469,7 +466,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
       })
 
-      // 💾 Persist user message to Firestore (best-effort, non-blocking for UI)
+      // 💾 Ensure session doc exists in Firestore (best-effort, non-blocking for UI)
+      // NOTE: User message is NOT persisted here to avoid duplication.
+      // The server persists the user message as part of saveChatSessionBoth() after processing.
       try {
         if (psychologistId) {
           const patientId = resolvePatientId({
@@ -501,13 +500,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             }
             await saveSessionMetadata(psychologistId, patientId, newSession)
           }
-
-          // Add the user message as individual document
-          await addFirestoreMessage(psychologistId, patientId, sessionIdToUse!, userMessage)
-          console.log('💾 [Firestore] Mensaje de usuario persistido:', { sessionId: sessionIdToUse, messageId: localUserMessageId })
         }
       } catch (persistError) {
-        console.error('❌ [Firestore] Error al persistir el mensaje del usuario:', persistError)
+        console.error('❌ [Firestore] Error al verificar/crear sesión:', persistError)
       }
 
       console.log('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
@@ -1043,20 +1038,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     console.log('✅ Respuesta de streaming agregada al historial')
     console.log('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
-    // 💾 Persist AI response to Firestore (best-effort, non-blocking for UI)
-    try {
-      if (psychologistId) {
-        await addFirestoreMessage(
-          psychologistId,
-          resolvePatientId({ sessionMeta: systemState.sessionMeta, clinicalContext: { sessionType: 'clinical_supervision', confidentialityLevel: 'high' } }),
-          targetSessionId,
-          aiMessage
-        )
-      }
-      console.log('💾 [Firestore] Respuesta AI persistida con executionTimeline')
-    } catch (persistError) {
-      console.warn('⚠️ [Firestore] No se pudo persistir respuesta AI:', persistError)
-    }
+    // NOTE: AI message is NOT persisted from the frontend to avoid duplication.
+    // The server already persists AI messages as part of saveChatSessionBoth() during streaming/response handling.
   }, [systemState.sessionId, currentMessageBullets])
 
   // Establecer contexto del paciente
