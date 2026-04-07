@@ -263,7 +263,8 @@ export function prepareFunctionCallWithSecurity(
   call: any,
   psychologistId: string | null,
   sessionId: string,
-  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>
+  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
+  onProgress?: (message: string) => void
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -315,7 +316,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId }),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, onProgress }),
   } as PreparedToolCall;
 }
 
@@ -326,7 +327,7 @@ export function prepareFunctionCallWithSecurity(
 async function executeToolCall(
   call: any,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
-  context?: { psychologistId?: string; sessionId?: string; patientId?: string }
+  context?: { psychologistId?: string; sessionId?: string; patientId?: string; onProgress?: (message: string) => void }
 ): Promise<ToolCallResult> {
   // Registry-based dispatch — delegates to tool-handlers.ts
   const { getToolHandler } = await import('./tool-handlers');
@@ -338,6 +339,7 @@ async function executeToolCall(
       sessionId: context?.sessionId || '',
       patientId: context?.patientId,
       academicReferences,
+      onProgress: context?.onProgress,
     });
   }
 
@@ -502,80 +504,95 @@ export async function handleStreamingWithTools(
       if (functionCalls.length > 0) {
         logger.info(`Processing ${functionCalls.length} function calls`)
 
-        // 🎨 UX: Emitir indicador de inicio de búsqueda académica (todas las variantes)
-        const academicSearchCalls = functionCalls.filter((call: any) =>
-          call.name === "search_academic_literature" ||
-          call.name === "search_evidence_for_reflection" ||
-          call.name === "search_evidence_for_documentation"
-        )
-        if (academicSearchCalls.length > 0) {
-          const toolName = academicSearchCalls[0].name
+        // 🎯 Almacenar referencias académicas obtenidas de ParallelAI
+        let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
+
+        // 🎨 UX: Emit tool_call_start for EVERY tool (generic, not just academic search)
+        for (const call of functionCalls) {
           yield {
             text: "",
             metadata: {
               type: "tool_call_start",
-              toolName: toolName,
-              query: academicSearchCalls[0].args.query
-            }
-          }
-          // 🔍 Intermediate progress: connecting to academic databases
-          yield {
-            text: "",
-            metadata: {
-              type: "tool_call_progress",
-              toolName: toolName,
-              message: "Conectando con bases de datos académicas (Parallel AI)…"
+              toolName: call.name,
+              query: call.args?.query || call.args?.research_question || call.args?.patientId || call.args?.document_type || undefined,
             }
           }
         }
 
-        // 🎯 Almacenar referencias académicas obtenidas de ParallelAI
-        let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
+        // 🎨 Progress queue: sub-agents push messages here, polling loop drains them
+        const progressQueue: Array<{toolName: string, message: string}> = [];
+        const createProgressCallback = (toolName: string) => (message: string) => {
+          progressQueue.push({ toolName, message });
+        };
 
-        // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
+        // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences)
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name))
         );
 
-        // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
-        const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
+        // 🎨 Progress polling loop: execute tools in background, drain progress queue every 200ms
+        let functionResponses: ToolCallResult[];
+        let executionDone = false;
+        const executionPromise = executeToolsSafely(preparedCalls, { maxConcurrent: 3 }).then((results) => {
+          executionDone = true;
+          return results;
+        });
+
+        // Small helper — resolves after `ms` with undefined
+        const sleep = (ms: number) => new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms));
+
+        while (!executionDone) {
+          // Drain any progress messages that accumulated
+          while (progressQueue.length > 0) {
+            const p = progressQueue.shift()!;
+            yield {
+              text: "",
+              metadata: {
+                type: "tool_call_progress",
+                toolName: p.toolName,
+                message: p.message,
+              }
+            };
+          }
+          // Wait 200ms or until tools finish, whichever comes first
+          const raceResult = await Promise.race([executionPromise, sleep(200)]);
+          if (raceResult !== undefined) {
+            functionResponses = raceResult;
+            break;
+          }
+        }
+        // If loop exited via executionDone flag (edge case), await the result
+        if (!functionResponses!) {
+          functionResponses = await executionPromise;
+        }
+
+        // Drain any remaining progress messages
+        while (progressQueue.length > 0) {
+          const p = progressQueue.shift()!;
+          yield {
+            text: "",
+            metadata: {
+              type: "tool_call_progress",
+              toolName: p.toolName,
+              message: p.message,
+            }
+          };
+        }
 
         // Filter out null responses
         const validResponses = functionResponses.filter(response => response !== null)
 
-        // 🎨 UX: Emitir indicador de finalización de búsqueda académica (todas las variantes)
-        if (academicSearchCalls.length > 0 && validResponses.length > 0) {
-          const academicResponse = validResponses.find((r: any) =>
-            r?.name === "search_academic_literature" ||
-            r?.name === "search_evidence_for_reflection" ||
-            r?.name === "search_evidence_for_documentation"
-          )
-          if (academicResponse && typeof academicResponse.response === 'object') {
-            const responseData = academicResponse.response as any
-            const sourcesCount = responseData.validated_count || responseData.sources?.length || 0
-
-            // 🔍 Intermediate progress: parsing sources
-            if (sourcesCount > 0) {
-              yield {
-                text: "",
-                metadata: {
-                  type: "tool_call_progress",
-                  toolName: academicResponse.name,
-                  message: `Validando ${responseData.total_found || sourcesCount} fuentes académicas…`
-                }
-              }
-            }
-
-            yield {
-              text: "",
-              metadata: {
-                type: "tool_call_complete",
-                toolName: academicResponse.name,
-                sourcesFound: responseData.total_found || 0,
-                sourcesValidated: sourcesCount,
-                // 📚 Include academic sources for timeline display
-                academicSources: academicReferences
-              }
+        // 🎨 UX: Emit tool_call_complete for EVERY tool
+        for (const resp of validResponses) {
+          const responseData = resp.response as any;
+          yield {
+            text: "",
+            metadata: {
+              type: "tool_call_complete",
+              toolName: resp.name,
+              sourcesFound: responseData?.total_found || responseData?.sourcesCount || responseData?.count || 0,
+              sourcesValidated: responseData?.validated_count || responseData?.sourcesCount || 0,
+              academicSources: resp.name === 'search_academic_literature' ? academicReferences : undefined,
             }
           }
         }

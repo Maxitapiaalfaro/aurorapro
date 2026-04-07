@@ -37,6 +37,8 @@ export interface ToolExecutionContext {
     year?: number;
     journal?: string;
   }>;
+  /** Callback for sub-agents to report internal progress steps in real-time */
+  onProgress?: (message: string) => void;
 }
 
 export type ToolHandler = (

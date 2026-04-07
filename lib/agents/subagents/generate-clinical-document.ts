@@ -43,10 +43,13 @@ export async function executeGenerateClinicalDocument(
   try {
     logger.info(`[subagent:generate_clinical_document] type=${documentType} patient=${patientId || 'none'}`);
 
+    ctx.onProgress?.('Preparando plantilla de documento…');
+
     // Optional patient context enrichment
     let patientContext = '';
     if (patientId && ctx.psychologistId) {
       try {
+        ctx.onProgress?.('Enriqueciendo con datos del paciente…');
         const { loadPatientFromFirestore } = await import('../../hopeai-system');
         const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
         if (record) {
@@ -65,6 +68,8 @@ export async function executeGenerateClinicalDocument(
       patientContext,
       additionalInstructions ? `\n## Instrucciones Adicionales\n${additionalInstructions}` : '',
     ].filter(Boolean).join('\n');
+
+    ctx.onProgress?.(`Generando documento ${documentType}…`);
 
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,

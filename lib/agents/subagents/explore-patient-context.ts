@@ -35,12 +35,16 @@ export async function executeExplorePatientContext(
   try {
     logger.info(`[subagent:explore_patient_context] patient=${patientId}`);
 
+    ctx.onProgress?.('Cargando registro del paciente…');
+
     // Dynamic imports to avoid circular dependencies
     const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemories }] =
       await Promise.all([
         import('../../hopeai-system'),
         import('../../clinical-memory-system'),
       ]);
+
+    ctx.onProgress?.('Recuperando memorias clínicas…');
 
     // Fetch all patient data in parallel
     const fetchPromises: [
@@ -63,6 +67,8 @@ export async function executeExplorePatientContext(
         response: { error: 'Paciente no encontrado', patientId },
       };
     }
+
+    ctx.onProgress?.(`${memories.length} memorias recuperadas, sintetizando…`);
 
     // Compose synthesis prompt with raw data
     const sections: string[] = [];

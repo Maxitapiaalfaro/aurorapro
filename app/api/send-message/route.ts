@@ -400,11 +400,14 @@ function getToolDisplayName(toolName: string): string {
     'search_academic_literature': 'Búsqueda académica',
     'search_evidence_for_reflection': 'Búsqueda de evidencia reflexiva',
     'search_evidence_for_documentation': 'Búsqueda de evidencia documental',
+    'get_patient_memories': 'Recuperando memorias clínicas',
+    'get_patient_record': 'Cargando registro del paciente',
+    'save_clinical_memory': 'Guardando memoria clínica',
     'google_search': 'Búsqueda web',
-    'formulateClarifyingQuestion': 'Formulación de preguntas',
-    'identifyCoreEmotion': 'Identificación emocional',
-    'analyzeThoughtPattern': 'Análisis de patrones cognitivos',
-    'detectCognitiveDistortion': 'Detección de distorsiones cognitivas',
+    'explore_patient_context': 'Sintetizando contexto del paciente',
+    'generate_clinical_document': 'Generando documento clínico',
+    'research_evidence': 'Investigación de evidencia multi-fuente',
+    'analyze_longitudinal_patterns': 'Analizando patrones longitudinales',
   }
   return displayNames[toolName] || toolName
 }

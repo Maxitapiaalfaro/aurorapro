@@ -74,11 +74,13 @@ export async function executeResearchEvidence(
     const subQueries = decomposeResearchQuestion(researchQuestion, focusArea);
     const perQueryMax = Math.ceil(maxSources / subQueries.length);
 
+    ctx.onProgress?.(`Descomponiendo pregunta en ${subQueries.length} sub-consultas…`);
     logger.info(`[subagent:research_evidence] ${subQueries.length} sub-queries, ${perQueryMax} results each`);
 
     // Step 2: Search in parallel
-    const searchPromises = subQueries.map((query) =>
-      academicMultiSourceSearch.search({
+    const searchPromises = subQueries.map((query, i) => {
+      ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length}: "${query.length > 50 ? query.substring(0, 50) + '…' : query}"`);
+      return academicMultiSourceSearch.search({
         query,
         maxResults: perQueryMax,
         language: 'both' as const,
@@ -86,8 +88,8 @@ export async function executeResearchEvidence(
       }).catch((err: Error) => {
         logger.warn(`[subagent:research_evidence] Search failed for query="${query}": ${err.message}`);
         return { results: [] };
-      }),
-    );
+      });
+    });
 
     const searchResults = await Promise.all(searchPromises);
 
@@ -117,6 +119,8 @@ export async function executeResearchEvidence(
         });
       }
     }
+
+    ctx.onProgress?.(`${allResults.length} fuentes encontradas, deduplicando…`);
 
     if (allResults.length === 0) {
       return {
@@ -148,6 +152,8 @@ export async function executeResearchEvidence(
       `\n## Fuentes Encontradas (${allResults.length}):\n\n${sourceSummaries}`,
       `\nSintetiza estos hallazgos en una revisión de evidencia integrada.`,
     ].filter(Boolean).join('\n');
+
+    ctx.onProgress?.(`Sintetizando ${allResults.length} fuentes con Gemini…`);
 
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,

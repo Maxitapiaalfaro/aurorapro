@@ -103,6 +103,8 @@ export async function executeAnalyzeLongitudinalPatterns(
   try {
     logger.info(`[subagent:analyze_longitudinal_patterns] patient=${patientId} sessions=${sessionHistory.length}`);
 
+    ctx.onProgress?.(`Procesando ${sessionHistory.length} sesiones…`);
+
     // Fetch patient name for display
     let patientName = 'Paciente';
     try {
@@ -115,6 +117,8 @@ export async function executeAnalyzeLongitudinalPatterns(
 
     // Convert to ChatMessage format
     const chatMessages = convertToChatMessages(sessionHistory);
+
+    ctx.onProgress?.('Analizando patrones clínicos…');
 
     // Delegate to the existing ClinicalPatternAnalyzer
     const { createClinicalPatternAnalyzer } = await import('../../clinical-pattern-analyzer');
