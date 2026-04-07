@@ -14,15 +14,9 @@ import { ClinicalAgentRouter } from './clinical-agent-router';
 import { EntityExtractionEngine } from './entity-extraction-engine';
 import { ToolRegistry, ClinicalTool, ClinicalDomain } from './tool-registry';
 import { ContextWindowManager, type ContextWindowConfig } from './context-window-manager';
-import type { AgentType } from '@/types/clinical-types';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('orchestration');
-import {
-  OperationalMetadata,
-  RoutingDecision,
-  RoutingReason,
-} from '@/types/operational-metadata';
 
 // Re-export types from routing module for backward compatibility
 export type {
@@ -37,23 +31,16 @@ import type {
   Content,
   ToolSelectionContext,
   OrchestrationResult,
-  EnrichedContext,
-  IntentClassificationResult,
   RouterConfig,
 } from './routing/routing-types';
 
 import {
   classifyIntentAndExtractEntities,
-  classifyIntent,
   calculateCombinedConfidence,
-  calculateOptimizedThreshold,
   detectExplicitAgentRequest,
   mapFunctionToAgent,
-  categorizeConfidence,
-  createEnrichedContext,
   generateOrchestrationReasoning,
   extractRecentTopics,
-  buildContextualPrompt,
 } from './routing/intent-classifier';
 
 /**
@@ -104,6 +91,20 @@ export class IntelligentIntentRouter {
     previousAgent?: string
   ): Promise<OrchestrationResult> {
     try {
+      // Fast path: detect explicit agent switch requests (regex only, no LLM)
+      const explicitRequest = detectExplicitAgentRequest(userInput);
+      if (explicitRequest.isExplicit) {
+        const basicTools = this.toolRegistry.getBasicTools();
+        logger.info(`[IntentRouter] Explicit agent request detected: ${explicitRequest.requestType}`);
+        return {
+          selectedAgent: explicitRequest.requestType,
+          contextualTools: basicTools.map(tool => tool.declaration),
+          toolMetadata: basicTools,
+          confidence: 1.0,
+          reasoning: `Solicitud explícita de cambio a modo ${explicitRequest.requestType}`
+        };
+      }
+
       const combinedResult = await classifyIntentAndExtractEntities(
         userInput, sessionContext, this.entityExtractor, this.contextWindowManager, this.config
       );
@@ -149,271 +150,6 @@ export class IntelligentIntentRouter {
   }
 
   /**
-   * Classifies user intent and routes to the appropriate agent.
-   * Used by hopeai-system.ts fallback path.
-   */
-  async routeUserInput(
-    userInput: string,
-    sessionContext: Content[],
-    currentAgent?: string,
-    enrichedSessionContext?: any,
-    operationalMetadata?: OperationalMetadata
-  ): Promise<{
-    success: boolean;
-    targetAgent: string;
-    enrichedContext: EnrichedContext;
-    requiresUserClarification: boolean;
-    errorMessage?: string;
-    routingDecision?: RoutingDecision;
-  }> {
-    try {
-      // Process context with Context Window Manager
-      const contextResult = this.contextWindowManager.processContext(sessionContext, userInput);
-      const optimizedContext = this.convertToLocalContentType(contextResult.processedContext);
-
-      if (this.config.enableLogging) {
-        logger.info('🔄 Context Window Processing', {
-          originalMessages: sessionContext.length,
-          processedMessages: optimizedContext.length,
-          tokensEstimated: contextResult.metrics.tokensEstimated,
-          contextualReferences: contextResult.metrics.contextualReferencesPreserved,
-          compressionApplied: contextResult.metrics.compressionApplied
-        });
-      }
-
-      // Step 1: Detect explicit agent switch requests
-      const explicitRequest = detectExplicitAgentRequest(userInput);
-
-      if (explicitRequest.isExplicit) {
-        const entityExtractionResult = await this.entityExtractor.extractEntities(
-          userInput,
-          enrichedSessionContext
-        );
-
-        const enrichedContext = createEnrichedContext(
-          userInput,
-          `activar_modo_${explicitRequest.requestType}`,
-          entityExtractionResult.entities,
-          entityExtractionResult,
-          optimizedContext,
-          currentAgent,
-          `Solicitud explícita de cambio a modo ${explicitRequest.requestType}`,
-          1.0,
-          true
-        );
-
-        if (this.config.enableLogging) {
-          logger.info(`[IntentRouter] Solicitud explícita detectada: ${explicitRequest.requestType}`);
-        }
-
-        const routingDecision: RoutingDecision = {
-          agent: explicitRequest.requestType as AgentType,
-          confidence: 1.0,
-          reason: RoutingReason.EXPLICIT_USER_REQUEST,
-          metadata_factors: ['explicit_request'],
-          is_edge_case: false
-        };
-
-        return {
-          success: true,
-          targetAgent: explicitRequest.requestType,
-          enrichedContext,
-          requiresUserClarification: false,
-          routingDecision
-        };
-      }
-      
-      // Step 2: Classify intent via LLM
-      const classificationResult = await classifyIntent(
-        userInput, optimizedContext, enrichedSessionContext, this.contextWindowManager, this.config
-      );
-      
-      if (!classificationResult) {
-        return this.handleFallback(userInput, optimizedContext, 'No se pudo clasificar la intención');
-      }
-
-      // Step 3: Extract entities
-      const entityExtractionResult = await this.entityExtractor.extractEntities(
-        userInput,
-        enrichedSessionContext
-      );
-
-      if (this.config.enableLogging) {
-        logger.info(`[IntentRouter] Entidades extraídas: ${entityExtractionResult.entities.length}`);
-      }
-
-      // Step 4: Calculate combined confidence with dynamic threshold
-      let combinedConfidence = calculateCombinedConfidence(
-        classificationResult.confidence,
-        entityExtractionResult.confidence,
-        classificationResult.functionName
-      );
-      
-      // Contextual reference boost
-      const contextualRefs = this.contextWindowManager.getContextualReferences();
-      const relevantRefs = contextualRefs.filter(ref => ref.relevance > 0.7);
-      if (relevantRefs.length > 0) {
-        const contextualBoost = Math.min(0.15, relevantRefs.length * 0.05);
-        combinedConfidence = Math.min(1.0, combinedConfidence + contextualBoost);
-        
-        if (this.config.enableLogging) {
-          logger.debug(`🎯 Contextual boost applied: +${(contextualBoost * 100).toFixed(1)}%`);
-        }
-      }
-
-      const dynamicThreshold = calculateOptimizedThreshold(
-        classificationResult.functionName, 
-        entityExtractionResult.entities,
-        this.config.confidenceThreshold,
-        classificationResult
-      );
-      
-      // Confidence analysis logging
-      if (this.config.enableLogging) {
-        let intentWeight = 0.7, entityWeight = 0.3;
-        if (classificationResult.functionName === 'activar_modo_academico') {
-          intentWeight = 0.8; entityWeight = 0.2;
-        } else if (classificationResult.functionName === 'activar_modo_clinico') {
-          intentWeight = 0.65; entityWeight = 0.35;
-        } else if (classificationResult.functionName === 'activar_modo_socratico') {
-          intentWeight = 0.75; entityWeight = 0.25;
-        }
-        
-        logger.debug('🎯 Análisis de Confianza Optimizado', {
-          intent: `${classificationResult.confidence.toFixed(3)} (${classificationResult.functionName})`,
-          entities: `${entityExtractionResult.confidence.toFixed(3)} (${entityExtractionResult.entities.length} detectadas)`,
-          combined: `${combinedConfidence.toFixed(3)} (${(intentWeight*100)}% intención + ${(entityWeight*100)}% entidades)`,
-          dynamicThreshold: dynamicThreshold.toFixed(3)
-        });
-      }
-      
-      // File-aware override for borderline confidence
-      const filesPresent = Array.isArray(enrichedSessionContext?.sessionFiles) && enrichedSessionContext.sessionFiles.length > 0;
-      const borderline = combinedConfidence >= (dynamicThreshold - 0.1) && combinedConfidence < dynamicThreshold;
-      if (filesPresent && borderline) {
-        const enrichedContext = createEnrichedContext(
-          userInput,
-          'activar_modo_clinico',
-          entityExtractionResult.entities,
-          entityExtractionResult,
-          optimizedContext,
-          currentAgent,
-          'Archivos presentes en sesión y confianza limítrofe: priorizar procesamiento clínico del material',
-          Math.max(combinedConfidence, dynamicThreshold)
-        );
-        if (this.config.enableLogging) {
-          logger.info('📎 [IntentRouter] File-aware override → clinico');
-        }
-        return {
-          success: true,
-          targetAgent: 'clinico',
-          enrichedContext,
-          requiresUserClarification: false
-        };
-      }
-
-      if (combinedConfidence < dynamicThreshold) {
-        logger.warn(`⚠️ Confianza insuficiente para enrutamiento automático: ${combinedConfidence.toFixed(3)} < ${dynamicThreshold.toFixed(3)}`);
-
-        const routingDecision: RoutingDecision = {
-          agent: this.config.fallbackAgent as AgentType,
-          confidence: combinedConfidence,
-          reason: RoutingReason.FALLBACK_LOW_CONFIDENCE,
-          metadata_factors: [
-            `low_confidence_${(combinedConfidence * 100).toFixed(0)}pct`,
-            `threshold_${(dynamicThreshold * 100).toFixed(0)}pct`
-          ],
-          is_edge_case: false
-        };
-
-        return {
-          success: false,
-          targetAgent: this.config.fallbackAgent,
-          enrichedContext: createEnrichedContext(
-            userInput,
-            'clarification_needed',
-            [],
-            entityExtractionResult,
-            optimizedContext,
-            currentAgent,
-            `Confianza insuficiente: se procederá con análisis general por el Supervisor Clínico`,
-            combinedConfidence,
-            false
-          ),
-          requiresUserClarification: true,
-          routingDecision
-        };
-      }
-
-      // Step 5: Map function to agent
-      const targetAgent = mapFunctionToAgent(classificationResult.functionName);
-
-      // Step 6: Create enriched context
-      const justificacion = classificationResult.parameters?.justificacion_clinica as string | undefined;
-      const { AGENT_DISPLAY_NAMES } = await import('./routing/intent-declarations');
-      const agentName = AGENT_DISPLAY_NAMES[classificationResult.functionName] || 'especialista';
-      const trimmedJustificacion = justificacion?.trim() || '';
-      const transitionReason = trimmedJustificacion
-        || `${agentName} seleccionado para procesar esta consulta`;
-
-      const enrichedContext = createEnrichedContext(
-        userInput,
-        classificationResult.functionName,
-        entityExtractionResult.entities,
-        entityExtractionResult,
-        optimizedContext,
-        currentAgent,
-        transitionReason,
-        combinedConfidence,
-        false
-      );
-
-      // Step 7: Log routing decision
-      if (this.config.enableLogging) {
-        this.logRoutingDecision(enrichedContext);
-      }
-
-      const routingDecision: RoutingDecision = {
-        agent: targetAgent,
-        confidence: combinedConfidence,
-        reason: combinedConfidence >= 0.75
-          ? RoutingReason.HIGH_CONFIDENCE_CLASSIFICATION
-          : RoutingReason.NORMAL_CLASSIFICATION,
-        metadata_factors: [
-          `confidence_${(combinedConfidence * 100).toFixed(0)}pct`,
-          `intent_${classificationResult.functionName}`,
-          `entities_${entityExtractionResult.entities.length}`
-        ],
-        is_edge_case: false
-      };
-
-      return {
-        success: true,
-        targetAgent,
-        enrichedContext,
-        requiresUserClarification: false,
-        routingDecision
-      };
-
-    } catch (error) {
-      logger.error('[IntentRouter] Error en enrutamiento:', { error });
-      return this.handleFallback(userInput, sessionContext, `Error: ${error}`);
-    }
-  }
-
-  /**
-   * Converts SDK Content[] to local Content[] type.
-   */
-  private convertToLocalContentType(sdkContent: import('@google/genai').Content[]): Content[] {
-    return sdkContent.map(content => ({
-      role: content.role || 'user',
-      parts: (content.parts || []).map(part => ({
-        text: part.text || ''
-      }))
-    }));
-  }
-
-  /**
    * Selects contextual tools based on intent and entities.
    */
   private async selectContextualTools(context: ToolSelectionContext): Promise<ClinicalTool[]> {
@@ -439,76 +175,6 @@ export class IntelligentIntentRouter {
     };
     
     return mapping[intent] || [ClinicalDomain.GENERAL];
-  }
-
-  /**
-   * Handles fallback when classification fails.
-   */
-  private handleFallback(
-    userInput: string,
-    sessionContext: Content[],
-    reason: string
-  ) {
-    if (this.config.enableLogging) {
-      logger.info(`[IntentRouter] Fallback activado: ${reason}`);
-    }
-
-    const fallbackResult = {
-      entityExtractionResult: { entities: [], primaryEntities: [], secondaryEntities: [], confidence: 0, processingTime: 0 }
-    };
-    const entityExtractionResult = fallbackResult.entityExtractionResult;
-
-    return {
-      success: true,
-      targetAgent: this.config.fallbackAgent,
-      enrichedContext: createEnrichedContext(
-        userInput,
-        'fallback',
-        [],
-        entityExtractionResult,
-        sessionContext,
-        undefined,
-        reason,
-        0.5
-      ),
-      requiresUserClarification: false
-    };
-  }
-
-  /**
-   * Logs routing decisions for analysis.
-   */
-  private logRoutingDecision(context: EnrichedContext): void {
-    if (!this.config.enableLogging) return;
-
-    const entitySummary = {
-      total: context.extractedEntities.length,
-      primary: context.entityExtractionResult.primaryEntities.length,
-      secondary: context.entityExtractionResult.secondaryEntities.length,
-      averageConfidence: context.entityExtractionResult.confidence
-    };
-
-    const qualityMetrics = {
-      confidenceLevel: categorizeConfidence(context.confidence),
-      isHighPrecision: context.confidence >= 0.9,
-      requiresMonitoring: context.confidence < 0.8,
-      optimizationApplied: true
-    };
-
-    logger.debug('[IntentRouter] Decisión de enrutamiento optimizada', {
-      intent: context.detectedIntent,
-      confidence: context.confidence,
-      qualityMetrics,
-      entitySummary,
-      extractedEntities: context.extractedEntities.map(e => ({
-        value: e.value,
-        type: e.type,
-        confidence: e.confidence
-      })),
-      transition: context.transitionReason,
-      processingTime: context.entityExtractionResult.processingTime,
-      timestamp: new Date().toISOString()
-    });
   }
 
   /**

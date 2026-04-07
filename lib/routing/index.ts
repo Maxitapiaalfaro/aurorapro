@@ -22,7 +22,6 @@ export {
 
 export {
   classifyIntentAndExtractEntities,
-  classifyIntent,
   validateFunctionCall,
   calculateEnhancedConfidence,
   calculateCombinedConfidence,

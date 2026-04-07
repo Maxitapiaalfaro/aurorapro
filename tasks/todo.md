@@ -13,10 +13,10 @@
 - [x] Router reduced from 3,248 → 706 lines (78% reduction) | Status: done
 - [ ] Align session manager with Firestore paths | Priority: M | Status: pending (moved to P4)
 
-### P4: Orchestration Simplification — IN PROGRESS (2026-04-06)
+### P4: Orchestration Simplification — COMPLETE (2026-04-07)
 - [x] Remove DynamicOrchestrator bridge dependency (already done in P2) | Priority: M | Status: done
 - [x] Session Maps consolidated: only 1 Map (`activeSessions`) remains after P2 purge (was 8 pre-P2) | Status: done
-- [ ] Unify dual public API: keep `orchestrateWithTools()`, deprecate `routeUserInput()` | Priority: M | Status: pending
+- [x] Unify dual public API: deleted `routeUserInput()` + 3 helpers + `classifyIntent()` standalone, migrated explicit agent detection to `orchestrateWithTools()` | Priority: M | Status: done
 - [x] Remove dead methods from DynamicOrchestrator (cleanupExpiredSessions, getStats, updateConfig) | Priority: M | Status: done
 - [x] Remove dead methods from IntelligentIntentRouter (getPerformanceMetrics, validateOptimizations) | Priority: M | Status: done
 - [x] Decompose `intelligent-intent-router.ts` → `lib/routing/` (1,538→460 lines, 70% reduction) | Priority: M | Status: done
@@ -24,6 +24,7 @@
   - `lib/routing/intent-declarations.ts` — Gemini function-calling schemas
   - `lib/routing/intent-classifier.ts` — classification, confidence, prompt building
   - `lib/routing/index.ts` — barrel exports
+- [x] Removed `useAdvancedOrchestration`, `setAdvancedOrchestration()`, `getOrchestrationStatus()`, `forceStandardRouting` from `hopeai-system.ts` | Status: done
 - [ ] Decompose `dynamic-orchestrator.ts` → `lib/orchestration/` | Priority: M | Status: pending (file is only 400 lines post-cleanup, may not need further decomposition)
 
 ### P5: Further Module Decomposition (MEDIUM)
@@ -36,7 +37,7 @@
 ### P7: Observability & Performance (LOW)
 - [x] PII/PHI redaction in logger + Sentry (Gap P0.2) | Priority: H | Status: done
 - [x] Replace console.log in orchestration layer (116/164 calls, 71%): `hopeai-system.ts`, `clinical-agent-router.ts`, `dynamic-orchestrator.ts`, `intelligent-intent-router.ts`, `routing/intent-classifier.ts` | Priority: M | Status: done
-- [ ] Replace remaining ~48 console.log calls in `lib/agents/` (streaming-handler.ts, message-context-builder.ts) | Priority: M | Status: pending (parallel agent)
+- [x] Replace remaining console.log calls in `lib/agents/` — already clean (0 calls found) | Priority: M | Status: done
 - [ ] Consolidate 5 metrics modules into unified tracker | Priority: L | Status: pending
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
 
@@ -103,6 +104,16 @@
   - `streaming-handler.ts`: handleStreamingWithTools, handleNonStreamingWithTools, text extraction, grounding URL validation
   - `message-context-builder.ts`: 9 context-building functions (buildEnhancedMessage, getRoleMetadata, addAgentTransitionContext, etc.)
   - Verification: zero new TypeScript errors, all imports updated
+- [x] 2026-04-07: **P4 — Unify Dual Public API** (COMPLETE)
+  - Deleted `routeUserInput()` + 3 private helpers (`handleFallback`, `logRoutingDecision`, `convertToLocalContentType`) from `intelligent-intent-router.ts`
+  - Deleted `classifyIntent()` standalone function from `intent-classifier.ts` (~70 lines)
+  - Migrated explicit agent detection (regex-based) into `orchestrateWithTools()` fast path
+  - Removed `useAdvancedOrchestration` flag, `setAdvancedOrchestration()`, `getOrchestrationStatus()` from `hopeai-system.ts`
+  - Removed dead `forceStandardRouting` variable and fallback routing branch (~40 lines)
+  - Updated barrel file `routing/index.ts` (removed `classifyIntent` export)
+  - `intelligent-intent-router.ts`: 559 → 216 lines (**61% reduction**)
+  - Net reduction: ~340 lines removed
+  - Verification: zero new TypeScript errors, zero dangling references
 
 ## Review Notes
 <!-- Post-task review observations -->

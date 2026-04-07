@@ -43,7 +43,6 @@ export class HopeAISystem {
   private storage: any = null
   private intentRouter: any = null
   private dynamicOrchestrator: DynamicOrchestrator | null = null
-  private useAdvancedOrchestration: boolean = true
   
   // Public getter for initialization status
   public get initialized(): boolean {
@@ -127,10 +126,6 @@ export class HopeAISystem {
 
         // 3. Dynamic orchestrator (independiente del storage)
         (async () => {
-          if (!this.useAdvancedOrchestration) {
-            return null
-          }
-
           systemLogger.debug('🔧 Creating dynamic orchestrator...')
           const orch = new DynamicOrchestrator(clinicalAgentRouter, {
             enableAdaptiveLearning: false,
@@ -788,15 +783,7 @@ export class HopeAISystem {
         patientReference
       );
 
-      // 🚨 SENSITIVE CONTENT PRE-CHECK: DISABLED
-      // Sensitive content detection was forcing all messages with clinical keywords
-      // (e.g. "diagnóstico diferencial", "crisis", "abuso") to bypass the advanced
-      // orchestrator and route directly to clinico. This prevented the intent router
-      // from properly discriminating based on the full context of the user input.
-      // The intent router's own classification is now trusted to handle routing.
-      const forceStandardRouting = false;
-
-      // Determinar si usar orquestación avanzada o routing directo
+      // Determinar agente vía orquestación
       let routingResult: { enrichedContext: any; targetAgent: any; routingDecision?: any };
       let orchestrationResult = null;
 
@@ -810,44 +797,37 @@ export class HopeAISystem {
             extractedEntities: [],
             isExplicitRequest: false
           },
-          routingDecision: undefined // No hay decisión de routing explícita
+          routingDecision: undefined
         }
-      } else if (this.useAdvancedOrchestration && this.dynamicOrchestrator && !forceStandardRouting) {
-        // 🧠 USAR ORQUESTACIÓN AVANZADA CON APRENDIZAJE CROSS-SESSION
+      } else {
+        // 🧠 Orquestación avanzada (single LLM call path)
         sessionLogger.info('🧠 Using Advanced Orchestration with cross-session learning')
-        
-        // Construir conversación completa (usuario + modelo) en formato Content[] para bullets coherentes
+
         const externalConversationHistory = (currentState.history || []).map((msg: ChatMessage) => ({
           role: msg.role,
           parts: [{ text: msg.content }]
         }))
 
-        // Contexto de paciente para bullets
-        const patientIdForBullets = patientReference
-        const patientSummaryForBullets = patientSummary
-        const sessionTypeForBullets = currentState.mode
-
-        orchestrationResult = await this.dynamicOrchestrator.orchestrate(
+        orchestrationResult = await this.dynamicOrchestrator!.orchestrate(
           message,
           sessionId,
           currentState.userId,
           resolvedSessionFiles,
           onBulletUpdate,
           externalConversationHistory,
-          patientIdForBullets,
-          patientSummaryForBullets,
-          sessionTypeForBullets
+          patientReference,
+          patientSummary,
+          currentState.mode
         )
-        
-        // 📊 RECORD ORCHESTRATION COMPLETION 
+
+        // 📊 RECORD ORCHESTRATION COMPLETION
         sessionMetricsTracker.recordOrchestrationComplete(
           interactionId,
           orchestrationResult.selectedAgent,
           orchestrationResult.contextualTools.map(tool => tool.name || 'unknown_tool'),
           currentState.activeAgent
         );
-        
-        // Convertir resultado de orquestación a formato de routing
+
         routingResult = {
           targetAgent: orchestrationResult.selectedAgent,
           enrichedContext: {
@@ -857,65 +837,22 @@ export class HopeAISystem {
             isExplicitRequest: false,
             contextualTools: orchestrationResult.contextualTools,
             sessionContext: orchestrationResult.sessionContext,
-            // 🏥 PATIENT CONTEXT: Preserve patient context from enrichedSessionContext
             patient_reference: enrichedSessionContext.patient_reference,
             patient_summary: enrichedSessionContext.patient_summary
           }
         }
-        
+
         sessionLogger.info('🎯 Advanced orchestration result', {
           selectedAgent: orchestrationResult.selectedAgent,
           confidence: orchestrationResult.confidence,
           toolsSelected: orchestrationResult.contextualTools.length
         })
-        
-        // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
+
         if (onAgentSelected) {
           onAgentSelected({
             targetAgent: orchestrationResult.selectedAgent,
             confidence: orchestrationResult.confidence,
             reasoning: orchestrationResult.reasoning
-          })
-        }
-      } else {
-        // Usar el router inteligente para clasificar la intención y enrutar automáticamente
-        sessionLogger.info('🎯 Using standard intelligent routing with metadata-informed decisions')
-
-        // Construir historial en formato Content[] para el router
-        const sessionContextArray = (currentState.history || []).map((msg: ChatMessage) => ({
-          role: msg.role,
-          parts: [{ text: msg.content }]
-        }))
-
-        // 🚨 RISK STATE: Enriquecer metadata con estado de riesgo de la sesión
-        const enrichedMetadata = {
-          ...operationalMetadata,
-          session_risk_state: currentState.riskState
-        };
-
-        // 🔍 DEBUG: Verificar que el estado de riesgo se está pasando
-        if (enrichedMetadata.session_risk_state?.isRiskSession) {
-          sessionLogger.debug('🔍 Passing risk state to router', {
-            isRiskSession: enrichedMetadata.session_risk_state.isRiskSession,
-            consecutiveSafeTurns: enrichedMetadata.session_risk_state.consecutiveSafeTurns,
-            riskType: enrichedMetadata.session_risk_state.riskType
-          });
-        }
-
-        routingResult = await this.intentRouter.routeUserInput(
-          message,
-          sessionContextArray,
-          currentState.activeAgent,
-          enrichedSessionContext,
-          enrichedMetadata
-        )
-
-        // 🎯 CALLBACK: Notificar al frontend del agente seleccionado INMEDIATAMENTE
-        if (onAgentSelected && routingResult.enrichedContext) {
-          onAgentSelected({
-            targetAgent: routingResult.targetAgent,
-            confidence: routingResult.enrichedContext.confidence,
-            reasoning: routingResult.enrichedContext.transitionReason || 'Routing based on intent classification'
           })
         }
       }
@@ -1661,29 +1598,6 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       initialized: this._initialized,
       activeAgents: Array.from(clinicalAgentRouter.getAllAgents().keys()),
       totalSessions: allSessions.length,
-    }
-  }
-
-  /**
-   * Enable or disable advanced orchestration features
-   */
-  setAdvancedOrchestration(enabled: boolean): void {
-    this.useAdvancedOrchestration = enabled
-    systemLogger.info(`🧠 Advanced orchestration ${enabled ? 'enabled' : 'disabled'}`)
-  }
-
-  /**
-   * Get current orchestration status
-   */
-  getOrchestrationStatus(): {
-    useAdvancedOrchestration: boolean
-    hasDynamicOrchestrator: boolean
-    initialized: boolean
-  } {
-    return {
-      useAdvancedOrchestration: this.useAdvancedOrchestration,
-      hasDynamicOrchestrator: !!this.dynamicOrchestrator,
-      initialized: this._initialized
     }
   }
 
