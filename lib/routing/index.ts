@@ -24,6 +24,7 @@ export {
   classifyIntentAndExtractEntities,
   classifyIntentByHeuristic,
   classifyIntentWithMetadata,
+  analyzeConversationContext,
   isEdgeCaseRisk,
   isEdgeCaseStress,
   isEdgeCaseSensitiveContent,

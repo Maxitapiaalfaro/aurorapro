@@ -322,82 +322,182 @@ export function detectExplicitAgentRequest(userInput: string): {
   return { isExplicit: false, requestType: '' };
 }
 
+// ─── Keyword sets shared across heuristic and context analysis ───────────────
+
+const KEYWORD_SETS: Record<string, string[]> = {
+  socratico: [
+    'reflexionar', 'explorar', 'pensar', 'analizar', 'insight',
+    'cuestionamiento', 'profundo', 'socrático', 'socratico',
+    'caso', 'paciente', 'supervisar', 'hipótesis', 'hipotesis',
+    'formulación', 'formulacion', 'creencias', 'autoconocimiento',
+    'introspección', 'perspectiva', 'bloqueado', 'resistencia',
+    'transferencia', 'contratransferencia', 'vínculo', 'alianza'
+  ],
+  clinico: [
+    'documentar', 'notas', 'resumen', 'soap', 'expediente',
+    'bitácora', 'bitacora', 'redactar', 'estructurar', 'formato',
+    'plan de tratamiento', 'progreso', 'nota de evolución', 'evolución',
+    'pirp', 'dap', 'birp', 'registro', 'historial', 'síntesis',
+    'sintesis', 'ficha', 'informe', 'reporte', 'archivo'
+  ],
+  academico: [
+    'investigación', 'investigacion', 'estudio', 'estudios',
+    'evidencia', 'research', 'paper', 'papers', 'científico',
+    'cientifico', 'avala', 'metaanálisis', 'metaanalisis',
+    'ensayos', 'rct', 'revisión sistemática', 'revision sistematica',
+    'guidelines', 'protocolos', 'empírico', 'empirico',
+    'literatura', 'validación', 'validacion', 'publicaciones'
+  ]
+};
+
 /**
- * R1: Deterministic intent classification via keyword heuristics.
- * Replaces the LLM-based classifyIntentAndExtractEntities() call,
- * saving 300-700ms per message.
+ * Analyzes recent conversation history to extract a contextual signal
+ * for each agent. Returns per-agent scores (0–1) representing how much
+ * the recent conversation has been about that agent's domain.
  *
- * Tier 2 (keyword scoring): scores user input against enriched keyword
- * sets per agent. If one agent scores substantially above the rest AND
- * differs from the current agent, recommend a switch.
+ * This is the key improvement over pure keyword matching on the current
+ * message: it considers the *flow* of the conversation, not just the
+ * latest isolated message. A user who has been exploring a case reflexively
+ * for 5 turns shouldn't be routed away just because one message lacks
+ * reflexive keywords.
+ */
+export function analyzeConversationContext(
+  sessionContext: Content[]
+): { scores: Record<string, number>; dominantAgent: string | null; turnCount: number } {
+  // Take the last 6 messages (3 user turns ≈ current flow direction)
+  const recent = sessionContext.slice(-6);
+  if (recent.length === 0) {
+    return { scores: { socratico: 0, clinico: 0, academico: 0 }, dominantAgent: null, turnCount: 0 };
+  }
+
+  const scores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+
+  for (const content of recent) {
+    const text = (content.parts || [])
+      .map(p => ('text' in p && p.text) ? p.text : '')
+      .join(' ')
+      .toLowerCase();
+
+    if (!text) continue;
+
+    for (const [agent, keywords] of Object.entries(KEYWORD_SETS)) {
+      let matches = 0;
+      for (const kw of keywords) {
+        if (text.includes(kw)) matches++;
+      }
+      // Normalize per-message score: count / (keywords * factor)
+      scores[agent] += matches / (keywords.length * 0.3);
+    }
+  }
+
+  // Normalize by number of messages to get average signal per message
+  const messageCount = recent.length;
+  for (const agent of Object.keys(scores)) {
+    scores[agent] = scores[agent] / messageCount;
+  }
+
+  // Determine dominant agent from context (must have meaningful signal)
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const [topAgent, topScore] = sorted[0];
+  const [, secondScore] = sorted[1];
+  const dominantAgent = (topScore > 0.05 && topScore - secondScore > 0.02) ? topAgent : null;
+
+  return { scores, dominantAgent, turnCount: messageCount };
+}
+
+/**
+ * Context-aware intent classification via keyword heuristics + conversation flow.
  *
- * Tier 3 (sticky routing): if no strong signal, keep the current agent.
- * The main Gemini Pro model handles cross-domain queries natively.
+ * Combines two signals:
+ *   1. Current message keywords (immediate intent)
+ *   2. Recent conversation context (conversational flow / momentum)
+ *
+ * The conversation context acts as a "momentum" signal — if the user
+ * has been consistently exploring a topic in one agent's domain, that
+ * momentum biases the decision even when the current message is ambiguous.
+ *
+ * Tier 2 (keyword + context scoring): scores user input against enriched
+ * keyword sets per agent, boosted by conversation context momentum.
+ * If one agent scores substantially above the rest AND differs from
+ * the current agent, recommend a switch.
+ *
+ * Tier 3 (context-informed sticky): if no strong signal from current
+ * message, use conversation context to decide whether to stay or switch.
  */
 export function classifyIntentByHeuristic(
   userInput: string,
-  previousAgent?: string
+  previousAgent?: string,
+  sessionContext?: Content[]
 ): { selectedAgent: string; confidence: number; reasoning: string } {
   const input = userInput.toLowerCase();
 
-  const KEYWORD_SETS: Record<string, string[]> = {
-    socratico: [
-      'reflexionar', 'explorar', 'pensar', 'analizar', 'insight',
-      'cuestionamiento', 'profundo', 'socrático', 'socratico',
-      'caso', 'paciente', 'supervisar', 'hipótesis', 'hipotesis',
-      'formulación', 'formulacion', 'creencias', 'autoconocimiento',
-      'introspección', 'perspectiva', 'bloqueado', 'resistencia',
-      'transferencia', 'contratransferencia', 'vínculo', 'alianza'
-    ],
-    clinico: [
-      'documentar', 'notas', 'resumen', 'soap', 'expediente',
-      'bitácora', 'bitacora', 'redactar', 'estructurar', 'formato',
-      'plan de tratamiento', 'progreso', 'nota de evolución', 'evolución',
-      'pirp', 'dap', 'birp', 'registro', 'historial', 'síntesis',
-      'sintesis', 'ficha', 'informe', 'reporte', 'archivo'
-    ],
-    academico: [
-      'investigación', 'investigacion', 'estudio', 'estudios',
-      'evidencia', 'research', 'paper', 'papers', 'científico',
-      'cientifico', 'avala', 'metaanálisis', 'metaanalisis',
-      'ensayos', 'rct', 'revisión sistemática', 'revision sistematica',
-      'guidelines', 'protocolos', 'empírico', 'empirico',
-      'literatura', 'validación', 'validacion', 'publicaciones'
-    ]
-  };
-
-  // Score each agent by counting keyword matches
-  const scores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+  // ── Score current message ──────────────────────────────────────────────────
+  const messageScores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
 
   for (const [agent, keywords] of Object.entries(KEYWORD_SETS)) {
     let matches = 0;
     for (const kw of keywords) {
       if (input.includes(kw)) matches++;
     }
-    scores[agent] = matches / (keywords.length * 0.15);
+    messageScores[agent] = matches / (keywords.length * 0.15);
   }
 
   // File-attachment heuristic: bias toward clinico
   if (input.includes('contexto para orquestación') || input.includes('adjuntó') || input.includes('adjunto')) {
-    scores.clinico += 0.2;
+    messageScores.clinico += 0.2;
   }
 
-  // Find best and second-best
-  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  // ── Analyze conversation context (if available) ────────────────────────────
+  const contextAnalysis = sessionContext && sessionContext.length > 0
+    ? analyzeConversationContext(sessionContext)
+    : null;
+
+  // ── Combine signals: message keywords (70%) + context momentum (30%) ──────
+  const combinedScores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+  const MESSAGE_WEIGHT = 0.7;
+  const CONTEXT_WEIGHT = 0.3;
+
+  for (const agent of Object.keys(combinedScores)) {
+    const msgScore = messageScores[agent];
+    const ctxScore = contextAnalysis ? contextAnalysis.scores[agent] : 0;
+    combinedScores[agent] = (msgScore * MESSAGE_WEIGHT) + (ctxScore * CONTEXT_WEIGHT);
+  }
+
+  // Find best and second-best from combined scores
+  const sorted = Object.entries(combinedScores).sort((a, b) => b[1] - a[1]);
   const [bestAgent, bestScore] = sorted[0];
   const [, secondScore] = sorted[1];
   const margin = bestScore - secondScore;
 
   const defaultAgent = previousAgent || 'socratico';
 
-  // Tier 2: Strong keyword signal → switch
+  // Tier 2: Strong combined signal → switch
   if (bestScore > 0.3 && margin > 0.15 && bestAgent !== defaultAgent) {
     const confidence = Math.min(0.9, 0.7 + bestScore * 0.2);
     const displayName = AGENT_DISPLAY_NAMES[`activar_modo_${bestAgent}`] || bestAgent;
+    const contextNote = contextAnalysis?.dominantAgent === bestAgent
+      ? ' (reforzado por contexto conversacional)'
+      : '';
     return {
       selectedAgent: bestAgent,
       confidence,
-      reasoning: `${displayName} seleccionado por señal de keywords (score: ${bestScore.toFixed(2)}, margen: ${margin.toFixed(2)})`
+      reasoning: `${displayName} seleccionado por señal combinada (score: ${bestScore.toFixed(2)}, margen: ${margin.toFixed(2)})${contextNote}`
+    };
+  }
+
+  // Tier 2b: Current message is ambiguous but conversation context has clear direction
+  // AND the context-dominant agent differs from the current agent
+  if (contextAnalysis?.dominantAgent &&
+      contextAnalysis.dominantAgent !== defaultAgent &&
+      contextAnalysis.scores[contextAnalysis.dominantAgent] > 0.1 &&
+      bestScore < 0.2) {
+    const ctxAgent = contextAnalysis.dominantAgent;
+    const ctxScore = contextAnalysis.scores[ctxAgent];
+    const displayName = AGENT_DISPLAY_NAMES[`activar_modo_${ctxAgent}`] || ctxAgent;
+    return {
+      selectedAgent: ctxAgent,
+      confidence: Math.min(0.85, 0.65 + ctxScore * 0.2),
+      reasoning: `${displayName} seleccionado por contexto conversacional (score contexto: ${ctxScore.toFixed(2)}, mensaje ambiguo)`
     };
   }
 
@@ -531,29 +631,32 @@ export function isEdgeCaseSensitiveContent(
 }
 
 /**
- * Metadata-informed intent classification.
+ * Metadata-informed intent classification with conversation context awareness.
  *
  * Replaces pure keyword-based routing with a layered decision strategy:
  *   1. Edge case detection (risk, stress, sensitive content) → clinico override
  *   2. Explicit agent request detection (regex) → direct routing
- *   3. Keyword heuristic scoring (Tier 2) → switch if strong signal
- *   4. Sticky routing (Tier 3) → stay with current agent
- *   5. Fallback → socratico
+ *   3. Context-aware keyword heuristic scoring (Tier 2) → switch if strong signal
+ *   4. Therapeutic phase influence
+ *   5. Sticky routing (Tier 3) → stay with current agent
+ *   6. Fallback → socratico
  *
- * The metadata is used to:
+ * The metadata + conversation context are used to:
  * - Override routing in critical situations (risk, stress)
  * - Adjust confidence thresholds dynamically
  * - Prevent socratico from handling high-risk cases
  * - Provide enriched decision context with justification
+ * - Use conversation momentum to disambiguate intent
  */
 export function classifyIntentWithMetadata(
   userInput: string,
   previousAgent?: string,
-  metadata?: OperationalMetadata
+  metadata?: OperationalMetadata,
+  sessionContext?: Content[]
 ): RoutingDecision {
   // If no metadata is provided, fall back to heuristic-only routing (backward compat)
   if (!metadata) {
-    const heuristic = classifyIntentByHeuristic(userInput, previousAgent);
+    const heuristic = classifyIntentByHeuristic(userInput, previousAgent, sessionContext);
     return {
       agent: heuristic.selectedAgent as 'socratico' | 'clinico' | 'academico',
       confidence: heuristic.confidence,
@@ -641,8 +744,8 @@ export function classifyIntentWithMetadata(
     };
   }
 
-  // ── Step 3: Keyword heuristic scoring ──────────────────────────────────────
-  const heuristic = classifyIntentByHeuristic(userInput, previousAgent);
+  // ── Step 3: Context-aware keyword heuristic scoring ─────────────────────────
+  const heuristic = classifyIntentByHeuristic(userInput, previousAgent, sessionContext);
 
   // Adjust confidence threshold based on metadata
   const dynamicThreshold = calculateDynamicConfidenceThreshold(metadata);

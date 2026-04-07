@@ -1,17 +1,21 @@
 /**
- * Intelligent Intent Router — Metadata-informed routing facade
+ * Intelligent Intent Router — Context-aware, metadata-informed routing facade
  *
- * Implements the Metadata-Informed Routing architecture:
+ * Implements the Metadata-Informed Routing architecture with conversation
+ * context awareness:
  *   1. Edge case detection (risk, stress, sensitive content) → clinico override
  *   2. Explicit regex detection (unchanged)
- *   3. Keyword heuristic scoring (Tier 2) → informed by operational metadata
- *   4. Sticky routing to current agent (Tier 3)
+ *   3. Context-aware keyword heuristic scoring (Tier 2) — uses conversation
+ *      history momentum + current message keywords + operational metadata
+ *   4. Therapeutic phase influence
+ *   5. Sticky routing to current agent (Tier 3) with context awareness
  *
- * When operational metadata is provided, the router uses it to detect
- * edge cases and make intelligent routing decisions. When metadata is
- * not available, falls back to deterministic keyword heuristics.
+ * The router combines three signal layers:
+ *   - Operational metadata: risk, stress, therapeutic phase
+ *   - Conversation context: recent topic flow / momentum from history
+ *   - Current message: keyword signal from the user's latest input
  *
- * @version 5.0.0 (Metadata-informed routing)
+ * @version 5.1.0 (Context-aware metadata-informed routing)
  */
 
 import { ClinicalAgentRouter } from './clinical-agent-router';
@@ -70,39 +74,40 @@ export class IntelligentIntentRouter {
   }
 
   /**
-   * Main orchestration method — metadata-informed routing.
+   * Main orchestration method — context-aware, metadata-informed routing.
    *
    * When operationalMetadata is provided:
    *   Step 1: Edge case detection (risk/stress/sensitive content) → clinico
    *   Step 2: Explicit regex detection → direct routing
-   *   Step 3: Keyword heuristic + metadata-informed scoring
+   *   Step 3: Context-aware keyword heuristic + metadata-informed scoring
    *   Step 4: Therapeutic phase influence
    *   Step 5: Sticky routing with stability
    *   Step 6: Fallback to socratico
    *
    * When operationalMetadata is NOT provided:
-   *   Falls back to deterministic keyword heuristics (backward compat)
+   *   Falls back to context-aware keyword heuristics (backward compat)
    */
   async orchestrateWithTools(
     userInput: string,
-    _sessionContext: Content[] = [],
+    sessionContext: Content[] = [],
     previousAgent?: string,
     operationalMetadata?: OperationalMetadata
   ): Promise<OrchestrationResult & { routingDecision?: RoutingDecision }> {
     try {
       // Use metadata-informed routing when metadata is available
       if (operationalMetadata) {
-        const routingDecision = classifyIntentWithMetadata(userInput, previousAgent, operationalMetadata);
+        const routingDecision = classifyIntentWithMetadata(userInput, previousAgent, operationalMetadata, sessionContext);
         const basicTools = this.toolRegistry.getBasicTools();
 
         if (this.config.enableLogging) {
-          logger.info('[IntentRouter] Metadata-informed routing', {
+          logger.info('[IntentRouter] Context-aware metadata-informed routing', {
             selectedAgent: routingDecision.agent,
             confidence: routingDecision.confidence.toFixed(2),
             reason: routingDecision.reason,
             isEdgeCase: routingDecision.is_edge_case,
             edgeCaseType: routingDecision.edge_case_type || 'none',
-            previousAgent: previousAgent || 'none'
+            previousAgent: previousAgent || 'none',
+            contextMessages: sessionContext.length
           });
         }
 
@@ -118,7 +123,7 @@ export class IntelligentIntentRouter {
         };
       }
 
-      // Fallback: deterministic heuristic routing (no metadata)
+      // Fallback: context-aware heuristic routing (no metadata)
       // Tier 1: Explicit regex — catches "activar modo X" commands
       const explicitRequest = detectExplicitAgentRequest(userInput);
       if (explicitRequest.isExplicit) {
@@ -133,15 +138,16 @@ export class IntelligentIntentRouter {
         };
       }
 
-      // Tier 2 + 3: Heuristic classification (replaces LLM call)
-      const heuristicResult = classifyIntentByHeuristic(userInput, previousAgent);
+      // Tier 2 + 3: Context-aware heuristic classification
+      const heuristicResult = classifyIntentByHeuristic(userInput, previousAgent, sessionContext);
       const basicTools = this.toolRegistry.getBasicTools();
 
       if (this.config.enableLogging) {
-        logger.debug('[IntentRouter] Heuristic routing (no metadata)', {
+        logger.debug('[IntentRouter] Context-aware heuristic routing (no metadata)', {
           selectedAgent: heuristicResult.selectedAgent,
           confidence: heuristicResult.confidence.toFixed(2),
-          previousAgent: previousAgent || 'none'
+          previousAgent: previousAgent || 'none',
+          contextMessages: sessionContext.length
         });
       }
 
