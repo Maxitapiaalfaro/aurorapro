@@ -11,6 +11,9 @@ import { createMetricsStreamingWrapper, handleStreamingWithTools, handleNonStrea
 import { buildEnhancedMessage, getRoleMetadata, addAgentTransitionContext } from "./agents/message-context-builder"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
 import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
+import { createLogger } from '@/lib/logger'
+
+const logger = createLogger('agent')
 
 // Import academicMultiSourceSearch only on server to avoid bundling in client
 // Removed top-level require to avoid build issues, will import dynamically
@@ -107,7 +110,7 @@ export class ClinicalAgentRouter {
 
       return chat
     } catch (error) {
-      console.error("Error creating chat session: " + (error instanceof Error ? error.message : String(error)))
+      logger.error("Error creating chat session", { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -126,7 +129,7 @@ export class ClinicalAgentRouter {
 
       // ARQUITECTURA OPTIMIZADA: Procesamiento dinámico de archivos por ID
       if (isAttachmentCarrier && msg.fileReferences && msg.fileReferences.length > 0) {
-        console.log(`[ClinicalRouter] Processing files for latest message only: ${msg.fileReferences.length} file IDs`)
+        logger.debug(`Processing files for latest message only: ${msg.fileReferences.length} file IDs`)
 
         try {
           // Resolve file objects using session cache first
@@ -168,11 +171,11 @@ export class ClinicalAgentRouter {
                     : `files/${fileRef.geminiFileId}`)
 
                   if (!fileUri) {
-                    console.error(`[ClinicalRouter] No valid URI found for file reference: ${fileRef.name}`)
+                    logger.error(`No valid URI found for file reference: ${fileRef.name}`)
                     continue
                   }
 
-                  console.log(`[ClinicalRouter] Adding file to context: ${fileRef.name}, URI: ${fileUri}`)
+                  logger.debug(`Adding file to context: ${fileRef.name}`, { uri: fileUri })
 
                   // Verify ACTIVE only once per session
                   const verifiedSet = this.verifiedActiveMap.get(sessionId) || new Set<string>()
@@ -183,7 +186,7 @@ export class ClinicalAgentRouter {
                       await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
                       verifiedSet.add(fileIdForCheck)
                     } catch (fileError) {
-                      console.error(`[ClinicalRouter] File not ready or not found: ${fileUri}`, fileError)
+                      logger.error(`File not ready or not found: ${fileUri}`, { error: fileError instanceof Error ? fileError.message : String(fileError) })
                       continue
                     }
                   }
@@ -192,9 +195,9 @@ export class ClinicalAgentRouter {
                   const filePart = createPartFromUri(fileUri, fileRef.type)
 
                   parts.push(filePart)
-                  console.log(`[ClinicalRouter] Successfully added file part for: ${fileRef.name}`)
+                  logger.debug(`Successfully added file part for: ${fileRef.name}`)
                 } catch (error) {
-                  console.error(`[ClinicalRouter] Error processing file reference ${fileRef.name}:`, error)
+                  logger.error(`Error processing file reference ${fileRef.name}`, { error: error instanceof Error ? error.message : String(error) })
                   // Continuar con el siguiente archivo en lugar de fallar completamente
                   continue
                 }
@@ -202,7 +205,7 @@ export class ClinicalAgentRouter {
             }
           }
         } catch (error) {
-          console.error(`[ClinicalRouter] Error retrieving files by IDs:`, error)
+          logger.error(`Error retrieving files by IDs`, { error: error instanceof Error ? error.message : String(error) })
           // Continuar sin archivos si hay error en la recuperación
         }
       }
@@ -283,7 +286,7 @@ export class ClinicalAgentRouter {
           this.activeChatSessions.set(sessionId, { chat: fileChat, agent, usesApiKeyClient: true })
           chat = fileChat
         } catch (switchErr) {
-          console.warn('[ClinicalRouter] ⚠️ Could not switch to API-key client for file-attached message:', switchErr)
+          logger.warn('⚠️ Could not switch to API-key client for file-attached message', { error: switchErr instanceof Error ? switchErr.message : String(switchErr) })
         }
       }
 
@@ -293,7 +296,7 @@ export class ClinicalAgentRouter {
       // 🔧 FIX: Estrategia de archivos - SOLO enviar completo en primer turno
       // Turnos posteriores: solo referencia ligera para evitar sobrecarga de tokens
       if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles) && enrichedContext.sessionFiles.length > 0) {
-        console.log(`📁 [ClinicalRouter] Processing sessionFiles for attachment:`, {
+        logger.debug(`📁 Processing sessionFiles for attachment`, {
           totalFiles: enrichedContext.sessionFiles.length,
           fileNames: enrichedContext.sessionFiles.map((f: any) => f.name)
         })
@@ -312,7 +315,7 @@ export class ClinicalAgentRouter {
         // Detectar si ALGUNO de estos archivos NO ha sido enviado completo aún
         const hasUnsentFiles = files.some(f => !fullySentFiles.has(f.id || f.geminiFileId || f.geminiFileUri));
 
-        console.log(`📁 [ClinicalRouter] File attachment decision:`, {
+        logger.debug(`📁 File attachment decision`, {
           hasUnsentFiles,
           filesToProcess: files.length,
           filesAlreadySent: Array.from(fullySentFiles),
@@ -326,7 +329,7 @@ export class ClinicalAgentRouter {
 
         if (hasUnsentFiles) {
           // ✅ PRIMER TURNO: Adjuntar archivo completo vía URI
-          console.log(`🔵 [ClinicalRouter] First turn detected: Attaching FULL files (${files.length}) via URI`);
+          logger.info(`🔵 First turn detected: Attaching FULL files (${files.length}) via URI`);
 
           // Prepend textual file annotation so the agent knows files are attached
           const fileDescriptions = files
@@ -357,7 +360,7 @@ export class ClinicalAgentRouter {
                   await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
                   verifiedSet.add(fileIdForCheck)
                 } catch (e) {
-                  console.warn(`[ClinicalRouter] Skipping non-active file: ${fileUri}`)
+                  logger.warn(`Skipping non-active file: ${fileUri}`)
                   continue
                 }
               }
@@ -371,14 +374,14 @@ export class ClinicalAgentRouter {
                 fullySentFiles.add(fileIdentifier);
               }
 
-              console.log(`[ClinicalRouter] ✅ Attached FULL file: ${fileRef.name} (${fileRef.size ? Math.round(fileRef.size / 1024) + 'KB' : 'size unknown'})`)
+              logger.info(`✅ Attached FULL file: ${fileRef.name} (${fileRef.size ? Math.round(fileRef.size / 1024) + 'KB' : 'size unknown'})`)
             } catch (err) {
-              console.error('[ClinicalRouter] Error attaching session file:', err)
+              logger.error('Error attaching session file', { error: err instanceof Error ? err.message : String(err) })
             }
           }
         } else {
           // ✅ TURNOS POSTERIORES: Solo referencia ligera textual (ahorra ~60k tokens)
-          console.log(`🟢 [ClinicalRouter] Subsequent turn detected: Using LIGHTWEIGHT file references (saves ~60k tokens)`);
+          logger.info(`🟢 Subsequent turn detected: Using LIGHTWEIGHT file references (saves ~60k tokens)`);
 
           const fileReferences = files.map(f => {
             const safeName = escapeXml(f.name)
@@ -394,7 +397,7 @@ export class ClinicalAgentRouter {
 
           // Prefijar el mensaje con contexto ligero de archivos usando XML tags
           messageParts[0].text = `<archivos_en_contexto>\nDocumentos previamente procesados en esta sesión (contenido completo ya fue compartido):\n${fileReferences}\n</archivos_en_contexto>\n\n${enhancedMessage}`;
-          console.log(`[ClinicalRouter] ✅ Added lightweight file context (~${fileReferences.length} chars vs ~60k tokens)`);
+          logger.info(`✅ Added lightweight file context (~${fileReferences.length} chars vs ~60k tokens)`);
         }
       }
 
@@ -431,7 +434,7 @@ export class ClinicalAgentRouter {
           } catch (err: any) {
             // ─── P1.1: Check if this is a context-window-exhausted error ───
             if (isContextExhaustedError(err) && !contextCompacted) {
-              console.warn(`🗜️ [ClinicalRouter] Context window exhausted on streaming attempt ${attempt}. Triggering reactive compaction...`);
+              logger.warn(`🗜️ Context window exhausted on streaming attempt ${attempt}. Triggering reactive compaction...`);
 
               const compactionResult = await this.performReactiveCompaction(sessionId, agent);
               if (compactionResult) {
@@ -452,7 +455,7 @@ export class ClinicalAgentRouter {
             const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED');
             if (is429 && !isContextExhaustedError(err) && attempt < MAX_RETRIES) {
               const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
-              console.warn(`⏳ [ClinicalRouter] 429 rate limit on attempt ${attempt}/${MAX_RETRIES}, retrying in ${backoffMs}ms...`);
+              logger.warn(`⏳ 429 rate limit on attempt ${attempt}/${MAX_RETRIES}, retrying in ${backoffMs}ms...`);
               await new Promise(resolve => setTimeout(resolve, backoffMs));
               continue;
             }
@@ -474,7 +477,7 @@ export class ClinicalAgentRouter {
           result = await chat.sendMessage(messageParams)
         } catch (err: any) {
           if (isContextExhaustedError(err)) {
-            console.warn(`🗜️ [ClinicalRouter] Context window exhausted on non-streaming call. Triggering reactive compaction...`);
+            logger.warn(`🗜️ Context window exhausted on non-streaming call. Triggering reactive compaction...`);
 
             const compactionResult = await this.performReactiveCompaction(sessionId, agent);
             if (compactionResult) {
@@ -509,23 +512,23 @@ export class ClinicalAgentRouter {
                 responseText
               );
 
-              console.log(`📊 [ClinicalRouter] Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+              logger.debug(`📊 Token usage`, { input: usageMetadata.promptTokenCount, output: usageMetadata.candidatesTokenCount, total: usageMetadata.totalTokenCount });
             } else {
               // Fallback: estimate tokens if usage metadata not available
               const inputTokens = Math.ceil(enhancedMessage.length / 4);
               const outputTokens = Math.ceil(responseText.length / 4);
               sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, responseText);
 
-              console.log(`📊 [ClinicalRouter] Token usage (estimated) - Input: ${inputTokens}, Output: ${outputTokens}`);
+              logger.debug(`📊 Token usage (estimated)`, { input: inputTokens, output: outputTokens });
             }
 
             // 📊 FINALIZE INTERACTION - Calculate performance metrics and save to snapshot
             const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
             if (completedMetrics) {
-              console.log(`✅ [ClinicalRouter] Interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+              logger.info(`✅ Interaction completed`, { cost: `$${completedMetrics.tokens.estimatedCost.toFixed(6)}`, tokens: completedMetrics.tokens.totalTokens, time: `${completedMetrics.timing.totalResponseTime}ms` });
             }
           } catch (error) {
-            console.warn(`⚠️ [ClinicalRouter] Could not extract token usage:`, error);
+            logger.warn(`⚠️ Could not extract token usage`, { error: error instanceof Error ? error.message : String(error) });
           }
         }
       }
@@ -533,7 +536,7 @@ export class ClinicalAgentRouter {
       return result;
 
     } catch (error) {
-      console.error(`[ClinicalRouter] Error sending message to ${agent}:`, error)
+      logger.error(`Error sending message to ${agent}`, { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -561,7 +564,7 @@ export class ClinicalAgentRouter {
     try {
       const sessionData = this.activeChatSessions.get(sessionId);
       if (!sessionData || !sessionData.history || sessionData.history.length < 4) {
-        console.warn(`🗜️ [ClinicalRouter] Cannot compact: insufficient history for session ${sessionId}`);
+        logger.warn(`🗜️ Cannot compact: insufficient history for session ${sessionId}`);
         return false;
       }
 
@@ -571,11 +574,11 @@ export class ClinicalAgentRouter {
       const compactionResult = this.contextWindowManager.compactReactively(currentHistory);
 
       if (compactionResult.metrics.messagesCompacted === 0) {
-        console.warn(`🗜️ [ClinicalRouter] Compaction yielded no reduction — history too short`);
+        logger.warn(`🗜️ Compaction yielded no reduction — history too short`);
         return false;
       }
 
-      console.log(`🗜️ [ClinicalRouter] Compaction complete:`, {
+      logger.info(`🗜️ Compaction complete`, {
         before: compactionResult.metrics.originalMessageCount,
         after: compactionResult.metrics.compactedMessageCount,
         tokensSaved: compactionResult.metrics.estimatedTokensSaved,
@@ -593,7 +596,7 @@ export class ClinicalAgentRouter {
 
       return true;
     } catch (compactionError) {
-      console.error(`🗜️ [ClinicalRouter] Reactive compaction failed:`, compactionError);
+      logger.error(`🗜️ Reactive compaction failed`, { error: compactionError instanceof Error ? compactionError.message : String(compactionError) });
       return false;
     }
   }
@@ -613,7 +616,7 @@ export class ClinicalAgentRouter {
     this.verifiedActiveMap.delete(sessionId)
     this.filesFullySentMap.delete(sessionId)
     this.sessionLastActivity.delete(sessionId)
-    console.log(`🗑️ [ClinicalAgentRouter] Closed session: ${sessionId}`)
+    logger.info(`🗑️ Closed session: ${sessionId}`)
   }
 
   getActiveChatSessions(): Map<string, any> {
@@ -629,7 +632,7 @@ export class ClinicalAgentRouter {
       this.cleanupInactiveSessions()
     }, this.CLEANUP_INTERVAL_MS)
 
-    console.log(`⏰ [ClinicalAgentRouter] Automatic cleanup started (interval: ${this.CLEANUP_INTERVAL_MS / 60000} minutes)`)
+    logger.info(`⏰ Automatic cleanup started (interval: ${this.CLEANUP_INTERVAL_MS / 60000} minutes)`)
   }
 
   /**
@@ -649,8 +652,8 @@ export class ClinicalAgentRouter {
     }
 
     if (cleanedCount > 0) {
-      console.log(`🧹 [ClinicalAgentRouter] Cleaned up ${cleanedCount} inactive sessions`)
-      console.log(`📊 [ClinicalAgentRouter] Active sessions remaining: ${this.activeChatSessions.size}`)
+      logger.info(`🧹 Cleaned up ${cleanedCount} inactive sessions`)
+      logger.info(`📊 Active sessions remaining: ${this.activeChatSessions.size}`)
     }
   }
 
@@ -670,7 +673,7 @@ export class ClinicalAgentRouter {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer)
       this.cleanupTimer = null
-      console.log(`⏹️ [ClinicalAgentRouter] Automatic cleanup stopped`)
+      logger.info(`⏹️ Automatic cleanup stopped`)
     }
   }
 

@@ -18,6 +18,7 @@ import { GoogleGenAI, FunctionDeclaration } from '@google/genai';
 import { IntelligentIntentRouter, OrchestrationResult } from './intelligent-intent-router';
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
+import { createLogger } from '@/lib/logger';
 import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-engine';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import { ai } from './google-genai-config';
@@ -83,6 +84,8 @@ interface DynamicOrchestratorConfig {
  * - Patrones de uso del psicólogo
  * - Especialización clínica requerida
  */
+const logger = createLogger('orchestration');
+
 export class DynamicOrchestrator {
   private ai: GoogleGenAI;
   private intentRouter: IntelligentIntentRouter;
@@ -244,7 +247,7 @@ export class DynamicOrchestrator {
 
 **CONTEXTO PARA ORQUESTACIÓN:** El usuario ha adjuntado ${sessionFiles.length} archivo(s): ${fileNames}. Esta información debe considerarse al seleccionar el agente y herramientas apropiados.`;
       
-      console.log(`[DynamicOrchestrator] Context enriched with ${sessionFiles.length} files:`, fileNames);
+      logger.info(`Context enriched with ${sessionFiles.length} files: ${fileNames}`);
     }
     
     session.conversationHistory.push({
@@ -375,51 +378,6 @@ export class DynamicOrchestrator {
   }
 
   /**
-   * Limpia sesiones expiradas
-   */
-  public cleanupExpiredSessions(): void {
-    const now = new Date();
-    const timeoutMs = this.config.sessionTimeoutMinutes * 60 * 1000;
-    
-    for (const [sessionId, session] of Array.from(this.activeSessions.entries())) {
-      const sessionAge = now.getTime() - session.sessionMetadata.startTime.getTime();
-      
-      if (sessionAge > timeoutMs) {
-        this.activeSessions.delete(sessionId);
-        this.log('debug', `Sesión expirada eliminada: ${sessionId}`);
-      }
-    }
-  }
-
-  /**
-   * Obtiene estadísticas del orquestador
-   */
-  public getStats(): {
-    activeSessions: number;
-    totalTools: number;
-    averageSessionLength: number;
-  } {
-    const sessions = Array.from(this.activeSessions.values());
-    const averageSessionLength = sessions.length > 0
-      ? sessions.reduce((sum, session) => sum + session.sessionMetadata.totalInteractions, 0) / sessions.length
-      : 0;
-    
-    return {
-      activeSessions: this.activeSessions.size,
-      totalTools: this.toolRegistry.getRegistryStats().totalTools,
-      averageSessionLength
-    };
-  }
-
-  /**
-   * Actualiza la configuración del orquestador
-   */
-  public updateConfig(newConfig: Partial<DynamicOrchestratorConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-    this.log('info', 'Configuración del orquestador actualizada');
-  }
-
-  /**
    * Logging interno
    */
   private log(level: DynamicOrchestratorConfig['logLevel'], message: string): void {
@@ -428,7 +386,7 @@ export class DynamicOrchestrator {
     const messageLevel = levels[level];
     
     if (messageLevel >= configLevel) {
-      console.log(`[DynamicOrchestrator:${level.toUpperCase()}] ${message}`);
+      logger[level](message);
     }
   }
 }

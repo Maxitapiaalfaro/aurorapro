@@ -13,12 +13,18 @@
 - [x] Router reduced from 3,248 → 706 lines (78% reduction) | Status: done
 - [ ] Align session manager with Firestore paths | Priority: M | Status: pending (moved to P4)
 
-### P4: Orchestration Simplification (MEDIUM)
-- [ ] Remove DynamicOrchestrator bridge dependency (after P2 bridge deletion) | Priority: M | Status: pending
-- [ ] Consolidate 8 session Maps into single bounded state structure | Priority: M | Status: pending
+### P4: Orchestration Simplification — IN PROGRESS (2026-04-06)
+- [x] Remove DynamicOrchestrator bridge dependency (already done in P2) | Priority: M | Status: done
+- [x] Session Maps consolidated: only 1 Map (`activeSessions`) remains after P2 purge (was 8 pre-P2) | Status: done
 - [ ] Unify dual public API: keep `orchestrateWithTools()`, deprecate `routeUserInput()` | Priority: M | Status: pending
-- [ ] Decompose `dynamic-orchestrator.ts` → `lib/orchestration/` | Priority: M | Status: pending
-- [ ] Decompose `intelligent-intent-router.ts` → `lib/routing/` | Priority: M | Status: pending
+- [x] Remove dead methods from DynamicOrchestrator (cleanupExpiredSessions, getStats, updateConfig) | Priority: M | Status: done
+- [x] Remove dead methods from IntelligentIntentRouter (getPerformanceMetrics, validateOptimizations) | Priority: M | Status: done
+- [x] Decompose `intelligent-intent-router.ts` → `lib/routing/` (1,538→460 lines, 70% reduction) | Priority: M | Status: done
+  - `lib/routing/routing-types.ts` — shared type definitions
+  - `lib/routing/intent-declarations.ts` — Gemini function-calling schemas
+  - `lib/routing/intent-classifier.ts` — classification, confidence, prompt building
+  - `lib/routing/index.ts` — barrel exports
+- [ ] Decompose `dynamic-orchestrator.ts` → `lib/orchestration/` | Priority: M | Status: pending (file is only 400 lines post-cleanup, may not need further decomposition)
 
 ### P5: Further Module Decomposition (MEDIUM)
 - [ ] Decompose `clinical-pattern-analyzer.ts` → `lib/patterns/` | Priority: M | Status: pending
@@ -29,7 +35,8 @@
 
 ### P7: Observability & Performance (LOW)
 - [x] PII/PHI redaction in logger + Sentry (Gap P0.2) | Priority: H | Status: done
-- [ ] Replace remaining ~300 console.log calls with structured logger | Priority: M | Status: pending
+- [x] Replace console.log in orchestration layer (116/164 calls, 71%): `hopeai-system.ts`, `clinical-agent-router.ts`, `dynamic-orchestrator.ts`, `intelligent-intent-router.ts`, `routing/intent-classifier.ts` | Priority: M | Status: done
+- [ ] Replace remaining ~48 console.log calls in `lib/agents/` (streaming-handler.ts, message-context-builder.ts) | Priority: M | Status: pending (parallel agent)
 - [ ] Consolidate 5 metrics modules into unified tracker | Priority: L | Status: pending
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
 

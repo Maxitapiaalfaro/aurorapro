@@ -13,6 +13,11 @@ import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet } from "@/types/clinical-types"
 import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
 
+import { createLogger } from '@/lib/logger'
+
+const systemLogger = createLogger('system')
+const sessionLogger = createLogger('session')
+
 /** Load a PatientRecord from Firestore (server-side, using firebase-admin). */
 async function loadPatientFromFirestore(userId: string, patientId: string): Promise<PatientRecord | null> {
   try {
@@ -28,7 +33,7 @@ async function loadPatientFromFirestore(userId: string, patientId: string): Prom
     if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate()
     return data as PatientRecord
   } catch (err) {
-    console.warn(`⚠️ [Firestore] Failed to load patient ${patientId}:`, err)
+    sessionLogger.warn(`⚠️ Failed to load patient ${patientId}`, { error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -52,18 +57,18 @@ export class HopeAISystem {
       const existingSession = await this.storage.loadChatSession(chatState.sessionId)
       
       if (existingSession) {
-        console.log(`⚠️ Sesión ya existe, actualizando: ${chatState.sessionId}`)
+        sessionLogger.info(`⚠️ Sesión ya existe, actualizando: ${chatState.sessionId}`)
         // Actualizar metadata de la sesión existente
         chatState.metadata.lastUpdated = new Date()
       } else {
-        console.log(`📝 Creando nueva sesión: ${chatState.sessionId}`)
+        sessionLogger.info(`📝 Creando nueva sesión: ${chatState.sessionId}`)
       }
       
       // Guardar en el storage adapter principal (servidor)
       await this.storage.saveChatSession(chatState)
-      console.log(`💾 Chat session saved: ${chatState.sessionId}`)
+      sessionLogger.info(`💾 Chat session saved: ${chatState.sessionId}`)
     } catch (error) {
-      console.error(`❌ Error saving chat session ${chatState.sessionId}:`, error)
+      sessionLogger.error(`❌ Error saving chat session ${chatState.sessionId}`, { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -76,32 +81,32 @@ export class HopeAISystem {
   async initialize(): Promise<void> {
     const isServer = typeof window === 'undefined'
     const startTime = Date.now()
-    console.log('🚀 [HopeAISystem] initialize() called', { isServer })
+    systemLogger.info('🚀 initialize() called', { isServer })
 
     if (this._initialized) {
-      console.log('✅ [HopeAISystem] Already initialized, skipping')
+      systemLogger.info('✅ Already initialized, skipping')
       return
     }
 
     try {
-      console.log('🔧 [HopeAISystem] Starting PARALLEL initialization...')
+      systemLogger.info('🔧 Starting PARALLEL initialization...')
 
       // 🚀 OPTIMIZACIÓN: Inicializar componentes en PARALELO para reducir cold start
       const [storage, intentRouter, orchestrator] = await Promise.all([
         // 1. Storage adapter
         (async () => {
-          console.log('🔧 [HopeAISystem] Getting storage adapter...')
+          systemLogger.debug('🔧 Getting storage adapter...')
           const { getStorageAdapter } = await import('./server-storage-adapter')
           const storageAdapter = await getStorageAdapter()
-          console.log('✅ [HopeAISystem] Storage adapter obtained:', storageAdapter?.constructor?.name)
+          systemLogger.info('✅ Storage adapter obtained', { adapter: storageAdapter?.constructor?.name })
 
           // Asegurar que el storage esté inicializado
           if (storageAdapter && typeof storageAdapter.initialize === 'function') {
-            console.log('🔧 [HopeAISystem] Calling storage.initialize()...')
+            systemLogger.debug('🔧 Calling storage.initialize()...')
             await storageAdapter.initialize()
-            console.log('✅ [HopeAISystem] Storage initialized successfully')
+            systemLogger.info('✅ Storage initialized successfully')
           } else {
-            console.warn('⚠️ [HopeAISystem] Storage does not have initialize method')
+            systemLogger.warn('⚠️ Storage does not have initialize method')
           }
 
           return storageAdapter
@@ -109,14 +114,14 @@ export class HopeAISystem {
 
         // 2. Intent router (independiente del storage)
         (async () => {
-          console.log('🔧 [HopeAISystem] Creating intent router...')
+          systemLogger.debug('🔧 Creating intent router...')
           const router = createIntelligentIntentRouter(clinicalAgentRouter, {
             confidenceThreshold: 0.8,
             fallbackAgent: 'socratico',
             enableLogging: true,
             maxRetries: 2
           })
-          console.log('✅ [HopeAISystem] Intent router created')
+          systemLogger.info('✅ Intent router created')
           return router
         })(),
 
@@ -126,7 +131,7 @@ export class HopeAISystem {
             return null
           }
 
-          console.log('🔧 [HopeAISystem] Creating dynamic orchestrator...')
+          systemLogger.debug('🔧 Creating dynamic orchestrator...')
           const orch = new DynamicOrchestrator(clinicalAgentRouter, {
             enableAdaptiveLearning: false,
             toolContinuityThreshold: 3,
@@ -136,7 +141,7 @@ export class HopeAISystem {
             sessionTimeoutMinutes: 60,
             logLevel: 'info'
           })
-          console.log('✅ [HopeAISystem] Dynamic orchestrator created')
+          systemLogger.info('✅ Dynamic orchestrator created')
           return orch
         })()
       ])
@@ -147,12 +152,12 @@ export class HopeAISystem {
       this.dynamicOrchestrator = orchestrator
 
       const initTime = Date.now() - startTime
-      console.log(`✅ [HopeAISystem] PARALLEL initialization completed in ${initTime}ms`)
+      systemLogger.info(`✅ PARALLEL initialization completed in ${initTime}ms`)
 
       this._initialized = true
       // 🔒 SECURITY: Console logging disabled in production
     } catch (error) {
-      console.error("Failed to initialize HopeAI System:", error)
+      systemLogger.error('❌ Failed to initialize HopeAI System', { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -176,13 +181,13 @@ export class HopeAISystem {
       try {
         const existingState = await this.storage.loadChatSession(sessionId)
         if (existingState) {
-          console.log(`♻️ Restaurando sesión existente: ${sessionId}`)
+          sessionLogger.info(`♻️ Restaurando sesión existente: ${sessionId}`)
           chatHistory = existingState.history
           isExistingSession = true
           
           // Update patient context if provided in patientSessionMeta
           if (patientSessionMeta?.patient?.reference) {
-            console.log(`🏥 Actualizando contexto de paciente: ${patientSessionMeta.patient.reference}`)
+            sessionLogger.info(`🏥 Actualizando contexto de paciente: ${patientSessionMeta.patient.reference}`)
             existingState.clinicalContext = {
               ...existingState.clinicalContext,
               patientId: patientSessionMeta.patient.reference,
@@ -197,7 +202,7 @@ export class HopeAISystem {
           return { sessionId: finalSessionId, chatState: existingState }
         }
       } catch (error) {
-        console.log(`⚠️ Error verificando sesión existente ${sessionId}, creando nueva:`, error)
+        sessionLogger.warn(`⚠️ Error verificando sesión existente ${sessionId}, creando nueva`, { error: error instanceof Error ? error.message : String(error) })
       }
     }
 
@@ -206,7 +211,7 @@ export class HopeAISystem {
       try {
         const potentialExisting = await this.storage.loadChatSession(finalSessionId)
         if (potentialExisting) {
-          console.log(`⚠️ ID de sesión generado ya existe, regenerando...`)
+          sessionLogger.warn('⚠️ ID de sesión generado ya existe, regenerando...')
           // Regenerar ID único
           const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           return this.createClinicalSession(userId, mode, agent, newId)
@@ -216,7 +221,7 @@ export class HopeAISystem {
       }
     }
 
-    console.log(`🆕 Creando nueva sesión clínica: ${finalSessionId}`)
+    sessionLogger.info(`🆕 Creando nueva sesión clínica: ${finalSessionId}`)
 
     // NOTE: The Gemini chat session is created lazily on first sendMessage call
     // (see the getActiveChatSessions guard further below in sendMessage())
@@ -352,7 +357,7 @@ export class HopeAISystem {
           lastRiskAssessment = patientRecord.updatedAt;
         }
       } catch (error) {
-        console.warn(`⚠️ [HopeAI] Error loading patient risk metadata for ${patientReference}:`, error);
+        sessionLogger.warn(`⚠️ Error loading patient risk metadata for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -448,11 +453,11 @@ export class HopeAISystem {
               lastSessionDate = new Date(sortedFichas[0].ultimaActualizacion);
             }
           } catch (error) {
-            console.warn(`⚠️ [HopeAI] Error loading patient session count for ${patientReference}:`, error);
+            sessionLogger.warn(`⚠️ Error loading patient session count for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
           }
         }
       } catch (error) {
-        console.warn(`⚠️ [HopeAI] Error loading patient context metadata for ${patientReference}:`, error);
+        sessionLogger.warn(`⚠️ Error loading patient context metadata for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -487,7 +492,7 @@ export class HopeAISystem {
       treatment_modality: treatmentModality
     };
 
-    console.log(`📊 [HopeAI] Operational metadata collected:`, {
+    sessionLogger.debug('📊 Operational metadata collected', {
       session_duration_minutes: sessionDurationMinutes,
       time_of_day: timeOfDay,
       region,
@@ -521,7 +526,7 @@ export class HopeAISystem {
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
-      console.log(`[HopeAI] Creating new session: ${sessionId}`)
+      sessionLogger.info(`🆕 Creating new session: ${sessionId}`)
       currentState = {
         sessionId,
         userId: '',
@@ -546,7 +551,7 @@ export class HopeAISystem {
       await this.saveChatSessionBoth(currentState)
     } else if (sessionMeta?.patient?.reference && currentState.clinicalContext?.patientId !== sessionMeta.patient.reference) {
       // Update existing session with patient context if provided and different
-      console.log(`🏥 [HopeAI] Updating existing session with patient context: ${sessionMeta.patient.reference}`)
+      sessionLogger.info(`🏥 Updating existing session with patient context: ${sessionMeta.patient.reference}`)
       currentState.clinicalContext = {
         ...currentState.clinicalContext,
         patientId: sessionMeta.patient.reference,
@@ -557,7 +562,7 @@ export class HopeAISystem {
       await this.saveChatSessionBoth(currentState)
     } else if (sessionMeta && !currentState.sessionMeta) {
       // 🏥 FIX: If sessionMeta is provided but not yet saved, save it now
-      console.log(`🏥 [HopeAI] Adding sessionMeta to existing session: ${sessionId}`)
+      sessionLogger.info(`🏥 Adding sessionMeta to existing session: ${sessionId}`)
       currentState.sessionMeta = sessionMeta
       await this.saveChatSessionBoth(currentState)
     }
@@ -569,7 +574,7 @@ export class HopeAISystem {
     const sessionFiles = await this.getPendingFilesForSession(sessionId)
 
     // 📁 DEBUG: Log fallback chain parameters
-    console.log(`📁 [HopeAI] File resolution fallback chain:`, {
+    sessionLogger.debug('📁 File resolution fallback chain', {
       sessionFiles: sessionFiles?.length || 0,
       clientFileReferences: clientFileReferences?.length || 0,
       clientFileReferencesIds: clientFileReferences || [],
@@ -587,25 +592,25 @@ export class HopeAISystem {
     // 🚀 NEW: Priority bypass - use client metadata if provided (serverless-safe)
     if (clientFileMetadata && clientFileMetadata.length > 0) {
       try {
-        console.log(`📁 [HopeAI] Using client-provided file metadata (bypass storage):`, clientFileMetadata.map((f: any) => f.name))
+        sessionLogger.debug('📁 Using client-provided file metadata (bypass storage)', { files: clientFileMetadata.map((f: any) => f.name) })
         // Convert metadata to ClinicalFile format
         resolvedSessionFiles = clientFileMetadata.map((meta: any) => ({
           ...meta,
           uploadDate: new Date(meta.uploadDate) // Ensure Date object
         }))
-        console.log(`✅ [HopeAI] Resolved ${resolvedSessionFiles.length} files from client metadata`)
+        sessionLogger.info(`✅ Resolved ${resolvedSessionFiles.length} files from client metadata`)
       } catch (e) {
-        console.error('❌ [HopeAI] Error parsing client file metadata:', e)
+        sessionLogger.error('❌ Error parsing client file metadata', { error: e instanceof Error ? e.message : String(e) })
         // Fall through to other resolution methods
       }
     }
 
     if ((!resolvedSessionFiles || resolvedSessionFiles.length === 0) && clientFileReferences && clientFileReferences.length > 0) {
       // Fallback: use file IDs sent from the client (reliable across serverless invocations)
-      console.log(`📁 [HopeAI] Attempting to resolve client file references...`, clientFileReferences)
+      sessionLogger.debug('📁 Attempting to resolve client file references...', { clientFileReferences })
       try {
         let clientFiles = await this.getFilesByIds(clientFileReferences)
-        console.log(`📁 [HopeAI] getFilesByIds returned:`, {
+        sessionLogger.debug('📁 getFilesByIds returned', {
           count: clientFiles?.length || 0,
           files: clientFiles?.map((f: any) => ({ id: f.id, name: f.name })) || []
         })
@@ -615,12 +620,12 @@ export class HopeAISystem {
             clientFiles = await Promise.all(clientFiles.map(f => clinicalFileManager.buildLightweightIndex(f)))
           } catch {}
           resolvedSessionFiles = clientFiles
-          console.log(`📎 [HopeAI] Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
+          sessionLogger.info(`📎 Resolved files from client fileReferences: ${clientFiles.map((f: any) => f.name).join(', ')}`)
         } else {
-          console.warn(`⚠️ [HopeAI] getFilesByIds returned empty array for IDs:`, clientFileReferences)
+          sessionLogger.warn('⚠️ getFilesByIds returned empty array for IDs', { clientFileReferences })
         }
       } catch (e) {
-        console.warn('⚠️ [HopeAI] Could not resolve client file references:', e)
+        sessionLogger.warn('⚠️ Could not resolve client file references', { error: e instanceof Error ? e.message : String(e) })
       }
     }
 
@@ -636,11 +641,11 @@ export class HopeAISystem {
           } catch {}
           if (reuseFiles && reuseFiles.length > 0) {
             resolvedSessionFiles = reuseFiles
-            console.log(`📎 [HopeAI] Reusing last referenced files for context: ${reuseFiles.map((f: any) => f.name).join(', ')}`)
+            sessionLogger.info(`📎 Reusing last referenced files for context: ${reuseFiles.map((f: any) => f.name).join(', ')}`)
           }
         }
       } catch (e) {
-        console.warn('⚠️ [HopeAI] Could not reuse last referenced files for context:', e)
+        sessionLogger.warn('⚠️ Could not reuse last referenced files for context', { error: e instanceof Error ? e.message : String(e) })
       }
     }
 
@@ -667,7 +672,7 @@ export class HopeAISystem {
       // Usar contexto optimizado (comprimido si es necesario)
       const sessionContext = contextResult.processedContext;
       
-      console.log(`🔄 [HopeAI] Context Window Applied:`, {
+      sessionLogger.debug('🔄 Context Window Applied', {
         originalMessages: rawSessionContext.length,
         optimizedMessages: sessionContext.length,
         estimatedTokens: contextResult.metrics.tokensEstimated,
@@ -677,7 +682,7 @@ export class HopeAISystem {
 
       // ARQUITECTURA OPTIMIZADA: Crear contexto enriquecido para detección de intención
       // Incluir archivos de la sesión actual para análisis contextual
-      console.log(`🏥 [HopeAI] SessionMeta received:`, {
+      sessionLogger.debug('🏥 SessionMeta received', {
         hasSessionMeta: !!sessionMeta,
         patientReference: sessionMeta?.patient?.reference || 'None',
         sessionId: sessionMeta?.sessionId || sessionId
@@ -691,7 +696,7 @@ export class HopeAISystem {
       const providedSummary = sessionMeta?.patient?.summaryText;
       if (providedSummary) {
         patientSummary = providedSummary;
-        console.log(`🏥 [HopeAI] Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
+        sessionLogger.info(`🏥 Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
       } else if (patientReference) {
         try {
           const patientRecord = await loadPatientFromFirestore(currentState.userId, patientReference);
@@ -701,7 +706,7 @@ export class HopeAISystem {
             const isFirstPatientMessage = currentState.history.length === 0 ||
               !currentState.history.some((msg: any) => msg.content?.includes(patientRecord.displayName));
 
-            console.log(`🏥 [HopeAI] Checking if first patient message:`, {
+            sessionLogger.debug('🏥 Checking if first patient message', {
               historyLength: currentState.history.length,
               patientName: patientRecord.displayName,
               isFirstMessage: isFirstPatientMessage
@@ -717,30 +722,30 @@ export class HopeAISystem {
                   .sort((a: any, b: any) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0];
 
                 if (latestFicha) {
-                  console.log(`🏥 [HopeAI] Found latest ficha clínica (version ${latestFicha.version}) for ${patientRecord.displayName}`);
+                  sessionLogger.info(`🏥 Found latest ficha clínica (version ${latestFicha.version}) for ${patientRecord.displayName}`);
                 }
               } catch (fichaError) {
-                console.warn(`🏥 [HopeAI] Error loading ficha clínica for ${patientReference}:`, fichaError);
+                sessionLogger.warn(`🏥 Error loading ficha clínica for ${patientReference}`, { error: fichaError instanceof Error ? fichaError.message : String(fichaError) });
               }
 
               // Usar getSummaryWithFicha que prioriza ficha sobre summary
               patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patientRecord, latestFicha);
 
               if (latestFicha) {
-                console.log(`🏥 [HopeAI] ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
+                sessionLogger.info(`🏥 ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
               } else if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
-                console.log(`🏥 [HopeAI] ✅ First message: Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
+                sessionLogger.info(`🏥 ✅ First message: Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
               } else {
-                console.log(`🏥 [HopeAI] ✅ First message: Built fresh patient summary for ${patientRecord.displayName}`);
+                sessionLogger.info(`🏥 ✅ First message: Built fresh patient summary for ${patientRecord.displayName}`);
               }
             } else {
               // 🔄 MENSAJES SUBSECUENTES: Solo referencia breve (el modelo ya tiene el contexto)
               patientSummary = `Continuing conversation with ${patientRecord.displayName}. Patient context already provided in previous messages.`;
-              console.log(`🏥 [HopeAI] ⚡ Subsequent message: Using brief patient reference (context already in model memory)`);
+              sessionLogger.info('🏥 ⚡ Subsequent message: Using brief patient reference (context already in model memory)');
             }
           }
         } catch (error) {
-          console.error(`🏥 [HopeAI] Error retrieving patient summary for ${patientReference}:`, error);
+          sessionLogger.error(`🏥 Error retrieving patient summary for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
         }
       }
       
@@ -775,7 +780,7 @@ export class HopeAISystem {
 
       // 📊 METADATA COLLECTION: Recolectar metadata operativa ANTES de routing
       // Esta metadata está disponible para todos los tipos de routing
-      console.log(`[HopeAI] Collecting operational metadata`)
+      sessionLogger.debug('📊 Collecting operational metadata')
       const operationalMetadata = await this.collectOperationalMetadata(
         sessionId,
         currentState.userId,
@@ -796,7 +801,7 @@ export class HopeAISystem {
       let orchestrationResult = null;
 
       if (suggestedAgent) {
-        console.log(`[HopeAI] Usando agente sugerido por orquestador: ${suggestedAgent}`)
+        sessionLogger.info(`🎯 Usando agente sugerido por orquestador: ${suggestedAgent}`)
         routingResult = {
           targetAgent: suggestedAgent,
           enrichedContext: {
@@ -809,7 +814,7 @@ export class HopeAISystem {
         }
       } else if (this.useAdvancedOrchestration && this.dynamicOrchestrator && !forceStandardRouting) {
         // 🧠 USAR ORQUESTACIÓN AVANZADA CON APRENDIZAJE CROSS-SESSION
-        console.log(`[HopeAI] 🧠 Using Advanced Orchestration with cross-session learning`)
+        sessionLogger.info('🧠 Using Advanced Orchestration with cross-session learning')
         
         // Construir conversación completa (usuario + modelo) en formato Content[] para bullets coherentes
         const externalConversationHistory = (currentState.history || []).map((msg: ChatMessage) => ({
@@ -858,7 +863,7 @@ export class HopeAISystem {
           }
         }
         
-        console.log(`[HopeAI] 🎯 Advanced orchestration result:`, {
+        sessionLogger.info('🎯 Advanced orchestration result', {
           selectedAgent: orchestrationResult.selectedAgent,
           confidence: orchestrationResult.confidence,
           toolsSelected: orchestrationResult.contextualTools.length
@@ -874,7 +879,7 @@ export class HopeAISystem {
         }
       } else {
         // Usar el router inteligente para clasificar la intención y enrutar automáticamente
-        console.log(`[HopeAI] Using standard intelligent routing with metadata-informed decisions`)
+        sessionLogger.info('🎯 Using standard intelligent routing with metadata-informed decisions')
 
         // Construir historial en formato Content[] para el router
         const sessionContextArray = (currentState.history || []).map((msg: ChatMessage) => ({
@@ -890,7 +895,7 @@ export class HopeAISystem {
 
         // 🔍 DEBUG: Verificar que el estado de riesgo se está pasando
         if (enrichedMetadata.session_risk_state?.isRiskSession) {
-          console.log(`🔍 [HopeAI] Passing risk state to router:`, {
+          sessionLogger.debug('🔍 Passing risk state to router', {
             isRiskSession: enrichedMetadata.session_risk_state.isRiskSession,
             consecutiveSafeTurns: enrichedMetadata.session_risk_state.consecutiveSafeTurns,
             riskType: enrichedMetadata.session_risk_state.riskType
@@ -922,7 +927,7 @@ export class HopeAISystem {
         
         // Si se detectó un cambio de agente, actualizar la sesión
         if (routingResult.targetAgent !== currentState.activeAgent) {
-          console.log(`[HopeAI] Explicit agent switch request: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
+          sessionLogger.info(`🔄 Explicit agent switch request: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
           
           // Instrumentar cambio de agente con Sentry
           const agentSwitchSpan = Sentry.startSpan(
@@ -1045,7 +1050,7 @@ export class HopeAISystem {
         currentState.title = derivedTitle || `Sesión ${currentState.activeAgent}`
       }
 
-      console.log('📝 [HopeAI] Mensaje del usuario agregado al historial:', {
+      sessionLogger.debug('📝 Mensaje del usuario agregado al historial', {
         historyLength: currentState.history.length,
         userMessageId: userMessage.id,
         userMessageContent: userMessage.content.substring(0, 50),
@@ -1055,7 +1060,7 @@ export class HopeAISystem {
 
       // Si se detectó un cambio de agente (routing automático), actualizar la sesión
       if (routingResult.targetAgent !== currentState.activeAgent) {
-        console.log(`[HopeAI] Intelligent routing: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
+        sessionLogger.info(`🔄 Intelligent routing: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
         
         // Instrumentar cambio de agente automático con Sentry
         const agentSwitchSpan = Sentry.startSpan(
@@ -1104,8 +1109,8 @@ export class HopeAISystem {
         routingDecision: routingResult.routingDecision
       }
 
-      console.log(`[HopeAI] SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
-      console.log(`📁 [HopeAI] Files in enrichedAgentContext.sessionFiles:`, {
+      sessionLogger.debug(`🏥 SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
+      sessionLogger.debug('📁 Files in enrichedAgentContext.sessionFiles', {
         count: resolvedSessionFiles?.length || 0,
         files: resolvedSessionFiles?.map((f: any) => ({
           id: f.id,
@@ -1147,7 +1152,7 @@ export class HopeAISystem {
       currentState.metadata.lastUpdated = new Date()
       await this.saveChatSessionBoth(currentState)
 
-      console.log('💾 [HopeAI] Estado guardado en DB con mensaje del usuario:', {
+      sessionLogger.info('💾 Estado guardado en DB con mensaje del usuario', {
         sessionId: sessionId,
         historyLength: currentState.history.length
       })
@@ -1175,7 +1180,7 @@ export class HopeAISystem {
         // when the stream finishes. DO NOT call completeInteraction here - it would complete
         // with 0 tokens before the stream has finished.
         
-        console.log(`🎉 [SessionMetrics] Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
+        sessionLogger.info(`🎉 Streaming interaction setup completed: ${sessionId} | Metrics will be captured on stream completion`);
         
         // Wrap the async generator to save the assistant response to history
         // when the stream is fully consumed by the API route
@@ -1204,13 +1209,13 @@ export class HopeAISystem {
               currentState.metadata.totalTokens += self.estimateTokens(message + accumulatedText)
               try {
                 await self.saveChatSessionBoth(currentState)
-                console.log('💾 [HopeAI] Streaming response saved to history:', {
+                sessionLogger.info('💾 Streaming response saved to history', {
                   sessionId,
                   historyLength: currentState.history.length,
                   responseLength: accumulatedText.length
                 })
               } catch (saveError) {
-                console.error('❌ [HopeAI] Failed to save streaming response to history:', saveError)
+                sessionLogger.error('❌ Failed to save streaming response to history', { error: saveError instanceof Error ? saveError.message : String(saveError) })
               }
             }
           }
@@ -1249,7 +1254,7 @@ export class HopeAISystem {
       // 🔍 PATTERN MIRROR: Check if we should trigger automatic analysis
       if (this.shouldTriggerPatternAnalysis(currentState)) {
         this.triggerPatternAnalysisAsync(currentState).catch(error => {
-          console.error('❌ [Análisis Longitudinal] Automatic trigger failed:', error)
+          sessionLogger.error('❌ Análisis Longitudinal: Automatic trigger failed', { error: error instanceof Error ? error.message : String(error) })
           // Don't block user flow, just log the error
         })
       }
@@ -1258,7 +1263,7 @@ export class HopeAISystem {
       // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
       // Attempting to call completeInteraction here would return null as interaction is already completed
       
-      console.log(`🎉 [SessionMetrics] Non-streaming interaction completed: ${sessionId}`);
+      sessionLogger.info(`🎉 Non-streaming interaction completed: ${sessionId}`);
 
       return { 
         response: {
@@ -1276,7 +1281,7 @@ export class HopeAISystem {
         interactionMetrics: null // Already captured and completed in router
       }
     } catch (error) {
-      console.error("Error sending message: " + (error instanceof Error ? error.message : String(error)))
+      sessionLogger.error('❌ Error sending message', { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -1392,14 +1397,14 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   ): Promise<void> {
     if (!this._initialized) await this.initialize()
 
-    console.log('🔍 [addStreamingResponseToHistory] Cargando estado desde DB para sessionId:', sessionId)
+    sessionLogger.debug('🔍 Cargando estado desde DB para addStreamingResponseToHistory', { sessionId })
 
     const currentState = await this.storage.loadChatSession(sessionId)
     if (!currentState) {
       throw new Error(`Session not found: ${sessionId}`)
     }
 
-    console.log('📊 [addStreamingResponseToHistory] Estado cargado desde DB:', {
+    sessionLogger.debug('📊 Estado cargado desde DB para addStreamingResponseToHistory', {
       historyLength: currentState.history.length,
       lastMessages: currentState.history.slice(-3).map((m: ChatMessage) => ({
         role: m.role,
@@ -1436,7 +1441,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       // 🔧 FIX: Attach executionTimeline if not already present
       if (executionTimeline && !(lastMessage as any).executionTimeline) {
         (lastMessage as any).executionTimeline = executionTimeline
-        console.log('🔧 ExecutionTimeline attached to existing message')
+        sessionLogger.debug('🔧 ExecutionTimeline attached to existing message')
       }
 
       // Update metadata and save without adding tokens again
@@ -1479,7 +1484,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     // Esto es crítico para mantener la sincronización entre persistencia y sesiones activas
     const hasActiveSession = clinicalAgentRouter.getActiveChatSessions().has(sessionId)
     if (!hasActiveSession) {
-      console.log(`[HopeAI] Recreando sesión activa para: ${sessionId}`)
+      sessionLogger.info(`♻️ Recreando sesión activa para: ${sessionId}`)
       await clinicalAgentRouter.createChatSession(
         sessionId, 
         currentState.activeAgent, 
@@ -1499,7 +1504,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     if (!this._initialized) await this.initialize()
     
     try {
-      console.log(`📁 Uploading document: ${file.name} for session: ${sessionId}`)
+      sessionLogger.info(`📁 Uploading document: ${file.name} for session: ${sessionId}`)
       
       // Dynamic import to keep firebase-admin out of client bundle
       const { clinicalFileManager } = await import('./clinical-file-manager')
@@ -1518,7 +1523,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       )
       
       if (duplicateFile) {
-        console.log(`📋 Document already exists in session: ${file.name} (${duplicateFile.id})`)
+        sessionLogger.info(`📋 Document already exists in session: ${file.name} (${duplicateFile.id})`)
         return duplicateFile
       }
       
@@ -1532,10 +1537,10 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         await this.saveChatSessionBoth(currentState)
       }
       
-      console.log(`✅ Document uploaded successfully: ${uploadedFile.id}`)
+      sessionLogger.info(`✅ Document uploaded successfully: ${uploadedFile.id}`)
       return uploadedFile
     } catch (error) {
-      console.error(`❌ Error uploading document ${file.name}:`, error)
+      sessionLogger.error(`❌ Error uploading document ${file.name}`, { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -1555,12 +1560,12 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     if (!this._initialized) await this.initialize()
 
     try {
-      console.log(`📋 [OPTIMIZED] Getting pending files for session: ${sessionId}`)
+      sessionLogger.debug(`📋 Getting pending files for session: ${sessionId}`)
 
       // Obtener TODOS los archivos clínicos procesados de la sesión
       const clinicalFiles = await this.storage.getClinicalFiles(sessionId)
 
-      console.log(`📋 [HopeAI.getPendingFilesForSession] All files from storage:`, {
+      sessionLogger.debug('📋 All files from storage for getPendingFilesForSession', {
         totalFiles: clinicalFiles.length,
         files: clinicalFiles.map((f: ClinicalFile) => ({
           id: f.id,
@@ -1576,10 +1581,10 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         file.status === 'processed'
       )
 
-      console.log(`📋 [OPTIMIZED] Found ${processedFiles.length} truly pending files for session ${sessionId} (${clinicalFiles.length} total, 0 already sent)`)
+      sessionLogger.debug(`📋 Found ${processedFiles.length} truly pending files for session ${sessionId} (${clinicalFiles.length} total, 0 already sent)`)
       return processedFiles
     } catch (error) {
-      console.error(`❌ Error getting pending files for session ${sessionId}:`, error)
+      sessionLogger.error(`❌ Error getting pending files for session ${sessionId}`, { error: error instanceof Error ? error.message : String(error) })
       return []
     }
   }
@@ -1591,13 +1596,13 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
   async getFilesByIds(fileIds: string[]): Promise<ClinicalFile[]> {
     if (!this._initialized) await this.initialize()
 
-    console.log(`📁 [HopeAI.getFilesByIds] Called with IDs:`, fileIds)
+    sessionLogger.debug('📁 getFilesByIds called', { fileIds })
 
     try {
       const files: ClinicalFile[] = []
       for (const fileId of fileIds) {
         const file = await this.storage.getClinicalFileById(fileId)
-        console.log(`📁 [HopeAI.getFilesByIds] File ${fileId}:`, {
+        sessionLogger.debug(`📁 getFilesByIds file ${fileId}`, {
           found: !!file,
           status: file?.status,
           name: file?.name,
@@ -1606,15 +1611,15 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         if (file && file.status === 'processed') {
           files.push(file)
         } else if (file && file.status !== 'processed') {
-          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} (${file.name}) has status "${file.status}", not "processed" - skipping`)
+          sessionLogger.warn(`⚠️ getFilesByIds: File ${fileId} (${file.name}) has status "${file.status}", not "processed" - skipping`)
         } else {
-          console.warn(`⚠️ [HopeAI.getFilesByIds] File ${fileId} not found in storage`)
+          sessionLogger.warn(`⚠️ getFilesByIds: File ${fileId} not found in storage`)
         }
       }
-      console.log(`📁 [HopeAI.getFilesByIds] Returning ${files.length} files out of ${fileIds.length} requested`)
+      sessionLogger.debug(`📁 getFilesByIds returning ${files.length} files out of ${fileIds.length} requested`)
       return files
     } catch (error) {
-      console.error(`❌ Error getting files by IDs:`, error)
+      sessionLogger.error('❌ Error getting files by IDs', { error: error instanceof Error ? error.message : String(error) })
       return []
     }
   }
@@ -1623,7 +1628,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     if (!this._initialized) await this.initialize()
     
     try {
-      console.log(`🗑️ Removing document ${fileId} from session: ${sessionId}`)
+      sessionLogger.info(`🗑️ Removing document ${fileId} from session: ${sessionId}`)
       
       // Remove file from clinical storage
       await this.storage.deleteClinicalFile(fileId)
@@ -1638,9 +1643,9 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         await this.saveChatSessionBoth(currentState)
       }
       
-      console.log(`✅ Document ${fileId} removed successfully from session ${sessionId}`)
+      sessionLogger.info(`✅ Document ${fileId} removed successfully from session ${sessionId}`)
     } catch (error) {
-      console.error(`❌ Error removing document ${fileId} from session ${sessionId}:`, error)
+      sessionLogger.error(`❌ Error removing document ${fileId} from session ${sessionId}`, { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -1664,7 +1669,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
    */
   setAdvancedOrchestration(enabled: boolean): void {
     this.useAdvancedOrchestration = enabled
-    console.log(`🧠 Advanced orchestration ${enabled ? 'enabled' : 'disabled'}`)
+    systemLogger.info(`🧠 Advanced orchestration ${enabled ? 'enabled' : 'disabled'}`)
   }
 
   /**
@@ -1700,7 +1705,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       };
     }
     
-    console.log(`📊 [SessionAnalytics] Complete session metrics for ${sessionId}:`, {
+    sessionLogger.debug(`📊 Complete session metrics for ${sessionId}`, {
       totalTokens: sessionMetrics.snapshot.totals.tokensConsumed,
       totalCost: `$${sessionMetrics.snapshot.totals.totalCost.toFixed(6)}`,
       averageResponseTime: `${sessionMetrics.snapshot.totals.averageResponseTime}ms`,
@@ -1732,7 +1737,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     const shouldTrigger = milestones.includes(sessionCount)
 
     if (shouldTrigger) {
-      console.log(`🔍 [Análisis Longitudinal] Milestone reached: ${sessionCount} sessions with patient ${patientId}`)
+      sessionLogger.info(`🔍 Análisis Longitudinal: Milestone reached: ${sessionCount} sessions with patient ${patientId}`)
     }
 
     return shouldTrigger
@@ -1746,14 +1751,14 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     const patientId = chatState.clinicalContext?.patientId
     if (!patientId) return
 
-    console.log(`🔍 [Análisis Longitudinal] Triggering automatic analysis for patient ${patientId}`)
+    sessionLogger.info(`🔍 Análisis Longitudinal: Triggering automatic analysis for patient ${patientId}`)
 
     try {
       // Get patient info
       const patient = await loadPatientFromFirestore(chatState.userId, patientId)
 
       if (!patient) {
-        console.warn(`⚠️ [Análisis Longitudinal] Patient not found: ${patientId}`)
+        sessionLogger.warn(`⚠️ Análisis Longitudinal: Patient not found: ${patientId}`)
         return
       }
 
@@ -1777,10 +1782,10 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
         throw new Error(errorData.error || 'Failed to trigger pattern analysis')
       }
 
-      console.log(`✅ [Análisis Longitudinal] Automatic analysis triggered successfully for patient ${patientId}`)
+      sessionLogger.info(`✅ Análisis Longitudinal: Automatic analysis triggered successfully for patient ${patientId}`)
 
     } catch (error) {
-      console.error(`❌ [Análisis Longitudinal] Error triggering automatic analysis:`, error)
+      sessionLogger.error('❌ Análisis Longitudinal: Error triggering automatic analysis', { error: error instanceof Error ? error.message : String(error) })
       
       // Report to Sentry but don't throw - this is a background operation
       Sentry.captureException(error, {
@@ -1861,7 +1866,7 @@ export class HopeAISystemSingleton {
       // 🔒 SECURITY: Console logging disabled in production
       return instance
     } catch (error) {
-      console.error('❌ Failed to initialize HopeAI Singleton System:', error)
+      systemLogger.error('❌ Failed to initialize HopeAI Singleton System', { error: error instanceof Error ? error.message : String(error) })
       Sentry.captureException(error, {
         tags: {
           context: 'hopeai-system-initialization'
@@ -1879,7 +1884,7 @@ export class HopeAISystemSingleton {
    */
   public static resetInstance(): void {
     if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
-      console.warn('⚠️ resetInstance should only be used in test/development environments')
+      systemLogger.warn('⚠️ resetInstance should only be used in test/development environments')
     }
     HopeAISystemSingleton.instance = null
     HopeAISystemSingleton.initializationPromise = null
@@ -1928,7 +1933,7 @@ export class HopeAISystemSingleton {
 
 // Legacy function for backward compatibility
 export function getHopeAIInstance(): HopeAISystem {
-  console.warn('⚠️ getHopeAIInstance() is deprecated. Use HopeAISystemSingleton.getInstance() instead.')
+  systemLogger.warn('⚠️ getHopeAIInstance() is deprecated. Use HopeAISystemSingleton.getInstance() instead.')
   return HopeAISystemSingleton.getInstance()
 }
 
@@ -1949,7 +1954,7 @@ export async function getGlobalOrchestrationSystem(): Promise<HopeAISystem> {
  * @deprecated Use getGlobalOrchestrationSystem() instead
  */
 export function getOrchestrationSystem(): HopeAISystem {
-  console.warn('⚠️ getOrchestrationSystem() is deprecated. Use getGlobalOrchestrationSystem() instead.')
+  systemLogger.warn('⚠️ getOrchestrationSystem() is deprecated. Use getGlobalOrchestrationSystem() instead.')
   return HopeAISystemSingleton.getInstance()
 }
 
