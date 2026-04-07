@@ -43,24 +43,33 @@ export async function executeGenerateClinicalDocument(
   try {
     logger.info(`[subagent:generate_clinical_document] type=${documentType} patient=${patientId || 'none'}`);
 
-    ctx.onProgress?.('Preparando plantilla de documento…');
+    ctx.onProgress?.(`Iniciando documento tipo ${documentType}`);
 
     // Optional patient context enrichment
     let patientContext = '';
     if (patientId && ctx.psychologistId) {
       try {
-        ctx.onProgress?.('Enriqueciendo con datos del paciente…');
+        ctx.onProgress?.('Conectando con Firestore…');
         const { loadPatientFromFirestore } = await import('../../hopeai-system');
+
+        ctx.onProgress?.('Cargando registro del paciente…');
         const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
+
         if (record) {
           patientContext = `\n\n## Datos del Paciente\n- Nombre: ${record.displayName || 'No especificado'}`;
           if (record.tags?.length) patientContext += `\n- Tags: ${record.tags.join(', ')}`;
           if (record.notes) patientContext += `\n- Notas: ${record.notes}`;
+          ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
+        } else {
+          ctx.onProgress?.('Paciente no encontrado, continuando sin contexto');
         }
       } catch {
         logger.warn('[subagent:generate_clinical_document] Could not fetch patient record');
+        ctx.onProgress?.('No se pudo cargar registro, continuando…');
       }
     }
+
+    ctx.onProgress?.('Preparando contenido de sesión…');
 
     const prompt = [
       `Genera un documento clínico tipo **${documentType}** basado en el siguiente contenido de sesión.`,
@@ -69,7 +78,8 @@ export async function executeGenerateClinicalDocument(
       additionalInstructions ? `\n## Instrucciones Adicionales\n${additionalInstructions}` : '',
     ].filter(Boolean).join('\n');
 
-    ctx.onProgress?.(`Generando documento ${documentType}…`);
+    ctx.onProgress?.('Construyendo prompt de generación…');
+    ctx.onProgress?.(`Generando documento ${documentType} con Gemini Flash…`);
 
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,
@@ -84,6 +94,7 @@ export async function executeGenerateClinicalDocument(
     const document = result.text || 'No se pudo generar el documento';
     const durationMs = Date.now() - start;
 
+    ctx.onProgress?.(`Documento ${documentType} completado (${(durationMs / 1000).toFixed(1)}s)`);
     logger.info(`[subagent:generate_clinical_document] completed in ${durationMs}ms`);
 
     return {

@@ -103,26 +103,40 @@ export async function executeAnalyzeLongitudinalPatterns(
   try {
     logger.info(`[subagent:analyze_longitudinal_patterns] patient=${patientId} sessions=${sessionHistory.length}`);
 
-    ctx.onProgress?.(`Procesando ${sessionHistory.length} sesiones…`);
+    ctx.onProgress?.(`Procesando ${sessionHistory.length} mensajes de sesión`);
 
     // Fetch patient name for display
     let patientName = 'Paciente';
     try {
+      ctx.onProgress?.('Conectando con Firestore…');
       const { loadPatientFromFirestore } = await import('../../hopeai-system');
+
+      ctx.onProgress?.('Cargando nombre del paciente…');
       const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
-      if (record?.displayName) patientName = record.displayName;
+      if (record?.displayName) {
+        patientName = record.displayName;
+        ctx.onProgress?.(`Paciente: ${patientName}`);
+      } else {
+        ctx.onProgress?.('Nombre no disponible, continuando…');
+      }
     } catch {
       logger.warn('[subagent:analyze_longitudinal_patterns] Could not fetch patient name');
+      ctx.onProgress?.('No se pudo cargar nombre, continuando…');
     }
 
     // Convert to ChatMessage format
+    ctx.onProgress?.('Convirtiendo historial a formato de análisis…');
     const chatMessages = convertToChatMessages(sessionHistory);
-
-    ctx.onProgress?.('Analizando patrones clínicos…');
+    ctx.onProgress?.(`${chatMessages.length} mensajes preparados`);
 
     // Delegate to the existing ClinicalPatternAnalyzer
+    ctx.onProgress?.('Importando analizador de patrones clínicos…');
     const { createClinicalPatternAnalyzer } = await import('../../clinical-pattern-analyzer');
+
+    ctx.onProgress?.('Inicializando analizador…');
     const analyzer = createClinicalPatternAnalyzer();
+
+    ctx.onProgress?.(`Analizando patrones de ${patientName} con Gemini…`);
     const analysis = await analyzer.analyzePatientPatterns(
       patientId,
       patientName,
@@ -130,9 +144,13 @@ export async function executeAnalyzeLongitudinalPatterns(
       'manual_request',
     );
 
+    ctx.onProgress?.('Formateando resultados del análisis…');
     const formattedAnalysis = formatPatternAnalysis(analysis);
     const durationMs = Date.now() - start;
 
+    const exploredCount = analysis.exploredDomains?.length || 0;
+    const unexploredCount = analysis.unexploredDomains?.length || 0;
+    ctx.onProgress?.(`Análisis completado: ${exploredCount} dominios explorados, ${unexploredCount} no explorados (${(durationMs / 1000).toFixed(1)}s)`);
     logger.info(`[subagent:analyze_longitudinal_patterns] completed in ${durationMs}ms`);
 
     return {

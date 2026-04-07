@@ -35,7 +35,7 @@ export async function executeExplorePatientContext(
   try {
     logger.info(`[subagent:explore_patient_context] patient=${patientId}`);
 
-    ctx.onProgress?.('Cargando registro del paciente…');
+    ctx.onProgress?.('Conectando con Firestore…');
 
     // Dynamic imports to avoid circular dependencies
     const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemories }] =
@@ -44,22 +44,8 @@ export async function executeExplorePatientContext(
         import('../../clinical-memory-system'),
       ]);
 
-    ctx.onProgress?.('Recuperando memorias clínicas…');
-
-    // Fetch all patient data in parallel
-    const fetchPromises: [
-      Promise<any>,
-      Promise<any[]>,
-      Promise<any[]>,
-    ] = [
-      loadPatientFromFirestore(ctx.psychologistId, patientId),
-      getPatientMemories(ctx.psychologistId, patientId, { isActive: true, limit: 20 }),
-      contextHint
-        ? getRelevantMemories(ctx.psychologistId, patientId, contextHint, 5)
-        : Promise.resolve([]),
-    ];
-
-    const [record, memories, relevantMemories] = await Promise.all(fetchPromises);
+    ctx.onProgress?.('Cargando registro del paciente…');
+    const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
 
     if (!record) {
       return {
@@ -68,7 +54,22 @@ export async function executeExplorePatientContext(
       };
     }
 
-    ctx.onProgress?.(`${memories.length} memorias recuperadas, sintetizando…`);
+    ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
+
+    ctx.onProgress?.('Recuperando memorias clínicas activas…');
+    const memories = await getPatientMemories(ctx.psychologistId, patientId, { isActive: true, limit: 20 });
+    ctx.onProgress?.(`${memories.length} memorias recuperadas`);
+
+    let relevantMemories: any[] = [];
+    if (contextHint) {
+      ctx.onProgress?.('Buscando memorias relevantes al contexto…');
+      relevantMemories = await getRelevantMemories(ctx.psychologistId, patientId, contextHint, 5);
+      if (relevantMemories.length > 0) {
+        ctx.onProgress?.(`${relevantMemories.length} memorias contextuales encontradas`);
+      }
+    }
+
+    ctx.onProgress?.('Construyendo prompt de síntesis…');
 
     // Compose synthesis prompt with raw data
     const sections: string[] = [];
@@ -108,6 +109,8 @@ export async function executeExplorePatientContext(
 
     const synthesisPrompt = `Sintetiza la siguiente información clínica del paciente en un resumen integrado:\n\n${sections.join('\n')}`;
 
+    ctx.onProgress?.('Generando síntesis clínica con Gemini Flash…');
+
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,
       contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
@@ -121,6 +124,7 @@ export async function executeExplorePatientContext(
     const summary = result.text || 'No se pudo generar síntesis';
     const durationMs = Date.now() - start;
 
+    ctx.onProgress?.(`Síntesis completada (${(durationMs / 1000).toFixed(1)}s)`);
     logger.info(`[subagent:explore_patient_context] completed in ${durationMs}ms`);
 
     return {

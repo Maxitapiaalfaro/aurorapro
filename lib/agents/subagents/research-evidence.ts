@@ -68,32 +68,42 @@ export async function executeResearchEvidence(
   try {
     logger.info(`[subagent:research_evidence] question="${researchQuestion}" focus="${focusArea || 'none'}"`);
 
+    ctx.onProgress?.('Conectando con bases de datos académicas…');
     const { academicMultiSourceSearch } = await import('../../academic-multi-source-search');
 
     // Step 1: Decompose into sub-queries
     const subQueries = decomposeResearchQuestion(researchQuestion, focusArea);
     const perQueryMax = Math.ceil(maxSources / subQueries.length);
 
-    ctx.onProgress?.(`Descomponiendo pregunta en ${subQueries.length} sub-consultas…`);
+    ctx.onProgress?.(`Pregunta descompuesta en ${subQueries.length} sub-consultas`);
     logger.info(`[subagent:research_evidence] ${subQueries.length} sub-queries, ${perQueryMax} results each`);
 
-    // Step 2: Search in parallel
-    const searchPromises = subQueries.map((query, i) => {
-      ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length}: "${query.length > 50 ? query.substring(0, 50) + '…' : query}"`);
-      return academicMultiSourceSearch.search({
-        query,
-        maxResults: perQueryMax,
-        language: 'both' as const,
-        minTrustScore: 60,
-      }).catch((err: Error) => {
-        logger.warn(`[subagent:research_evidence] Search failed for query="${query}": ${err.message}`);
-        return { results: [] };
-      });
-    });
+    // Step 2: Search SEQUENTIALLY so each search reports in real-time
+    const searchResults: any[] = [];
+    for (let i = 0; i < subQueries.length; i++) {
+      const query = subQueries[i];
+      const truncatedQuery = query.length > 50 ? query.substring(0, 50) + '…' : query;
+      ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length}: "${truncatedQuery}"`);
 
-    const searchResults = await Promise.all(searchPromises);
+      try {
+        const result = await academicMultiSourceSearch.search({
+          query,
+          maxResults: perQueryMax,
+          language: 'both' as const,
+          minTrustScore: 60,
+        });
+        searchResults.push(result);
+        const found = result?.results?.length ?? 0;
+        ctx.onProgress?.(`Búsqueda ${i + 1} completada: ${found} resultados`);
+      } catch (err: any) {
+        logger.warn(`[subagent:research_evidence] Search failed for query="${query}": ${err.message}`);
+        searchResults.push({ results: [] });
+        ctx.onProgress?.(`Búsqueda ${i + 1} falló, continuando…`);
+      }
+    }
 
     // Step 3: Deduplicate and collect references
+    ctx.onProgress?.('Deduplicando resultados…');
     const seenDois = new Set<string>();
     const seenTitles = new Set<string>();
     const allResults: any[] = [];
@@ -120,7 +130,7 @@ export async function executeResearchEvidence(
       }
     }
 
-    ctx.onProgress?.(`${allResults.length} fuentes encontradas, deduplicando…`);
+    ctx.onProgress?.(`${allResults.length} fuentes únicas tras deduplicación`);
 
     if (allResults.length === 0) {
       return {
@@ -134,6 +144,7 @@ export async function executeResearchEvidence(
     }
 
     // Step 4: Synthesize via Gemini
+    ctx.onProgress?.('Preparando datos para síntesis…');
     const sourceSummaries = allResults
       .map((r, i) => {
         const parts = [`[${i + 1}] "${r.title || 'Sin título'}"`];
@@ -153,7 +164,7 @@ export async function executeResearchEvidence(
       `\nSintetiza estos hallazgos en una revisión de evidencia integrada.`,
     ].filter(Boolean).join('\n');
 
-    ctx.onProgress?.(`Sintetizando ${allResults.length} fuentes con Gemini…`);
+    ctx.onProgress?.(`Sintetizando ${allResults.length} fuentes con Gemini Flash…`);
 
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,
@@ -168,6 +179,7 @@ export async function executeResearchEvidence(
     const synthesis = result.text || 'No se pudo generar síntesis';
     const durationMs = Date.now() - start;
 
+    ctx.onProgress?.(`Síntesis completada (${(durationMs / 1000).toFixed(1)}s)`);
     logger.info(`[subagent:research_evidence] completed in ${durationMs}ms, ${allResults.length} sources`);
 
     return {
