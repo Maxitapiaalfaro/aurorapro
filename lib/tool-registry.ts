@@ -61,6 +61,23 @@ const registeredTools: ClinicalTool[] = [
     metadata: { id: 'google_search', securityCategory: 'external' },
     declaration: { name: 'google_search' },
   },
+  // Sub-agent tools
+  {
+    metadata: { id: 'explore_patient_context', securityCategory: 'read-only' },
+    declaration: { name: 'explore_patient_context' },
+  },
+  {
+    metadata: { id: 'generate_clinical_document', securityCategory: 'read-only' },
+    declaration: { name: 'generate_clinical_document' },
+  },
+  {
+    metadata: { id: 'research_evidence', securityCategory: 'external' },
+    declaration: { name: 'research_evidence' },
+  },
+  {
+    metadata: { id: 'analyze_longitudinal_patterns', securityCategory: 'read-only' },
+    declaration: { name: 'analyze_longitudinal_patterns' },
+  },
 ];
 
 // ============================================================================

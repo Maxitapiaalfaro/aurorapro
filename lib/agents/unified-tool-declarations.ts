@@ -168,6 +168,175 @@ export const UNIFIED_TOOL_DECLARATIONS = [
           required: ['patientId', 'category', 'content', 'confidence'],
         },
       },
+      // ─── SUB-AGENT TOOLS ─────────────────────────────────────────
+      {
+        name: 'explore_patient_context',
+        description: [
+          'Sub-agente que agrega y sintetiza el contexto clínico completo de un paciente: registro clínico, memorias inter-sesión, patrones relevantes → resumen clínico integrado.',
+          'Usa un modelo secundario para producir una síntesis comprensiva.',
+          '',
+          'USA CUANDO:',
+          '- Primera mención de un paciente en la sesión y necesitas contexto completo',
+          '- El terapeuta pide "recuérdame este caso" o "qué sabemos de este paciente"',
+          '- Vas a iniciar una formulación de caso y necesitas toda la información disponible',
+          '- Necesitas más que solo el registro o solo las memorias — necesitas la síntesis integrada',
+          '',
+          'NO USES CUANDO:',
+          '- Solo necesitas un dato específico (usa get_patient_record o get_patient_memories)',
+          '- Ya sintetizaste el contexto de este paciente en este turno',
+          '- No hay paciente activo en la sesión',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            patientId: {
+              type: 'string',
+              description: 'ID del paciente en Firestore',
+            },
+            context_hint: {
+              type: 'string',
+              description:
+                'Contexto de la consulta actual para priorizar memorias relevantes. Ejemplo: "terapeuta pregunta sobre patrones de evitación"',
+            },
+          },
+          required: ['patientId'],
+        },
+      },
+      {
+        name: 'generate_clinical_document',
+        description: [
+          'Sub-agente que genera documentos clínicos estructurados profesionales: notas SOAP, DAP, BIRP, planes de tratamiento, resúmenes de caso.',
+          'Usa un modelo secundario especializado en documentación clínica.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta solicita explícitamente documentación (notas de sesión, plan de tratamiento)',
+          '- Final de sesión y el terapeuta pide resumen estructurado',
+          '- Necesitas generar un documento formal con formato clínico específico',
+          '',
+          'NO USES CUANDO:',
+          '- El terapeuta solo hace una pregunta sobre documentación (responde directamente)',
+          '- La consulta es conversacional, no requiere documento formal',
+          '- No hay suficiente material de sesión para documentar',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            document_type: {
+              type: 'string',
+              description:
+                'Tipo de documento: "SOAP", "DAP", "BIRP", "plan_tratamiento", "resumen_caso"',
+              enum: ['SOAP', 'DAP', 'BIRP', 'plan_tratamiento', 'resumen_caso'],
+            },
+            conversation_context: {
+              type: 'string',
+              description:
+                'Resumen del contenido de la sesión a documentar. Incluye: temas discutidos, intervenciones realizadas, respuestas del paciente, observaciones clínicas.',
+            },
+            patient_id: {
+              type: 'string',
+              description:
+                'ID del paciente (opcional, para enriquecer con datos del registro)',
+            },
+            additional_instructions: {
+              type: 'string',
+              description:
+                'Instrucciones específicas del terapeuta para el documento (ej: "enfoca en la alianza terapéutica")',
+            },
+          },
+          required: ['document_type', 'conversation_context'],
+        },
+      },
+      {
+        name: 'research_evidence',
+        description: [
+          'Sub-agente de investigación que realiza búsquedas multi-query y sintetiza evidencia académica de forma comprensiva.',
+          'Descompone una pregunta de investigación en 2-3 sub-consultas, busca en paralelo, y produce una revisión de evidencia integrada con niveles de confianza.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta necesita una revisión comprensiva de evidencia sobre un tema complejo',
+          '- Comparación de intervenciones o enfoques terapéuticos con múltiples dimensiones',
+          '- La pregunta requiere cruzar evidencia de múltiples búsquedas para una respuesta completa',
+          '- Mini-revisión de literatura para informar decisiones clínicas',
+          '',
+          'NO USES CUANDO:',
+          '- Una búsqueda simple basta — usa search_academic_literature directamente',
+          '- El terapeuta pide un dato específico, no una revisión',
+          '- Ya investigaste este tema en la conversación actual',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            research_question: {
+              type: 'string',
+              description:
+                'Pregunta de investigación clínica completa. Ejemplo: "¿Cuál es la evidencia comparativa entre EMDR y terapia de exposición prolongada para TEPT en adultos?"',
+            },
+            focus_area: {
+              type: 'string',
+              description:
+                'Área de enfoque opcional para priorizar resultados (ej: "población infantil", "comorbilidad con depresión")',
+            },
+            max_sources: {
+              type: 'number',
+              description:
+                'Número máximo de fuentes a incluir en la síntesis (default: 12)',
+            },
+          },
+          required: ['research_question'],
+        },
+      },
+      {
+        name: 'analyze_longitudinal_patterns',
+        description: [
+          'Sub-agente que analiza patrones longitudinales en el trabajo terapéutico: dominios clínicos explorados, técnicas utilizadas, áreas no exploradas, y oportunidades de desarrollo profesional.',
+          'Requiere historial de múltiples sesiones. Usa análisis asistido por IA con modelo secundario.',
+          '',
+          'USA CUANDO:',
+          '- Después de múltiples sesiones con un paciente (mínimo 3)',
+          '- El terapeuta pregunta "¿qué patrones ves?" o "¿qué estoy explorando consistentemente?"',
+          '- Revisión de desarrollo profesional o supervisión',
+          '- El terapeuta quiere una meta-perspectiva sobre su abordaje clínico',
+          '',
+          'NO USES CUANDO:',
+          '- Solo hay 1-2 sesiones de historial (insuficiente para análisis longitudinal)',
+          '- El terapeuta pregunta sobre un caso puntual (usa supervisión directa)',
+          '- La consulta no requiere análisis meta-clínico',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            patient_id: {
+              type: 'string',
+              description: 'ID del paciente para análisis longitudinal',
+            },
+            session_history: {
+              type: 'array',
+              description:
+                'Array de resúmenes de sesión o extractos de mensajes para analizar. Mínimo 3 entradas.',
+              items: {
+                type: 'object',
+                properties: {
+                  role: {
+                    type: 'string',
+                    description: '"user" (terapeuta) o "model" (Aurora)',
+                    enum: ['user', 'model'],
+                  },
+                  content: {
+                    type: 'string',
+                    description: 'Contenido del mensaje o resumen de sesión',
+                  },
+                  timestamp: {
+                    type: 'string',
+                    description: 'ISO timestamp (opcional)',
+                  },
+                },
+                required: ['role', 'content'],
+              },
+            },
+          },
+          required: ['patient_id', 'session_history'],
+        },
+      },
     ],
   },
 ];

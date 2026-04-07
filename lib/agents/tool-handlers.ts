@@ -247,3 +247,8 @@ registerToolHandler('google_search', async () => {
     response: 'Search completed with automatic processing',
   };
 });
+
+// ─── SUB-AGENT HANDLERS ────────────────────────────────────────────────────
+// Registered from subagents/index.ts to keep this file focused on direct tools
+import { registerSubAgentHandlers } from './subagents/index';
+registerSubAgentHandlers();

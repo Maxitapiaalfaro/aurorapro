@@ -16,7 +16,7 @@ const systemLogger = createLogger('system')
 const sessionLogger = createLogger('session')
 
 /** Load a PatientRecord from Firestore (server-side, using firebase-admin). */
-async function loadPatientFromFirestore(userId: string, patientId: string): Promise<PatientRecord | null> {
+export async function loadPatientFromFirestore(userId: string, patientId: string): Promise<PatientRecord | null> {
   try {
     const adminDb = getAdminFirestore(getAdminApp())
     const snap = await adminDb

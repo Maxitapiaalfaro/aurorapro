@@ -60,6 +60,44 @@ export const googleSearchSchema = z.object({
 });
 
 // ============================================================================
+// SUB-AGENT TOOL SCHEMAS
+// ============================================================================
+
+/** explore_patient_context — Patient Context Synthesis (sub-agent, read-only) */
+export const explorePatientContextSchema = z.object({
+  patientId: z.string().min(1).describe('ID del paciente en Firestore'),
+  context_hint: z.string().optional().describe('Contexto de la consulta para priorizar memorias'),
+});
+
+/** generate_clinical_document — Document Generation (sub-agent, read-only) */
+export const generateClinicalDocumentSchema = z.object({
+  document_type: z.enum(['SOAP', 'DAP', 'BIRP', 'plan_tratamiento', 'resumen_caso'])
+    .describe('Tipo de documento clínico'),
+  conversation_context: z.string().min(20).max(10000)
+    .describe('Contenido de sesión a documentar'),
+  patient_id: z.string().optional().describe('ID del paciente (opcional)'),
+  additional_instructions: z.string().optional().describe('Instrucciones adicionales del terapeuta'),
+});
+
+/** research_evidence — Evidence Synthesis (sub-agent, external) */
+export const researchEvidenceSchema = z.object({
+  research_question: z.string().min(10).describe('Pregunta de investigación clínica'),
+  focus_area: z.string().optional().describe('Área de enfoque para priorizar resultados'),
+  max_sources: z.number().int().min(3).max(20).optional()
+    .describe('Máximo de fuentes a incluir (default: 12)'),
+});
+
+/** analyze_longitudinal_patterns — Pattern Analysis (sub-agent, read-only) */
+export const analyzeLongitudinalPatternsSchema = z.object({
+  patient_id: z.string().min(1).describe('ID del paciente'),
+  session_history: z.array(z.object({
+    role: z.enum(['user', 'model']),
+    content: z.string().min(1),
+    timestamp: z.string().optional(),
+  })).min(3).describe('Historial de sesiones (mínimo 3 entradas)'),
+});
+
+// ============================================================================
 // LEGACY SCHEMAS (backward compat for sessions with old tool names)
 // ============================================================================
 
@@ -83,6 +121,12 @@ export const toolInputSchemas: Record<string, z.ZodType> = {
   'get_patient_record': getPatientRecordSchema,
   'save_clinical_memory': saveClinicalMemorySchema,
   'google_search': googleSearchSchema,
+
+  // Sub-agent tools
+  'explore_patient_context': explorePatientContextSchema,
+  'generate_clinical_document': generateClinicalDocumentSchema,
+  'research_evidence': researchEvidenceSchema,
+  'analyze_longitudinal_patterns': analyzeLongitudinalPatternsSchema,
 
   // Legacy tool names (may appear in existing Gemini chat sessions)
   'search_evidence_for_reflection': legacySearchSchema,

@@ -245,6 +245,11 @@ const KNOWN_DYNAMIC_TOOLS = new Set([
   'get_patient_memories',
   'get_patient_record',
   'save_clinical_memory',
+  // Sub-agent tools
+  'explore_patient_context',
+  'generate_clinical_document',
+  'research_evidence',
+  'analyze_longitudinal_patterns',
   // Legacy tool names (may appear in existing sessions)
   'search_evidence_for_reflection',
   'search_evidence_for_documentation',
