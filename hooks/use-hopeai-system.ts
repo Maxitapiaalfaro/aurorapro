@@ -408,20 +408,24 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         logger.info('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
 
         // 🏥 FIX: Also persist the updated sessionMeta to Firestore immediately
+        // PERF: Write directly instead of read-then-write (session was just created)
         try {
           if (psychologistId) {
-            const result = await findSessionById(psychologistId, newSessionId)
-            if (result) {
-              const { session: currentState, patientId: pid } = result
-              currentState.sessionMeta = updatedSessionMeta
-              currentState.clinicalContext = {
-                ...currentState.clinicalContext,
-                patientId: updatedSessionMeta.patient.reference,
-                confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel
-              }
-              await saveSessionMetadata(psychologistId, pid, currentState)
-              logger.info('💾 SessionMeta persisted to Firestore after lazy session creation')
-            }
+            const patientId = resolvePatientId({
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: systemState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              sessionMeta: updatedSessionMeta,
+            })
+            await saveSessionMetadata(psychologistId, patientId, {
+              sessionId: newSessionId,
+              userId: systemState.userId || psychologistId,
+              mode: systemState.mode || 'clinical_supervision',
+              activeAgent: systemState.activeAgent,
+              history: [],
+              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: systemState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              sessionMeta: updatedSessionMeta,
+            } as ChatState)
+            logger.info('💾 SessionMeta persisted to Firestore after lazy session creation')
           }
         } catch (error) {
           logger.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
@@ -472,7 +476,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       // 💾 Ensure session doc exists in Firestore (best-effort, non-blocking for UI)
       // NOTE: User message is NOT persisted here to avoid duplication.
-      // The server persists the user message as part of saveChatSessionBoth() after processing.
+      // The server persists the user message as part of addMessageToSession() after processing.
+      // PERF: Write directly with set({merge:true}) — idempotent, no need to check existence first.
       try {
         if (psychologistId) {
           const patientId = resolvePatientId({
@@ -484,26 +489,21 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             sessionMeta: systemState.sessionMeta,
           })
 
-          // Check if session doc exists; if not, create it
-          const existingResult = await findSessionById(psychologistId, sessionIdToUse!)
-          if (!existingResult) {
-            // New session — create the session document
-            const newSession: ChatState = {
-              sessionId: sessionIdToUse!,
-              userId: systemState.userId || psychologistId,
-              mode: systemState.mode || 'clinical_supervision',
-              activeAgent: systemState.activeAgent,
-              history: [],
-              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
-              clinicalContext: {
-                sessionType: systemState.mode || 'clinical_supervision',
-                confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
-                patientId: systemState.sessionMeta?.patient?.reference
-              },
-              sessionMeta: systemState.sessionMeta
-            }
-            await saveSessionMetadata(psychologistId, patientId, newSession)
+          const sessionDoc: ChatState = {
+            sessionId: sessionIdToUse!,
+            userId: systemState.userId || psychologistId,
+            mode: systemState.mode || 'clinical_supervision',
+            activeAgent: systemState.activeAgent,
+            history: [],
+            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
+            clinicalContext: {
+              sessionType: systemState.mode || 'clinical_supervision',
+              confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
+              patientId: systemState.sessionMeta?.patient?.reference
+            },
+            sessionMeta: systemState.sessionMeta
           }
+          await saveSessionMetadata(psychologistId, patientId, sessionDoc)
         }
       } catch (persistError) {
         logger.error('❌ [Firestore] Error al verificar/crear sesión:', persistError)
@@ -531,6 +531,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           logger.warn('⚠️ [Client] Could not extract file metadata:', e)
         }
       } else {
+        // PERF: Short-circuit if no files attached and no historical file references exist
+        const hasHistoricalFiles = systemState.history.some(m => m.role === 'user' && m.fileReferences && m.fileReferences.length > 0)
+        if (!hasHistoricalFiles) {
+          logger.info('📁 [Client] No files attached and no historical file references — skipping fallback chain')
+        } else {
         // 🔄 FALLBACK: If attachedFiles is empty, try loading from IndexedDB directly
         logger.info('🔄 [Client] attachedFiles is empty, attempting IndexedDB fallback...')
 
@@ -626,6 +631,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         } catch (idbError) {
           logger.error('❌ [Client] IndexedDB fallback failed:', idbError)
         }
+        } // end hasHistoricalFiles
       }
 
       // Callback para manejar bullets progresivos
@@ -670,17 +676,20 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         })
 
         // 💾 Persistir actualización del agente para el último mensaje de usuario en Firestore
+        // PERF: Write directly with set({merge:true}) — no need to read first
         void (async () => {
           try {
             if (!psychologistId) return
-            const result = await findSessionById(psychologistId, sessionIdToUse!)
-            if (result) {
-              const { session: existingState, patientId: pid } = result
-              existingState.activeAgent = routingInfo.targetAgent as AgentType
-              existingState.metadata = { ...existingState.metadata, lastUpdated: new Date() }
-              await saveSessionMetadata(psychologistId, pid, existingState)
-              logger.info('💾 [Firestore] Agente del mensaje de usuario actualizado en persistencia')
-            }
+            const patientId = resolvePatientId({
+              clinicalContext: { patientId: systemState.sessionMeta?.patient?.reference, sessionType: 'clinical_supervision', confidentialityLevel: 'high' },
+              sessionMeta: systemState.sessionMeta,
+            })
+            await saveSessionMetadata(psychologistId, patientId, {
+              sessionId: sessionIdToUse!,
+              activeAgent: routingInfo.targetAgent as AgentType,
+              metadata: { lastUpdated: new Date() },
+            } as any) // merge: true handles partial writes
+            logger.info('💾 [Firestore] Agente del mensaje de usuario actualizado en persistencia')
           } catch (e) {
             logger.warn('⚠️ [Firestore] No se pudo actualizar el agente en persistencia:', e)
           }

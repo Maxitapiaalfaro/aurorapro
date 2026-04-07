@@ -581,7 +581,8 @@ export async function handleStreamingWithTools(
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
         const executionPromise = executeToolsSafely(preparedCalls, { maxConcurrent: 3 })
-          .then(results => { progressQueue.finish(); return results; });
+          .then(results => { progressQueue.finish(); return results; })
+          .catch(err => { progressQueue.finish(); throw err; });
 
         // Drain progress events in real-time while tools execute
         for await (const p of progressQueue) {

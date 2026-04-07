@@ -12,16 +12,11 @@ type HIPAAStorage = any
 /**
  * Adaptador de almacenamiento para el servidor con persistencia.
  *
- * MIGRACIÓN FASE 2:
- * - Antes: In-memory Maps (Vercel) o SQLite (local)
- * - Ahora: Firestore (Vercel/serverless) o SQLite (local disk)
- *
  * Selección de backend:
- * - Vercel / serverless / HOPEAI_STORAGE_MODE=memory → FirestoreStorageAdapter (cloud persistent)
- * - Disk-capable environments → HIPAACompliantStorage (SQLite + AES-256)
- * - Fallback if Firestore init fails → MemoryServerStorage (ephemeral)
- *
- * @version 3.0.0 — Phase 2: Firestore Migration
+ * - Firebase credentials available → FirestoreStorageAdapter (consistent with client reads)
+ * - No Firebase credentials → HIPAACompliantStorage (SQLite for offline dev)
+ * - Fallback if Firestore init fails on Vercel → MemoryServerStorage (ephemeral)
+ * - Fallback if Firestore init fails locally → HIPAACompliantStorage (SQLite)
  */
 export class ServerStorageAdapter {
   private storage: HIPAAStorage | null = null
@@ -33,28 +28,39 @@ export class ServerStorageAdapter {
 
   private async ensureStorage(): Promise<HIPAAStorage> {
     if (!this.storage) {
-      // Detectar entorno Vercel o modo memoria forzado
-      const isVercel = !!process.env.VERCEL || typeof process.env.VERCEL_ENV !== 'undefined'
-      const forceMemory = process.env.HOPEAI_STORAGE_MODE === 'memory'
+      // Always prefer Firestore when Firebase admin credentials are available.
+      // The client-side reads from Firestore directly, so the server MUST write
+      // to the same backend to maintain consistency.
+      const hasFirebaseCredentials = !!(
+        process.env.FIREBASE_PROJECT_ID &&
+        process.env.FIREBASE_CLIENT_EMAIL &&
+        process.env.FIREBASE_PRIVATE_KEY
+      )
 
-      if (isVercel || forceMemory) {
-        // ── Phase 2: Use Firestore instead of MemoryServerStorage ──
+      if (hasFirebaseCredentials) {
         try {
-          logger.info('🔧 [ServerStorageAdapter] Creating FirestoreStorageAdapter (Vercel/serverless)...')
+          logger.info('🔧 [ServerStorageAdapter] Creating FirestoreStorageAdapter...')
           const { FirestoreStorageAdapter } = await import('./firestore-storage-adapter')
           this.storage = new FirestoreStorageAdapter()
           logger.info('✅ [ServerStorageAdapter] FirestoreStorageAdapter instance created')
         } catch (error) {
-          // Graceful fallback: if firebase-admin fails (missing credentials, etc.)
-          // fall back to MemoryServerStorage to avoid hard crashes
-          logger.warn('⚠️ [ServerStorageAdapter] FirestoreStorageAdapter failed, falling back to MemoryServerStorage:', error)
-          const { MemoryServerStorage } = await import('./server-storage-memory')
-          this.storage = new MemoryServerStorage()
-          logger.info('✅ [ServerStorageAdapter] MemoryServerStorage fallback instance created')
+          // Graceful fallback: if firebase-admin fails, fall back to SQLite (local dev)
+          // or MemoryServerStorage (serverless without disk)
+          logger.warn('⚠️ [ServerStorageAdapter] FirestoreStorageAdapter failed, falling back:', error)
+          const isVercel = !!process.env.VERCEL || typeof process.env.VERCEL_ENV !== 'undefined'
+          if (isVercel) {
+            const { MemoryServerStorage } = await import('./server-storage-memory')
+            this.storage = new MemoryServerStorage()
+            logger.info('✅ [ServerStorageAdapter] MemoryServerStorage fallback instance created')
+          } else {
+            const { HIPAACompliantStorage } = await import('./hipaa-compliant-storage')
+            this.storage = new HIPAACompliantStorage()
+            logger.info('✅ [ServerStorageAdapter] HIPAACompliantStorage fallback instance created')
+          }
         }
       } else {
-        logger.info('🔧 [ServerStorageAdapter] Creating HIPAACompliantStorage instance...')
-        // Dynamic import para evitar bundling en cliente
+        // No Firebase credentials — use local SQLite for development
+        logger.info('🔧 [ServerStorageAdapter] No Firebase credentials, using HIPAACompliantStorage (SQLite)...')
         const { HIPAACompliantStorage } = await import('./hipaa-compliant-storage')
         this.storage = new HIPAACompliantStorage()
         logger.info('✅ [ServerStorageAdapter] HIPAACompliantStorage instance created')
@@ -93,6 +99,20 @@ export class ServerStorageAdapter {
     }
 
     await storage.saveChatSession(updatedState)
+  }
+
+  /**
+   * PERF: Save only session metadata (no message rewrite).
+   * Falls back to saveChatSession for backends that don't support it.
+   */
+  async saveSessionMetadataOnly(chatState: ChatState): Promise<void> {
+    if (!this.initialized) throw new Error("Storage not initialized")
+    const storage = await this.ensureStorage()
+    if (typeof storage.saveSessionMetadataOnly === 'function') {
+      await storage.saveSessionMetadataOnly(chatState)
+    } else {
+      await storage.saveChatSession(chatState)
+    }
   }
 
   /**

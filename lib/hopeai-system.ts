@@ -44,21 +44,11 @@ export class HopeAISystem {
     return this._initialized
   }
   
-  // Método privado para guardar en el sistema de almacenamiento del servidor con verificación de existencia
+  // Método privado para guardar en el sistema de almacenamiento del servidor
+  // PERF: No pre-read — set({merge:true}) in the storage adapter is idempotent (creates or updates).
   private async saveChatSessionBoth(chatState: ChatState): Promise<void> {
     try {
-      // Verificar si la sesión ya existe para prevenir duplicaciones
-      const existingSession = await this.storage.loadChatSession(chatState.sessionId)
-      
-      if (existingSession) {
-        sessionLogger.info(`⚠️ Sesión ya existe, actualizando: ${chatState.sessionId}`)
-        // Actualizar metadata de la sesión existente
-        chatState.metadata.lastUpdated = new Date()
-      } else {
-        sessionLogger.info(`📝 Creando nueva sesión: ${chatState.sessionId}`)
-      }
-      
-      // Guardar en el storage adapter principal (servidor)
+      chatState.metadata.lastUpdated = new Date()
       await this.storage.saveChatSession(chatState)
       sessionLogger.info(`💾 Chat session saved: ${chatState.sessionId}`)
     } catch (error) {
@@ -66,7 +56,32 @@ export class HopeAISystem {
       throw error
     }
   }
-  
+
+  /**
+   * PERF: Save only session metadata without rewriting all messages.
+   * Use for metadata-only updates (sessionMeta, clinicalContext, activeAgent).
+   */
+  private async saveSessionMetadataOnly(chatState: ChatState): Promise<void> {
+    try {
+      chatState.metadata.lastUpdated = new Date()
+      await this.storage.saveSessionMetadataOnly(chatState)
+      sessionLogger.debug(`Session metadata saved: ${chatState.sessionId}`)
+    } catch (error) {
+      sessionLogger.error(`❌ Error saving session metadata ${chatState.sessionId}`, { error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  }
+
+  /**
+   * PERF: Add a single message to the subcollection (O(1) instead of O(N) full-history rewrite).
+   * Resolves userId/patientId from the ChatState automatically.
+   */
+  private async addMessageToSession(chatState: ChatState, message: ChatMessage): Promise<void> {
+    const userId = chatState.userId || 'anonymous'
+    const patientId = chatState.clinicalContext?.patientId || chatState.sessionMeta?.patient?.reference || '_general'
+    await this.storage.addMessage(userId, patientId, chatState.sessionId, message)
+  }
+
   // Getter público para acceder al storage desde la API
   get storageAdapter() {
     return this.storage
@@ -245,13 +260,16 @@ export class HopeAISystem {
   /**
    * METADATA COLLECTION: Recolecta metadata operativa para decisiones de routing
    * Esta metadata informa las decisiones del router, no es un delivery pasivo
+   * PERF: Accepts pre-fetched patientRecord and fichas to avoid redundant Firestore reads.
    */
-  private async collectOperationalMetadata(
+  private collectOperationalMetadata(
     sessionId: string,
     userId: string,
     currentState: ChatState,
-    patientReference?: string
-  ): Promise<OperationalMetadata> {
+    patientReference?: string,
+    prefetchedPatientRecord?: any,
+    prefetchedFichas?: any[]
+  ): OperationalMetadata {
     // 1. TEMPORAL METADATA
     const now = new Date();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -273,48 +291,36 @@ export class HopeAISystem {
     else if (timezone.includes('US/') || timezone.includes('America/New_York') || timezone.includes('America/Los_Angeles')) region = 'US';
     else if (timezone.includes('Asia/')) region = 'ASIA';
 
-    // 2. RISK METADATA (desde patient context si está disponible)
+    // 2. RISK METADATA (from pre-fetched patient record)
     let riskFlags: string[] = [];
     let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
     let requiresImmediateAttention = false;
     let lastRiskAssessment: Date | null = null;
 
-    if (patientReference) {
-      try {
-        const patientRecord = await loadPatientFromFirestore(userId, patientReference);
+    if (prefetchedPatientRecord) {
+      const riskTags = prefetchedPatientRecord.tags?.filter((tag: string) =>
+        tag.toLowerCase().includes('riesgo') ||
+        tag.toLowerCase().includes('suicid') ||
+        tag.toLowerCase().includes('autolesión') ||
+        tag.toLowerCase().includes('crisis') ||
+        tag.toLowerCase().includes('urgente')
+      ) || [];
 
-        if (patientRecord) {
-          // Extraer risk flags desde tags del paciente
-          const riskTags = patientRecord.tags?.filter(tag =>
-            tag.toLowerCase().includes('riesgo') ||
-            tag.toLowerCase().includes('suicid') ||
-            tag.toLowerCase().includes('autolesión') ||
-            tag.toLowerCase().includes('crisis') ||
-            tag.toLowerCase().includes('urgente')
-          ) || [];
+      riskFlags = riskTags;
 
-          riskFlags = riskTags;
-
-          // Determinar nivel de riesgo basado en tags
-          if (riskTags.some(tag => tag.toLowerCase().includes('crítico') || tag.toLowerCase().includes('suicid'))) {
-            riskLevel = 'critical';
-            requiresImmediateAttention = true;
-          } else if (riskTags.some(tag => tag.toLowerCase().includes('alto') || tag.toLowerCase().includes('crisis'))) {
-            riskLevel = 'high';
-          } else if (riskTags.length > 0) {
-            riskLevel = 'medium';
-          }
-
-          // Last risk assessment desde updatedAt del paciente
-          lastRiskAssessment = patientRecord.updatedAt;
-        }
-      } catch (error) {
-        sessionLogger.warn(`⚠️ Error loading patient risk metadata for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
+      if (riskTags.some((tag: string) => tag.toLowerCase().includes('crítico') || tag.toLowerCase().includes('suicid'))) {
+        riskLevel = 'critical';
+        requiresImmediateAttention = true;
+      } else if (riskTags.some((tag: string) => tag.toLowerCase().includes('alto') || tag.toLowerCase().includes('crisis'))) {
+        riskLevel = 'high';
+      } else if (riskTags.length > 0) {
+        riskLevel = 'medium';
       }
+
+      lastRiskAssessment = prefetchedPatientRecord.updatedAt;
     }
 
-    // 3. AGENT HISTORY METADATA
-    // Extraer transiciones de agentes desde el historial de mensajes
+    // 3. AGENT HISTORY METADATA (CPU-only, no I/O)
     const agentTransitions: AgentTransition[] = [];
     const agentTurnCounts: Record<AgentType, number> = {
       socratico: 0,
@@ -332,7 +338,6 @@ export class HopeAISystem {
       if (msg.role === 'model' && msg.agent) {
         agentTurnCounts[msg.agent]++;
 
-        // Detectar transiciones
         if (previousAgent && previousAgent !== msg.agent) {
           const transition: AgentTransition = {
             from: previousAgent,
@@ -343,7 +348,6 @@ export class HopeAISystem {
           agentTransitions.push(transition);
           lastAgentSwitch = msg.timestamp;
 
-          // Contar switches consecutivos en últimos 5 minutos
           if (msg.timestamp.getTime() >= fiveMinutesAgo) {
             consecutiveSwitches++;
           }
@@ -353,63 +357,49 @@ export class HopeAISystem {
       }
     }
 
-    // 4. PATIENT CONTEXT METADATA
+    // 4. PATIENT CONTEXT METADATA (from pre-fetched data)
     let therapeuticPhase: 'assessment' | 'intervention' | 'maintenance' | 'closure' | null = null;
     let sessionCount = 0;
     let lastSessionDate: Date | null = null;
     let treatmentModality: string | null = null;
     let patientSummaryAvailable = false;
 
-    if (patientReference) {
-      try {
-        const patientRecord = await loadPatientFromFirestore(userId, patientReference);
+    if (prefetchedPatientRecord) {
+      patientSummaryAvailable = !!prefetchedPatientRecord.summaryCache;
 
-        if (patientRecord) {
-          patientSummaryAvailable = !!patientRecord.summaryCache;
+      const modalityTags = prefetchedPatientRecord.tags?.filter((tag: string) =>
+        tag.toLowerCase().includes('tcc') ||
+        tag.toLowerCase().includes('cbt') ||
+        tag.toLowerCase().includes('psicodinámico') ||
+        tag.toLowerCase().includes('humanista') ||
+        tag.toLowerCase().includes('sistémica')
+      ) || [];
 
-          // Extraer modalidad de tratamiento desde tags
-          const modalityTags = patientRecord.tags?.filter(tag =>
-            tag.toLowerCase().includes('tcc') ||
-            tag.toLowerCase().includes('cbt') ||
-            tag.toLowerCase().includes('psicodinámico') ||
-            tag.toLowerCase().includes('humanista') ||
-            tag.toLowerCase().includes('sistémica')
-          ) || [];
+      if (modalityTags.length > 0) {
+        treatmentModality = modalityTags[0];
+      }
 
-          if (modalityTags.length > 0) {
-            treatmentModality = modalityTags[0];
-          }
+      if (prefetchedFichas) {
+        sessionCount = prefetchedFichas.length;
 
-          // Estimar fase terapéutica basada en número de notas clínicas
-          try {
-            const fichas = await this.storage.getFichasClinicasByPaciente(patientReference);
-            sessionCount = fichas.length;
-
-            if (sessionCount === 0) {
-              therapeuticPhase = 'assessment';
-            } else if (sessionCount <= 3) {
-              therapeuticPhase = 'assessment';
-            } else if (sessionCount <= 12) {
-              therapeuticPhase = 'intervention';
-            } else if (sessionCount <= 24) {
-              therapeuticPhase = 'maintenance';
-            } else {
-              therapeuticPhase = 'closure';
-            }
-
-            // Last session date desde última ficha
-            if (fichas.length > 0) {
-              const sortedFichas = fichas.sort((a: any, b: any) =>
-                new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime()
-              );
-              lastSessionDate = new Date(sortedFichas[0].ultimaActualizacion);
-            }
-          } catch (error) {
-            sessionLogger.warn(`⚠️ Error loading patient session count for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
-          }
+        if (sessionCount === 0) {
+          therapeuticPhase = 'assessment';
+        } else if (sessionCount <= 3) {
+          therapeuticPhase = 'assessment';
+        } else if (sessionCount <= 12) {
+          therapeuticPhase = 'intervention';
+        } else if (sessionCount <= 24) {
+          therapeuticPhase = 'maintenance';
+        } else {
+          therapeuticPhase = 'closure';
         }
-      } catch (error) {
-        sessionLogger.warn(`⚠️ Error loading patient context metadata for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
+
+        if (prefetchedFichas.length > 0) {
+          const sortedFichas = [...prefetchedFichas].sort((a: any, b: any) =>
+            new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime()
+          );
+          lastSessionDate = new Date(sortedFichas[0].ultimaActualizacion);
+        }
       }
     }
 
@@ -511,12 +501,14 @@ export class HopeAISystem {
       }
       // 🏥 FIX: Also update sessionMeta in storage
       currentState.sessionMeta = sessionMeta
-      await this.saveChatSessionBoth(currentState)
+      // PERF: metadata-only update — no messages changed, skip full history rewrite
+      await this.saveSessionMetadataOnly(currentState)
     } else if (sessionMeta && !currentState.sessionMeta) {
       // 🏥 FIX: If sessionMeta is provided but not yet saved, save it now
       sessionLogger.info(`🏥 Adding sessionMeta to existing session: ${sessionId}`)
       currentState.sessionMeta = sessionMeta
-      await this.saveChatSessionBoth(currentState)
+      // PERF: metadata-only update — no messages changed
+      await this.saveSessionMetadataOnly(currentState)
     }
 
     // 🎯 START COMPREHENSIVE METRICS TRACKING (after currentState is loaded)
@@ -612,18 +604,18 @@ export class HopeAISystem {
         enableLogging: true
       });
 
-      // Convertir historial completo al formato Content[] 
+      // Convertir historial completo al formato Content[]
       const rawSessionContext = currentState.history.map((msg: ChatMessage) => ({
         role: msg.role,
         parts: [{ text: msg.content }]
       }));
 
-      // Aplicar compresión inteligente del contexto
+      // Aplicar compresión inteligente del contexto (CPU-only, no I/O)
       const contextResult = contextWindowManager.processContext(rawSessionContext, message);
-      
+
       // Usar contexto optimizado (comprimido si es necesario)
       const sessionContext = contextResult.processedContext;
-      
+
       sessionLogger.debug('🔄 Context Window Applied', {
         originalMessages: rawSessionContext.length,
         optimizedMessages: sessionContext.length,
@@ -632,75 +624,76 @@ export class HopeAISystem {
         hasFiles: resolvedSessionFiles.length > 0
       });
 
-      // ARQUITECTURA OPTIMIZADA: Crear contexto enriquecido para detección de intención
-      // Incluir archivos de la sesión actual para análisis contextual
       sessionLogger.debug('🏥 SessionMeta received', {
         hasSessionMeta: !!sessionMeta,
         patientReference: sessionMeta?.patient?.reference || 'None',
         sessionId: sessionMeta?.sessionId || sessionId
       });
-      
-      // PATIENT CONTEXT: Retrieve full patient summary if available
-      let patientSummary: string | undefined = undefined;
-      const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
 
-      // 🔹 Prefer client-provided summaryText on first turn to avoid client-only persistence lookup
+      const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
       const providedSummary = sessionMeta?.patient?.summaryText;
+
+      // ─── PERF: Parallel prefetch — fire ALL independent I/O at once ───
+      // Instead of 10+ sequential reads, run them concurrently via Promise.all.
+      // Each fetch is independent; results are assembled afterwards.
+      const { getRelevantMemories } = await import('./clinical-memory-system')
+
+      const [patientRecord, fichas, clinicalMemories] = await Promise.all([
+        // Patient record: needed for summary + risk metadata + modality
+        (patientReference && !providedSummary && currentState.userId)
+          ? loadPatientFromFirestore(currentState.userId, patientReference).catch((err: unknown) => {
+              sessionLogger.warn(`⚠️ Error loading patient record: ${err instanceof Error ? err.message : String(err)}`)
+              return null
+            })
+          : Promise.resolve(null),
+
+        // Fichas: needed for therapeutic phase + first-message summary
+        patientReference
+          ? this.storage.getFichasClinicasByPaciente(patientReference).catch((err: unknown) => {
+              sessionLogger.warn(`⚠️ Error loading fichas: ${err instanceof Error ? err.message : String(err)}`)
+              return [] as any[]
+            })
+          : Promise.resolve([] as any[]),
+
+        // Clinical memories: relevant inter-session memories
+        (patientReference && currentState.userId)
+          ? getRelevantMemories(currentState.userId, patientReference, message, 5).catch((err: unknown) => {
+              sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+              return [] as any[]
+            })
+          : Promise.resolve([] as any[]),
+      ])
+
+      // ─── Build patient summary from pre-fetched data (CPU-only) ───
+      let patientSummary: string | undefined = undefined;
+
       if (providedSummary) {
         patientSummary = providedSummary;
         sessionLogger.info(`🏥 Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
-      } else if (patientReference) {
-        try {
-          const patientRecord = await loadPatientFromFirestore(currentState.userId, patientReference);
+      } else if (patientRecord) {
+        const isFirstPatientMessage = currentState.history.length === 0 ||
+          !currentState.history.some((msg: any) => msg.content?.includes(patientRecord.displayName));
 
-          if (patientRecord) {
-            // 🎯 OPTIMIZACIÓN: Detectar si es el primer mensaje con este paciente
-            const isFirstPatientMessage = currentState.history.length === 0 ||
-              !currentState.history.some((msg: any) => msg.content?.includes(patientRecord.displayName));
+        if (isFirstPatientMessage) {
+          const latestFicha = fichas
+            .filter((f: any) => f.estado === 'completado')
+            .sort((a: any, b: any) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0] || null;
 
-            sessionLogger.debug('🏥 Checking if first patient message', {
-              historyLength: currentState.history.length,
-              patientName: patientRecord.displayName,
-              isFirstMessage: isFirstPatientMessage
-            })
+          patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patientRecord, latestFicha);
 
-            if (isFirstPatientMessage) {
-              // 📋 PRIMER MENSAJE: Cargar ficha clínica completa
-              let latestFicha = null;
-              try {
-                const fichas = await this.storage.getFichasClinicasByPaciente(patientReference);
-                latestFicha = fichas
-                  .filter((f: any) => f.estado === 'completado')
-                  .sort((a: any, b: any) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0];
-
-                if (latestFicha) {
-                  sessionLogger.info(`🏥 Found latest ficha clínica (version ${latestFicha.version}) for ${patientRecord.displayName}`);
-                }
-              } catch (fichaError) {
-                sessionLogger.warn(`🏥 Error loading ficha clínica for ${patientReference}`, { error: fichaError instanceof Error ? fichaError.message : String(fichaError) });
-              }
-
-              // Usar getSummaryWithFicha que prioriza ficha sobre summary
-              patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patientRecord, latestFicha);
-
-              if (latestFicha) {
-                sessionLogger.info(`🏥 ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
-              } else if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
-                sessionLogger.info(`🏥 ✅ First message: Using cached patient summary (${patientRecord.summaryCache.tokenCount || 'unknown'} tokens)`);
-              } else {
-                sessionLogger.info(`🏥 ✅ First message: Built fresh patient summary for ${patientRecord.displayName}`);
-              }
-            } else {
-              // 🔄 MENSAJES SUBSECUENTES: Solo referencia breve (el modelo ya tiene el contexto)
-              patientSummary = `Continuing conversation with ${patientRecord.displayName}. Patient context already provided in previous messages.`;
-              sessionLogger.info('🏥 ⚡ Subsequent message: Using brief patient reference (context already in model memory)');
-            }
+          if (latestFicha) {
+            sessionLogger.info(`🏥 ✅ First message: Using FULL ficha clínica v${latestFicha.version} as patient context`);
+          } else if (patientRecord.summaryCache && PatientSummaryBuilder.isCacheValid(patientRecord)) {
+            sessionLogger.info(`🏥 ✅ First message: Using cached patient summary`);
+          } else {
+            sessionLogger.info(`🏥 ✅ First message: Built fresh patient summary for ${patientRecord.displayName}`);
           }
-        } catch (error) {
-          sessionLogger.error(`🏥 Error retrieving patient summary for ${patientReference}`, { error: error instanceof Error ? error.message : String(error) });
+        } else {
+          patientSummary = `Continuing conversation with ${patientRecord.displayName}. Patient context already provided in previous messages.`;
+          sessionLogger.info('🏥 ⚡ Subsequent message: Using brief patient reference');
         }
       }
-      
+
       const enrichedSessionContext: {
         patient_reference?: string;
         patient_summary?: string;
@@ -710,28 +703,19 @@ export class HopeAISystem {
         patient_summary: patientSummary,
       }
 
-      // 🧠 CLINICAL MEMORIES: Inject relevant inter-session memories if patient is active
-      if (patientReference && currentState.userId) {
-        try {
-          const { getRelevantMemories } = await import('./clinical-memory-system')
-          const clinicalMemories = await getRelevantMemories(currentState.userId, patientReference, message, 5)
-          if (clinicalMemories.length > 0) {
-            enrichedSessionContext.clinicalMemories = clinicalMemories
-            sessionLogger.info(`🧠 Clinical memories injected: ${clinicalMemories.length} memories for patient ${patientReference}`)
-          }
-        } catch (memoryError) {
-          sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: memoryError instanceof Error ? memoryError.message : String(memoryError) })
-        }
+      if (clinicalMemories.length > 0) {
+        enrichedSessionContext.clinicalMemories = clinicalMemories
+        sessionLogger.info(`🧠 Clinical memories injected: ${clinicalMemories.length} memories for patient ${patientReference}`)
       }
 
-      // 📊 METADATA COLLECTION: Recolectar metadata operativa ANTES de routing
-      // Esta metadata está disponible para todos los tipos de routing
-      sessionLogger.debug('📊 Collecting operational metadata')
-      const operationalMetadata = await this.collectOperationalMetadata(
+      // ─── Operational metadata (now synchronous — uses pre-fetched data) ───
+      const operationalMetadata = this.collectOperationalMetadata(
         sessionId,
         currentState.userId,
         currentState,
-        patientReference
+        patientReference,
+        patientRecord,
+        fichas
       );
 
       // Agregar el mensaje del usuario al historial
@@ -810,9 +794,12 @@ export class HopeAISystem {
         currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
 
-      // Save state with user message immediately (for both streaming and non-streaming)
+      // Save user message: O(1) append + metadata update (instead of rewriting ALL messages)
       currentState.metadata.lastUpdated = new Date()
-      await this.saveChatSessionBoth(currentState)
+      await Promise.all([
+        this.addMessageToSession(currentState, userMessage),
+        this.saveSessionMetadataOnly(currentState),
+      ])
 
       sessionLogger.info('💾 Estado guardado en DB con mensaje del usuario', {
         sessionId: sessionId,
@@ -870,7 +857,11 @@ export class HopeAISystem {
               currentState.metadata.lastUpdated = new Date()
               currentState.metadata.totalTokens += self.estimateTokens(message + accumulatedText)
               try {
-                await self.saveChatSessionBoth(currentState)
+                // PERF: O(1) message append + metadata update
+                await Promise.all([
+                  self.addMessageToSession(currentState, aiMessage),
+                  self.saveSessionMetadataOnly(currentState),
+                ])
                 sessionLogger.info('💾 Streaming response saved to history', {
                   sessionId,
                   historyLength: currentState.history.length,
@@ -909,14 +900,17 @@ export class HopeAISystem {
         }
 
         currentState.history.push(aiMessage)
+
+        // Update metadata
+        currentState.metadata.lastUpdated = new Date()
+        currentState.metadata.totalTokens += this.estimateTokens(message + responseContent)
+
+        // PERF: O(1) message append + metadata update (instead of rewriting ALL messages)
+        await Promise.all([
+          this.addMessageToSession(currentState, aiMessage),
+          this.saveSessionMetadataOnly(currentState),
+        ])
       }
-
-      // Update metadata
-      currentState.metadata.lastUpdated = new Date()
-      currentState.metadata.totalTokens += this.estimateTokens(message + responseContent)
-
-      // Save updated state
-      await this.saveChatSessionBoth(currentState)
 
       // 🔍 PATTERN MIRROR: Check if we should trigger automatic analysis
       if (this.shouldTriggerPatternAnalysis(currentState)) {

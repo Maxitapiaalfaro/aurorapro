@@ -2,6 +2,11 @@
 
 ## Patterns & Rules
 
+### 2026-04-07: Server and client storage backends MUST match
+- **Error:** After migrating client to Firestore, the server-side `ServerStorageAdapter` continued using SQLite (HIPAACompliantStorage) in local dev because the backend selection depended on `VERCEL` env var — which is only set in production. Server wrote to SQLite, client read from Firestore → zero persistence visible to the user.
+- **Root Cause:** Backend selection logic was environment-based (`isVercel`) instead of capability-based (Firebase credentials available). The migration added Firestore support but gated it behind a Vercel-only condition, leaving local dev on the old backend.
+- **Rule:** When client and server share a storage layer, the backend selector must use **capability detection** (are credentials present?) not **environment detection** (are we on Vercel?). Always verify that both sides of a read/write split point to the same database.
+
 ### 2026-04-06: Always cross-reference existing architectural decisions before proposing changes
 - **Error:** Proposed decomposing `hipaa-compliant-storage.ts` into 6 sub-modules (P1 target), when an existing spec (`docs/architecture/data-layer-architecture-firestore.md`, dated 2026-04-04) already mandates eliminating it entirely in favor of Firestore.
 - **Root Cause:** Performed static code analysis without first checking for existing architectural decisions, migration plans, or strategic documents that override the current codebase state.

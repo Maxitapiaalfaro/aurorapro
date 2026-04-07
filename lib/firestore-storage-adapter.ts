@@ -268,6 +268,38 @@ export class FirestoreStorageAdapter {
   }
 
   /**
+   * PERF: Save only session metadata (no messages rewrite).
+   * Use this for metadata-only updates (sessionMeta, clinicalContext, activeAgent, etc.)
+   * instead of saveChatSession which rewrites ALL messages.
+   */
+  async saveSessionMetadataOnly(chatState: ChatState): Promise<void> {
+    if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
+
+    const userId = chatState.userId || 'anonymous'
+    const patientId = this.resolvePatientId(chatState)
+    const ref = this.sessionDocRef(userId, patientId, chatState.sessionId)
+
+    chatState.metadata.createdAt = new Date(chatState.metadata.createdAt)
+    chatState.metadata.lastUpdated = new Date(chatState.metadata.lastUpdated)
+
+    const { history: _history, ...sessionWithoutHistory } = chatState
+
+    const docData: DocumentData = {
+      ...sessionWithoutHistory,
+      _userId: userId,
+      _patientId: patientId,
+    }
+
+    await ref.set(docData, { merge: true })
+
+    logger.debug('Saved session metadata (no messages)', {
+      sessionId: chatState.sessionId,
+      userId,
+      patientId,
+    })
+  }
+
+  /**
    * Load a chat session with messages from the subcollection.
    * Falls back to inline history[] for legacy sessions that haven't been migrated.
    */
