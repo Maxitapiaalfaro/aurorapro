@@ -242,6 +242,10 @@ export async function extractUrlsFromGroundingMetadata(groundingMetadata: any): 
 const KNOWN_DYNAMIC_TOOLS = new Set([
   'google_search',
   'search_academic_literature',
+  'get_patient_memories',
+  'get_patient_record',
+  'save_clinical_memory',
+  // Legacy tool names (may appear in existing sessions)
   'search_evidence_for_reflection',
   'search_evidence_for_documentation',
 ]);
@@ -306,7 +310,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId }),
   } as PreparedToolCall;
 }
 
@@ -316,113 +320,25 @@ export function prepareFunctionCallWithSecurity(
  */
 async function executeToolCall(
   call: any,
-  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>
+  academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
+  context?: { psychologistId?: string; sessionId?: string; patientId?: string }
 ): Promise<ToolCallResult> {
-  if (call.name === "google_search") {
-    logger.info(`Executing Google Search:`, call.args)
-    return {
-      name: call.name,
-      response: "Search completed with automatic processing",
-    }
-  }
+  // Registry-based dispatch — delegates to tool-handlers.ts
+  const { getToolHandler } = await import('./tool-handlers');
+  const handler = getToolHandler(call.name);
 
-  if (call.name === "search_academic_literature" ||
-      call.name === "search_evidence_for_reflection" ||
-      call.name === "search_evidence_for_documentation") {
-    logger.info(`Executing Academic Search (${call.name}):`, call.args)
-    let searchResults: any
-
-    const defaultMaxResults = call.name === "search_academic_literature" ? 10 : 5
-
-    if (typeof window === 'undefined') {
-      try {
-        const { academicMultiSourceSearch } = await import('../academic-multi-source-search');
-        logger.info(`Calling academicMultiSourceSearch directly for ${call.name}`)
-        searchResults = await academicMultiSourceSearch.search({
-          query: call.args.query,
-          maxResults: call.args.max_results || defaultMaxResults,
-          language: 'both',
-          minTrustScore: 60
-        })
-      } catch (error) {
-        logger.error('Error importing academicMultiSourceSearch:', error);
-        const response = await fetch('/api/academic-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: call.args.query,
-            maxResults: call.args.max_results || defaultMaxResults
-          })
-        });
-        if (response.ok) {
-          searchResults = await response.json();
-        }
-      }
-    } else {
-      logger.warn('Academic search called from client - using API route')
-      const response = await fetch('/api/academic-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: call.args.query,
-          maxResults: call.args.max_results || defaultMaxResults,
-          language: 'both',
-          minTrustScore: 60
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`)
-      }
-
-      const data = await response.json()
-      searchResults = data.results
-    }
-
-    logger.info(`Academic search completed:`, {
-      totalFound: searchResults.metadata.totalFound,
-      validated: searchResults.sources.length,
-      fromParallelAI: searchResults.metadata.fromParallelAI
-    })
-
-    // Side-effect: capture academic references for UI emission
-    const refs = searchResults.sources.map((source: any) => ({
-      title: source.title,
-      url: source.url,
-      doi: source.doi,
-      authors: source.authors?.join?.(', ') || (Array.isArray(source.authors) ? source.authors.join(', ') : source.authors),
-      year: source.year,
-      journal: source.journal
-    }))
-    // Mutate the shared array so callers see the results
-    academicReferences.length = 0
-    academicReferences.push(...refs)
-    logger.info(`Stored ${academicReferences.length} academic references from search`)
-
-    const formattedResults = {
-      total_found: searchResults.metadata.totalFound,
-      validated_count: searchResults.sources.length,
-      sources: searchResults.sources.map((source: any) => ({
-        title: source.title,
-        authors: source.authors?.join(', ') || 'Unknown',
-        year: source.year,
-        journal: source.journal,
-        doi: source.doi,
-        url: source.url,
-        abstract: source.abstract,
-        excerpts: source.excerpts || [],
-        trust_score: source.trustScore
-      }))
-    }
-
-    return {
-      name: call.name,
-      response: formattedResults
-    }
+  if (handler) {
+    return handler(call.args || {}, {
+      psychologistId: context?.psychologistId || '',
+      sessionId: context?.sessionId || '',
+      patientId: context?.patientId,
+      academicReferences,
+    });
   }
 
   // Unknown tool that passed security — return null-like
-  return { name: call.name, response: null }
+  logger.warn(`No handler registered for tool: ${call.name}`);
+  return { name: call.name, response: null };
 }
 
 // ---- Streaming handlers ----

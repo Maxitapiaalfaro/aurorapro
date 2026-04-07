@@ -1,33 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
-
 
 import { createLogger } from '@/lib/logger'
 const logger = createLogger('api')
 
+/**
+ * @deprecated Agent switching is no longer supported — unified agent handles all capabilities.
+ * This endpoint returns a no-op success for backward compatibility with existing clients.
+ */
 export async function POST(request: NextRequest) {
   try {
     const { sessionId, newAgent } = await request.json()
-    
-    logger.info('🔄 API: Cambiando agente...', { sessionId, newAgent })
-    
-    const hopeAISystem = await getGlobalOrchestrationSystem()
 
-    // Usar la API explícita de cambio de agente del sistema HopeAI
-    const updatedState = await hopeAISystem.switchAgent(sessionId, newAgent)
-
-    logger.info('✅ API: Agente cambiado exitosamente')
+    logger.info('🔄 API: switch-agent called (no-op in unified agent architecture)', { sessionId, newAgent })
 
     return NextResponse.json({
       success: true,
-      sessionId: updatedState.sessionId,
-      activeAgent: updatedState.activeAgent,
-      metadata: updatedState.metadata
+      sessionId,
+      activeAgent: 'socratico', // Legacy value for backward compat
+      message: 'Agent switching is no longer needed — unified agent handles all capabilities.'
     })
   } catch (error) {
     logger.error('❌ API Error (Switch Agent):', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Error al cambiar agente',
         details: error instanceof Error ? error.message : 'Error desconocido'
       },

@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
       message: message.substring(0, 50) + '...',
       useStreaming,
       userId: verifiedUserId,
-      suggestedAgent,
       patientReference: sessionMeta?.patient?.reference || 'None',
       fileReferences: fileReferences?.length || 0,
       fileMetadata: fileMetadata?.length || 0

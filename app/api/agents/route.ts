@@ -6,27 +6,27 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    logger.info('🔄 API: Obteniendo agentes disponibles...')
-    
-    // Lazy import to avoid build-time issues
+    logger.info('🔄 API: Obteniendo agente unificado...')
+
     const { clinicalAgentRouter } = await import('@/lib/clinical-agent-router')
-    
-    const agents = clinicalAgentRouter.getAllAgents()
-    const agentsList = Array.from(agents.entries()).map(([type, config]) => ({
-      type,
-      ...config,
-    }))
-    
-    logger.info('✅ API: Agentes obtenidos:', agentsList.length)
-    
+
+    const config = clinicalAgentRouter.getAgentConfig()
+
+    logger.info('✅ API: Agente unificado obtenido')
+
     return NextResponse.json({
       success: true,
-      agents: agentsList
+      agents: [{
+        type: 'aurora',
+        name: config.name,
+        description: config.description,
+        color: config.color,
+      }]
     })
   } catch (error) {
     logger.error('❌ API Error (Get Agents):', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Error al obtener agentes',
         details: error instanceof Error ? error.message : 'Error desconocido'
       },

@@ -1,10 +1,7 @@
 import 'server-only'
 
 import { clinicalAgentRouter } from "./clinical-agent-router"
-import { type EnrichedContext } from "./intelligent-intent-router"
-import { DynamicOrchestrator } from "./dynamic-orchestrator"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
-import { trackAgentSwitch } from "./sentry-metrics-tracker"
 import { getAdminApp } from './firebase-admin-config'
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore'
 import { PatientSummaryBuilder } from "./patient-summary-builder"
@@ -41,7 +38,6 @@ async function loadPatientFromFirestore(userId: string, patientId: string): Prom
 export class HopeAISystem {
   private _initialized = false
   private storage: any = null
-  private dynamicOrchestrator: DynamicOrchestrator | null = null
 
   // Public getter for initialization status
   public get initialized(): boolean {
@@ -87,49 +83,25 @@ export class HopeAISystem {
     }
 
     try {
-      systemLogger.info('🔧 Starting PARALLEL initialization...')
+      systemLogger.info('🔧 Starting initialization...')
 
-      // 🚀 OPTIMIZACIÓN: Inicializar componentes en PARALELO para reducir cold start
-      const [storage, orchestrator] = await Promise.all([
-        // 1. Storage adapter
-        (async () => {
-          systemLogger.debug('🔧 Getting storage adapter...')
-          const { getStorageAdapter } = await import('./server-storage-adapter')
-          const storageAdapter = await getStorageAdapter()
-          systemLogger.info('✅ Storage adapter obtained', { adapter: storageAdapter?.constructor?.name })
+      // Storage adapter initialization
+      systemLogger.debug('🔧 Getting storage adapter...')
+      const { getStorageAdapter } = await import('./server-storage-adapter')
+      const storage = await getStorageAdapter()
+      systemLogger.info('✅ Storage adapter obtained', { adapter: storage?.constructor?.name })
 
-          // Asegurar que el storage esté inicializado
-          if (storageAdapter && typeof storageAdapter.initialize === 'function') {
-            systemLogger.debug('🔧 Calling storage.initialize()...')
-            await storageAdapter.initialize()
-            systemLogger.info('✅ Storage initialized successfully')
-          } else {
-            systemLogger.warn('⚠️ Storage does not have initialize method')
-          }
-
-          return storageAdapter
-        })(),
-
-        // 2. Dynamic orchestrator (independiente del storage)
-        (async () => {
-          systemLogger.debug('🔧 Creating dynamic orchestrator...')
-          const orch = new DynamicOrchestrator(clinicalAgentRouter, {
-            enableAdaptiveLearning: false,
-            toolContinuityThreshold: 3,
-            dominantTopicsUpdateInterval: 5,
-            maxToolsPerSession: 20,
-            confidenceThreshold: 0.75,
-            sessionTimeoutMinutes: 60,
-            logLevel: 'info'
-          })
-          systemLogger.info('✅ Dynamic orchestrator created')
-          return orch
-        })()
-      ])
+      // Asegurar que el storage esté inicializado
+      if (storage && typeof storage.initialize === 'function') {
+        systemLogger.debug('🔧 Calling storage.initialize()...')
+        await storage.initialize()
+        systemLogger.info('✅ Storage initialized successfully')
+      } else {
+        systemLogger.warn('⚠️ Storage does not have initialize method')
+      }
 
       // Asignar resultados
       this.storage = storage
-      this.dynamicOrchestrator = orchestrator
 
       const initTime = Date.now() - startTime
       systemLogger.info(`✅ PARALLEL initialization completed in ${initTime}ms`)
@@ -490,10 +462,10 @@ export class HopeAISystem {
     sessionId: string,
     message: string,
     useStreaming = true,
-    suggestedAgent?: string,
+    _suggestedAgent?: string,
     sessionMeta?: PatientSessionMeta,
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
-    onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
+    _onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
     clientFileReferences?: string[],
     clientFileMetadata?: any[] // Metadata completa de archivos desde el cliente
   ): Promise<{
@@ -729,33 +701,13 @@ export class HopeAISystem {
         }
       }
       
-      const enrichedSessionContext: EnrichedContext = {
-        sessionFiles: resolvedSessionFiles || [],
-        currentMessage: message,
-        conversationHistory: currentState.history.slice(-20), // Últimos 20 mensajes para contexto de routing
-        activeAgent: currentState.activeAgent,
-        clinicalMode: currentState.mode,
-        sessionMetadata: currentState.metadata,
-        // PATIENT CONTEXT: Inject patient reference and full summary if available
+      const enrichedSessionContext: {
+        patient_reference?: string;
+        patient_summary?: string;
+        clinicalMemories?: any[];
+      } = {
         patient_reference: patientReference,
         patient_summary: patientSummary,
-        // Required fields for EnrichedContext interface
-        originalQuery: message,
-        detectedIntent: '',
-        extractedEntities: [],
-        entityExtractionResult: { 
-          entities: [], 
-          primaryEntities: [],
-          secondaryEntities: [],
-          confidence: 0,
-          processingTime: 0
-        },
-        sessionHistory: sessionContext.map(c => ({
-          role: c.role || 'user',
-          parts: (c.parts || []).map(p => ({ text: ('text' in p && p.text) ? p.text : '' }))
-        })),
-        transitionReason: '',
-        confidence: 0
       }
 
       // 🧠 CLINICAL MEMORIES: Inject relevant inter-session memories if patient is active
@@ -764,7 +716,7 @@ export class HopeAISystem {
           const { getRelevantMemories } = await import('./clinical-memory-system')
           const clinicalMemories = await getRelevantMemories(currentState.userId, patientReference, message, 5)
           if (clinicalMemories.length > 0) {
-            ;(enrichedSessionContext as any).clinicalMemories = clinicalMemories
+            enrichedSessionContext.clinicalMemories = clinicalMemories
             sessionLogger.info(`🧠 Clinical memories injected: ${clinicalMemories.length} memories for patient ${patientReference}`)
           }
         } catch (memoryError) {
@@ -782,191 +734,7 @@ export class HopeAISystem {
         patientReference
       );
 
-      // Determinar agente vía orquestación
-      let routingResult: { enrichedContext: any; targetAgent: any; routingDecision?: any };
-      let orchestrationResult = null;
-
-      if (suggestedAgent) {
-        sessionLogger.info(`🎯 Usando agente sugerido por orquestador: ${suggestedAgent}`)
-        routingResult = {
-          targetAgent: suggestedAgent,
-          enrichedContext: {
-            detectedIntent: 'orchestrator_suggestion',
-            confidence: 0.95,
-            extractedEntities: [],
-            isExplicitRequest: false
-          },
-          routingDecision: undefined
-        }
-      } else {
-        // 🧠 Orquestación avanzada (single LLM call path)
-        sessionLogger.info('🧠 Using Advanced Orchestration with cross-session learning')
-
-        const externalConversationHistory = (currentState.history || []).map((msg: ChatMessage) => ({
-          role: msg.role,
-          parts: [{ text: msg.content }]
-        }))
-
-        orchestrationResult = await this.dynamicOrchestrator!.orchestrate(
-          message,
-          sessionId,
-          currentState.userId,
-          resolvedSessionFiles,
-          onBulletUpdate,
-          externalConversationHistory,
-          patientReference,
-          patientSummary,
-          currentState.mode
-        )
-
-        // 📊 RECORD ORCHESTRATION COMPLETION
-        sessionMetricsTracker.recordOrchestrationComplete(
-          interactionId,
-          orchestrationResult.selectedAgent,
-          orchestrationResult.contextualTools.map(tool => tool.name || 'unknown_tool'),
-          currentState.activeAgent
-        );
-
-        routingResult = {
-          targetAgent: orchestrationResult.selectedAgent,
-          enrichedContext: {
-            detectedIntent: orchestrationResult.reasoning,
-            confidence: orchestrationResult.confidence,
-            extractedEntities: [],
-            isExplicitRequest: false,
-            contextualTools: orchestrationResult.contextualTools,
-            sessionContext: orchestrationResult.sessionContext,
-            patient_reference: enrichedSessionContext.patient_reference,
-            patient_summary: enrichedSessionContext.patient_summary
-          }
-        }
-
-        sessionLogger.info('🎯 Advanced orchestration result', {
-          selectedAgent: orchestrationResult.selectedAgent,
-          confidence: orchestrationResult.confidence,
-          toolsSelected: orchestrationResult.contextualTools.length
-        })
-
-        if (onAgentSelected) {
-          onAgentSelected({
-            targetAgent: orchestrationResult.selectedAgent,
-            confidence: orchestrationResult.confidence,
-            reasoning: orchestrationResult.reasoning
-          })
-        }
-      }
-
-      // Manejar solicitudes explícitas de cambio de agente
-      if (routingResult.enrichedContext?.isExplicitRequest) {
-        // Para solicitudes explícitas, NO agregamos el mensaje del usuario al historial
-        // ya que es solo un comando de cambio de agente
-        
-        // Si se detectó un cambio de agente, actualizar la sesión
-        if (routingResult.targetAgent !== currentState.activeAgent) {
-          sessionLogger.info(`🔄 Explicit agent switch request: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
-          
-          // Instrumentar cambio de agente con Sentry
-          const agentSwitchSpan = Sentry.startSpan(
-            { name: 'agent.switch.explicit', op: 'orchestration' },
-            () => {
-              // Registrar métricas del cambio de agente
-              trackAgentSwitch({
-                userId: currentState.userId,
-                sessionId,
-                fromAgent: currentState.activeAgent,
-                toAgent: routingResult.targetAgent,
-                switchType: 'explicit',
-                confidence: routingResult.enrichedContext?.confidence || 1.0
-              })
-              
-              // Close current chat session
-              clinicalAgentRouter.closeChatSession(sessionId)
-              
-              // Create new chat session with new agent - mark as transition to maintain flow
-              return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, currentState.history, true)
-            }
-          )
-          
-          await agentSwitchSpan
-          
-          // Update state
-          currentState.activeAgent = routingResult.targetAgent
-          currentState.metadata.lastUpdated = new Date()
-        }
-
-        // Para solicitudes explícitas, crear un prompt especial para que el agente genere la confirmación
-        const confirmationPrompt = this.createAgentConfirmationPrompt(routingResult.targetAgent, message)
-        
-        // Enviar el prompt de confirmación al agente correspondiente con streaming
-        // 🏥 PATIENT CONTEXT: Include patient context in confirmation context
-        const confirmationContext = {
-          ...routingResult.enrichedContext,
-          isConfirmationRequest: true,
-          patient_reference: patientReference,
-          patient_summary: patientSummary
-        }
-        
-        const confirmationResponse = await clinicalAgentRouter.sendMessage(
-          sessionId, 
-          confirmationPrompt, 
-          useStreaming, // Usar streaming también para confirmaciones
-          confirmationContext,
-          undefined,  // interactionId
-          currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
-        )
-
-        // Manejar respuesta según si es streaming o no
-        if (useStreaming) {
-          // Para streaming, agregar routing info y retornar el generator
-          if (confirmationResponse && typeof confirmationResponse[Symbol.asyncIterator] === 'function') {
-            confirmationResponse.routingInfo = {
-              detectedIntent: 'explicit_agent_switch',
-              targetAgent: routingResult.targetAgent,
-              confidence: 1.0,
-              extractedEntities: routingResult.enrichedContext?.extractedEntities || [],
-              isExplicitRequest: true
-            }
-          }
-          
-          return { 
-            response: confirmationResponse, 
-            updatedState: currentState 
-          }
-        } else {
-          // Para no-streaming, agregar al historial y retornar
-          const confirmationMessage: ChatMessage = {
-            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            content: confirmationResponse.text,
-            role: "model",
-            agent: currentState.activeAgent,
-            timestamp: new Date(),
-          }
-
-          currentState.history.push(confirmationMessage)
-          currentState.metadata.lastUpdated = new Date()
-          await this.saveChatSessionBoth(currentState)
-
-          return {
-            response: {
-              text: confirmationResponse.text,
-              // Mark non-streaming confirmation as already persisted server-side
-              persistedInServer: true,
-              routingInfo: {
-                detectedIntent: 'explicit_agent_switch',
-                targetAgent: routingResult.targetAgent,
-                confidence: 1.0,
-                extractedEntities: routingResult.enrichedContext?.extractedEntities || [],
-                isExplicitRequest: true
-              }
-            },
-            updatedState: currentState
-          }
-        }
-      }
-
-      // Para mensajes normales (no explícitos), agregar el mensaje del usuario al historial
-      // ARQUITECTURA OPTIMIZADA: Separar gestión de archivos del historial de conversación
-      // Los archivos se almacenan a nivel de sesión y se referencian por ID, no se duplican en cada mensaje
+      // Agregar el mensaje del usuario al historial
       const userMessage: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         content: message,
@@ -994,55 +762,13 @@ export class HopeAISystem {
         fileCount: userMessage.fileReferences?.length || 0
       })
 
-      // Si se detectó un cambio de agente (routing automático), actualizar la sesión
-      if (routingResult.targetAgent !== currentState.activeAgent) {
-        sessionLogger.info(`🔄 Intelligent routing: ${currentState.activeAgent} → ${routingResult.targetAgent}`)
-        
-        // Instrumentar cambio de agente automático con Sentry
-        const agentSwitchSpan = Sentry.startSpan(
-          { name: 'agent.switch.automatic', op: 'orchestration' },
-          () => {
-            // Registrar métricas del cambio de agente
-            trackAgentSwitch({
-              userId: currentState.userId,
-              sessionId,
-              fromAgent: currentState.activeAgent,
-              toAgent: routingResult.targetAgent,
-              switchType: 'automatic',
-              confidence: routingResult.enrichedContext?.confidence || 0.8
-            })
-            
-            // Close current chat session
-            clinicalAgentRouter.closeChatSession(sessionId)
-            
-            // Create new chat session with new agent - mark as transition to maintain flow
-            // CRITICAL FIX: Exclude the current user message to avoid consecutive user turns
-            const historyForSwitch = currentState.history.slice(0, -1)
-            return clinicalAgentRouter.createChatSession(sessionId, routingResult.targetAgent, historyForSwitch, true)
-          }
-        )
-        
-        await agentSwitchSpan
-        
-        // Update state
-        currentState.activeAgent = routingResult.targetAgent
-        currentState.metadata.lastUpdated = new Date()
-      }
-
-      // Send message through agent router with enriched context
-      // La búsqueda académica ahora es manejada por el agente como herramienta (tool)
-      // Session files are handled through conversation history, not as attachments
-      // 🏥 PATIENT CONTEXT: Include patient context from sessionMeta
-      // 📊 METADATA: Include operational metadata and routing decision
+      // Build enriched context for the unified agent (no routing needed)
       const enrichedAgentContext = {
-        ...routingResult.enrichedContext,
-        // Ensure document context is available to the agent at generation time
         sessionFiles: resolvedSessionFiles || [],
         patient_reference: patientReference,
         patient_summary: patientSummary,
-        // NUEVO: Metadata operativa y decisión de routing
         operationalMetadata: operationalMetadata,
-        routingDecision: routingResult.routingDecision
+        clinicalMemories: enrichedSessionContext.clinicalMemories || [],
       }
 
       sessionLogger.debug(`🏥 SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
@@ -1068,7 +794,7 @@ export class HopeAISystem {
           // turn — which carries the file parts — causing the "files sent but agent
           // can't see them" bug.
           const historyForSession = currentState.history.slice(0, -1)
-          await clinicalAgentRouter.createChatSession(sessionId, currentState.activeAgent, historyForSession)
+          await clinicalAgentRouter.createChatSession(sessionId, undefined, historyForSession)
         } catch (chatSessionError) {
           const msg = chatSessionError instanceof Error ? chatSessionError.message : String(chatSessionError)
           throw new Error(`Error al inicializar la sesión de chat: ${msg}`)
@@ -1102,10 +828,10 @@ export class HopeAISystem {
         
         // Add routing info as a property on the async generator
         const routingInfo = {
-          detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
-          targetAgent: routingResult.targetAgent,
-          confidence: routingResult.enrichedContext?.confidence || 0,
-          extractedEntities: routingResult.enrichedContext?.extractedEntities || []
+          detectedIntent: 'unified_agent',
+          targetAgent: 'aurora',
+          confidence: 1.0,
+          extractedEntities: [] as string[]
         }
         if (streamingResponse && typeof streamingResponse[Symbol.asyncIterator] === 'function') {
           (streamingResponse as any).routingInfo = routingInfo
@@ -1217,10 +943,10 @@ export class HopeAISystem {
           // Mark non-streaming responses as already persisted server-side
           persistedInServer: true,
           routingInfo: {
-            detectedIntent: routingResult.enrichedContext?.detectedIntent || 'unknown',
-            targetAgent: routingResult.targetAgent,
-            confidence: routingResult.enrichedContext?.confidence || 0,
-            extractedEntities: routingResult.enrichedContext?.extractedEntities || []
+            detectedIntent: 'unified_agent',
+            targetAgent: 'aurora',
+            confidence: 1.0,
+            extractedEntities: [] as string[]
           }
         }, 
         updatedState: currentState,
@@ -1230,46 +956,6 @@ export class HopeAISystem {
       sessionLogger.error('❌ Error sending message', { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
-  }
-
-  async switchAgent(sessionId: string, newAgent: AgentType): Promise<ChatState> {
-    if (!this._initialized) await this.initialize()
-
-    const currentState = await this.storage.loadChatSession(sessionId)
-    if (!currentState) {
-      throw new Error(`Session not found: ${sessionId}`)
-    }
-
-    // Instrumentar cambio manual de agente con Sentry
-    return await Sentry.startSpan(
-      { name: 'agent.switch.manual', op: 'orchestration' },
-      async () => {
-        // Registrar métricas del cambio de agente
-        trackAgentSwitch({
-          userId: currentState.userId,
-          sessionId,
-          fromAgent: currentState.activeAgent,
-          toAgent: newAgent,
-          switchType: 'manual',
-          confidence: 1.0
-        })
-        
-        // Close current chat session
-        clinicalAgentRouter.closeChatSession(sessionId)
-
-        // Create new chat session with new agent - mark as transition to maintain flow
-        await clinicalAgentRouter.createChatSession(sessionId, newAgent, currentState.history, true)
-
-        // Update state
-        currentState.activeAgent = newAgent
-        currentState.metadata.lastUpdated = new Date()
-
-        // Save updated state
-        await this.saveChatSessionBoth(currentState)
-
-        return currentState
-      }
-    )
   }
 
   // Método uploadDocument implementado más abajo con mejor manejo de errores
@@ -1287,34 +973,6 @@ export class HopeAISystem {
 
     // Delete from storage
     await this.storage.deleteChatSession(sessionId)
-  }
-
-  /**
-   * Crea un prompt específico para que cada agente genere su propia confirmación de activación
-   */
-  private createAgentConfirmationPrompt(targetAgent: string, originalMessage: string): string {
-    const agentConfirmationPrompts = {
-      socratico: `El usuario me ha solicitado activar el modo socrático con el mensaje: "${originalMessage}".
-
-Como Supervisor Clínico, núcleo reflexivo de la plataforma integral Aurora, debo confirmar mi activación de manera cálida y contextual. Mi respuesta debe reflejar naturalmente mi capacidad de exploración reflexiva profunda, desarrollo de insights terapéuticos y análisis de casos clínicos, mientras mantengo una conciencia implícita de formar parte de un ecosistema más amplio de apoyo clínico. Luego debo hacer una pregunta reflexiva que invite al usuario a comenzar nuestra exploración socrática.
-
-Por favor, genera una confirmación natural y empática que refleje mi personalidad socrática integrada.`,
-      
-      clinico: `El usuario me ha solicitado activar el modo clínico con el mensaje: "${originalMessage}".
-
-Como Especialista en Documentación, núcleo organizacional de la plataforma integral Aurora, debo confirmar mi activación de manera profesional y estructurada. Mi respuesta debe reflejar naturalmente mi capacidad de documentación clínica, resúmenes de sesión, notas SOAP y estructuración de información profesional, mientras mantengo una conciencia implícita de formar parte de un ecosistema que integra exploración reflexiva, documentación estructurada y validación empírica. Luego debo preguntar específicamente qué tipo de documentación o tarea clínica necesita.
-
-Por favor, genera una confirmación clara y profesional que refleje mi enfoque clínico organizativo integrado.`,
-      
-      academico: `El usuario me ha solicitado activar el modo académico con el mensaje: "${originalMessage}".
-
-Como Aurora Académico, núcleo científico de la plataforma integral Aurora, debo confirmar mi activación de manera rigurosa y científica. Mi respuesta debe reflejar naturalmente mi capacidad de búsqueda de investigación científica, evidencia empírica y revisión de literatura especializada, mientras mantengo una conciencia implícita de formar parte de un ecosistema que conecta rigor científico con exploración reflexiva y documentación profesional. Luego debo preguntar específicamente qué tema de investigación o evidencia científica necesita explorar.
-
-Por favor, genera una confirmación precisa y académica que refleje mi enfoque científico integrado.`
-    }
-
-    return agentConfirmationPrompts[targetAgent as keyof typeof agentConfirmationPrompts] || 
-           `El usuario me ha solicitado cambiar al modo ${targetAgent}. Por favor, confirma la activación y pregunta en qué puedo ayudar.`
   }
 
   /**
@@ -1432,8 +1090,8 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
     if (!hasActiveSession) {
       sessionLogger.info(`♻️ Recreando sesión activa para: ${sessionId}`)
       await clinicalAgentRouter.createChatSession(
-        sessionId, 
-        currentState.activeAgent, 
+        sessionId,
+        undefined,
         currentState.history
       )
     }
@@ -1605,7 +1263,7 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
 
     return {
       initialized: this._initialized,
-      activeAgents: Array.from(clinicalAgentRouter.getAllAgents().keys()),
+      activeAgents: ['aurora'],
       totalSessions: allSessions.length,
     }
   }

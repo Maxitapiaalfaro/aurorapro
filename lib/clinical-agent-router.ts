@@ -1,16 +1,13 @@
 import { ai, aiFiles } from "./google-genai-config"
-import { createAgentDefinitions } from "./agents/agent-definitions"
-import { createUserContent } from "@google/genai"
+import { createUnifiedAgentConfig } from "./agents/agent-definitions"
 import { clinicalFileManager, createPartFromUri } from "./clinical-file-manager"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 // P1.1: Reactive context compaction — detect context-exhausted errors and compact history
 import { ContextWindowManager, isContextExhaustedError } from "./context-window-manager"
-// P1.2: Concurrency-limited tool orchestration — types re-exported for streaming handler
 // P3: Streaming & Tool handler — extracted to agents/streaming-handler.ts
-import { createMetricsStreamingWrapper, handleStreamingWithTools, handleNonStreamingWithTools, extractTextFromChunk, estimateTokenCount, extractUrlsFromGroundingMetadata } from "./agents/streaming-handler"
-import { buildEnhancedMessage, getRoleMetadata, addAgentTransitionContext } from "./agents/message-context-builder"
+import { createMetricsStreamingWrapper, handleStreamingWithTools, extractTextFromChunk, estimateTokenCount } from "./agents/streaming-handler"
+import { buildEnhancedMessage } from "./agents/message-context-builder"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
-import type { OperationalMetadata, RoutingDecision } from "@/types/operational-metadata"
 import { createLogger } from '@/lib/logger'
 
 const logger = createLogger('agent')
@@ -26,7 +23,7 @@ function escapeXml(str: string): string {
 }
 
 export class ClinicalAgentRouter {
-  private agents: Map<AgentType, AgentConfig> = new Map()
+  private unifiedConfig!: AgentConfig
   private activeChatSessions: Map<string, { chat: any; agent: AgentType; usesApiKeyClient?: boolean; history?: any[] }> = new Map()
   // Session-scoped caches to avoid re-fetching and re-verifying files each turn
   private sessionFileCache: Map<string, Map<string, any>> = new Map()
@@ -58,23 +55,14 @@ export class ClinicalAgentRouter {
   // aligned with expert supervisor competencies (Eells, Gilboa-Schechtman, Page et al.).
 
   private initializeAgents() {
-    this.agents = createAgentDefinitions()
+    this.unifiedConfig = createUnifiedAgentConfig()
   }
 
-  async createChatSession(sessionId: string, agent: AgentType, history?: ChatMessage[], isAgentTransition = false): Promise<any> {
-    const agentConfig = this.agents.get(agent)
-    if (!agentConfig) {
-      throw new Error(`Agent not found: ${agent}`)
-    }
+  async createChatSession(sessionId: string, _agent?: AgentType, history?: ChatMessage[]): Promise<any> {
+    const agentConfig = this.unifiedConfig
 
     try {
-      // Convert history to Gemini format if provided - NOW AGENT-AWARE
-      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(sessionId, history, agent) : []
-
-      // Add transition context if this is an agent switch to maintain conversational flow
-      if (isAgentTransition && history && history.length > 0) {
-        geminiHistory = addAgentTransitionContext(geminiHistory, agent)
-      }
+      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(sessionId, history) : []
 
       // Detect if any message in history references files uploaded via API-key Files API.
       // When Vertex AI is the main client, it cannot resolve file URIs from the API-key
@@ -99,7 +87,7 @@ export class ClinicalAgentRouter {
         history: geminiHistory,
       })
 
-      this.activeChatSessions.set(sessionId, { chat, agent, usesApiKeyClient: historyHasFiles })
+      this.activeChatSessions.set(sessionId, { chat, agent: 'socratico', usesApiKeyClient: historyHasFiles })
       // Prepare caches for this session
       if (!this.sessionFileCache.has(sessionId)) this.sessionFileCache.set(sessionId, new Map())
       if (!this.verifiedActiveMap.has(sessionId)) this.verifiedActiveMap.set(sessionId, new Set())
@@ -115,7 +103,7 @@ export class ClinicalAgentRouter {
     }
   }
 
-  async convertHistoryToGeminiFormat(sessionId: string, history: ChatMessage[], agentType: AgentType) {
+  async convertHistoryToGeminiFormat(sessionId: string, history: ChatMessage[]) {
     // Find the most recent message that actually has file references
     const lastMsgWithFilesIdx = [...history].reverse().findIndex(m => m.fileReferences && m.fileReferences.length > 0)
     const attachIndex = lastMsgWithFilesIdx === -1 ? -1 : history.length - 1 - lastMsgWithFilesIdx
@@ -231,31 +219,22 @@ export class ClinicalAgentRouter {
     }
 
     let chat = sessionData.chat
-    const agent = sessionData.agent
 
     // 🧹 CLEANUP: Update session activity on every message
     this.updateSessionActivity(sessionId)
 
     try {
-      // 🎯 ROLE METADATA: Agregar metadata de rol que acompaña al agente en cada mensaje
-      const roleMetadata = getRoleMetadata(agent)
-
       // Enriquecer el mensaje con contexto si está disponible
       let enhancedMessage = message
       if (enrichedContext) {
-        enhancedMessage = buildEnhancedMessage(message, enrichedContext, agent)
+        enhancedMessage = buildEnhancedMessage(message, enrichedContext, 'socratico')
       }
-
-      // 🎯 Prefijar mensaje con metadata de rol (invisible para el usuario, visible para el agente)
-      enhancedMessage = `${roleMetadata}\n\n${enhancedMessage}`
 
       // 📊 RECORD MODEL CALL START - Estimate context tokens if interaction tracking enabled
       if (interactionId) {
         const currentHistory = sessionData.history || [];
         const contextTokens = estimateTokenCount(currentHistory);
-        // Get the actual model used by this agent
-        const agentConfig = this.agents.get(agent);
-        const modelUsed = agentConfig?.config?.model || 'gemini-2.5-flash';
+        const modelUsed = this.unifiedConfig.config?.model || 'gemini-2.5-flash';
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
@@ -267,8 +246,8 @@ export class ClinicalAgentRouter {
 
       if (hasFileAttachments && !sessionData.usesApiKeyClient) {
         try {
-          const agentConfig = this.agents.get(agent)
-          const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [], agent)
+          const agentConfig = this.unifiedConfig
+          const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [])
           const fileChat = aiFiles.chats.create({
             model: agentConfig?.config?.model || 'gemini-2.5-flash',
             config: {
@@ -283,7 +262,7 @@ export class ClinicalAgentRouter {
             },
             history: geminiHistory,
           })
-          this.activeChatSessions.set(sessionId, { chat: fileChat, agent, usesApiKeyClient: true })
+          this.activeChatSessions.set(sessionId, { chat: fileChat, agent: 'socratico', usesApiKeyClient: true })
           chat = fileChat
         } catch (switchErr) {
           logger.warn('⚠️ Could not switch to API-key client for file-attached message', { error: switchErr instanceof Error ? switchErr.message : String(switchErr) })
@@ -436,7 +415,7 @@ export class ClinicalAgentRouter {
             if (isContextExhaustedError(err) && !contextCompacted) {
               logger.warn(`🗜️ Context window exhausted on streaming attempt ${attempt}. Triggering reactive compaction...`);
 
-              const compactionResult = await this.performReactiveCompaction(sessionId, agent);
+              const compactionResult = await this.performReactiveCompaction(sessionId);
               if (compactionResult) {
                 // Update chat reference after session recreation
                 const newSessionData = this.activeChatSessions.get(sessionId);
@@ -463,14 +442,8 @@ export class ClinicalAgentRouter {
           }
         }
 
-        // Handle function calls for ALL agents that have tools (academico, socratico, clinico)
-        // Estos agentes tienen acceso a herramientas de búsqueda académica
-        if (agent === "academico" || agent === "socratico" || agent === "clinico") {
-          result = await handleStreamingWithTools(streamResult, sessionId, { activeChatSessions: this.activeChatSessions }, interactionId, psychologistId)
-        } else {
-          // 📊 Create streaming wrapper that captures metrics when stream completes
-          result = createMetricsStreamingWrapper(streamResult, interactionId, enhancedMessage)
-        }
+        // Unified agent always has tools — handle function calls via streaming handler
+        result = await handleStreamingWithTools(streamResult, sessionId, { activeChatSessions: this.activeChatSessions }, interactionId, psychologistId)
       } else {
         // ─── Non-streaming path with P1.1 reactive compaction ───
         try {
@@ -479,7 +452,7 @@ export class ClinicalAgentRouter {
           if (isContextExhaustedError(err)) {
             logger.warn(`🗜️ Context window exhausted on non-streaming call. Triggering reactive compaction...`);
 
-            const compactionResult = await this.performReactiveCompaction(sessionId, agent);
+            const compactionResult = await this.performReactiveCompaction(sessionId);
             if (compactionResult) {
               // Update chat reference after session recreation
               const newSessionData = this.activeChatSessions.get(sessionId);
@@ -536,7 +509,7 @@ export class ClinicalAgentRouter {
       return result;
 
     } catch (error) {
-      logger.error(`Error sending message to ${agent}`, { error: error instanceof Error ? error.message : String(error) })
+      logger.error(`Error sending message`, { error: error instanceof Error ? error.message : String(error) })
       throw error
     }
   }
@@ -558,8 +531,7 @@ export class ClinicalAgentRouter {
    * @returns true if compaction and session recreation succeeded, false otherwise
    */
   private async performReactiveCompaction(
-    sessionId: string,
-    agent: AgentType
+    sessionId: string
   ): Promise<boolean> {
     try {
       const sessionData = this.activeChatSessions.get(sessionId);
@@ -586,7 +558,7 @@ export class ClinicalAgentRouter {
 
       // Destroy old session and recreate with compacted history
       this.activeChatSessions.delete(sessionId);
-      await this.createChatSession(sessionId, agent, compactionResult.compactedHistory);
+      await this.createChatSession(sessionId, undefined, compactionResult.compactedHistory);
 
       // Update the stored history reference so Firestore persistence stays in sync
       const newSessionData = this.activeChatSessions.get(sessionId);
@@ -602,12 +574,8 @@ export class ClinicalAgentRouter {
   }
 
 
-  getAgentConfig(agent: AgentType): AgentConfig | undefined {
-    return this.agents.get(agent)
-  }
-
-  getAllAgents(): Map<AgentType, AgentConfig> {
-    return this.agents
+  getAgentConfig(): AgentConfig {
+    return this.unifiedConfig
   }
 
   closeChatSession(sessionId: string): void {

@@ -1,115 +1,71 @@
 /**
- * Tool Input Schemas — P1.3: Formal Input Validation with Zod
+ * Tool Input Schemas — Formal Input Validation with Zod
  *
- * Defines strict Zod schemas for every tool registered in the ToolRegistry.
- * These schemas validate LLM-generated payloads BEFORE execution, catching
+ * Zod schemas for all tools in the unified Aurora agent.
+ * Validates LLM-generated payloads BEFORE execution, catching
  * hallucinated formats early and enabling self-healing via structured errors.
  *
- * Pattern inspired by Claude Code's Tool.inputSchema (docs/architecture/claude).
+ * Pattern: Claude Code's Tool.inputSchema.
  *
- * @version 1.0.0 — P1.3
+ * @version 2.0.0 — Unified Agent Architecture
  */
 
 import { z } from 'zod';
 
 // ============================================================================
-// REGISTERED TOOL SCHEMAS (match tool-registry.ts declarations)
+// UNIFIED AGENT TOOL SCHEMAS
 // ============================================================================
 
-/** formulate_clarifying_question — Emotional Exploration (read-only) */
-export const formulateClarifyingQuestionSchema = z.object({
-  clientStatement: z.string().describe('La declaración o comentario del cliente que requiere clarificación'),
-  emotionalContext: z.string().describe('El contexto emocional detectado en la conversación'),
-  focusArea: z.enum(['emotions', 'thoughts', 'behaviors', 'relationships', 'triggers'])
-    .describe('El área específica en la que enfocar la clarificación'),
-});
-
-/** identify_core_emotion — Emotional Exploration (read-only) */
-export const identifyCoreEmotionSchema = z.object({
-  clientNarrative: z.string().describe('La narrativa o descripción del cliente sobre su experiencia'),
-  behavioralIndicators: z.array(z.string())
-    .optional()
-    .describe('Indicadores conductuales observados o reportados'),
-  contextualFactors: z.string()
-    .optional()
-    .describe('Factores contextuales relevantes (situación, relaciones, eventos)'),
-});
-
-/** generate_validating_statement — Validation Support (read-only) */
-export const generateValidatingStatementSchema = z.object({
-  clientExperience: z.string().describe('La experiencia específica que el cliente ha compartido'),
-  emotionalIntensity: z.enum(['low', 'moderate', 'high', 'severe'])
-    .describe('La intensidad emocional percibida en la experiencia'),
-  validationType: z.enum(['emotional', 'experiential', 'perspective', 'effort'])
-    .describe('El tipo de validación más apropiado para la situación'),
-});
-
-/** detect_pattern — Pattern Detection (read-only) */
-export const detectPatternSchema = z.object({
-  conversationHistory: z.string().describe('Historial relevante de la conversación para análisis de patrones'),
-  patternType: z.enum(['cognitive', 'emotional', 'behavioral', 'relational', 'situational'])
-    .describe('El tipo de patrón a detectar'),
-  timeframe: z.string()
-    .optional()
-    .describe('Marco temporal en el que se observa el patrón'),
-});
-
-/** reframe_perspective — Cognitive Analysis (read-only) */
-export const reframePerspectiveSchema = z.object({
-  originalPerspective: z.string().describe('La perspectiva original o pensamiento del cliente'),
-  situationalContext: z.string().describe('El contexto situacional completo'),
-  reframeType: z.enum(['balanced', 'strength_based', 'growth_oriented', 'evidence_based'])
-    .describe('El tipo de reencuadre más apropiado'),
-});
-
-/** propose_behavioral_experiment — Behavioral Intervention (read-only) */
-export const proposeBehavioralExperimentSchema = z.object({
-  targetBelief: z.string().describe('La creencia o patrón específico que se quiere examinar'),
-  clientCapabilities: z.string().describe('Las capacidades y limitaciones actuales del cliente'),
-  experimentType: z.enum(['exposure', 'behavioral_activation', 'skill_practice', 'reality_testing'])
-    .describe('El tipo de experimento conductual'),
-  timeframe: z.string()
-    .optional()
-    .describe('Marco temporal propuesto para el experimento'),
-});
-
-/** google_search — Academic Web Search (external) */
-export const googleSearchSchema = z.object({
-  query: z.string().describe('Términos de búsqueda académicos específicos'),
-  clinicalCondition: z.string()
-    .optional()
-    .describe('Condición clínica específica de interés'),
-  interventionType: z.string()
-    .optional()
-    .describe('Tipo de intervención o técnica terapéutica'),
-});
-
-// ============================================================================
-// DYNAMIC TOOL SCHEMAS (known SDK-managed tools)
-// ============================================================================
-
-/** search_academic_literature — ParallelAI Academic Search (external) */
+/** search_academic_literature — Academic Search (external) */
 export const searchAcademicLiteratureSchema = z.object({
-  query: z.string().describe('Términos de búsqueda académica'),
-  max_results: z.number().int().positive()
+  query: z.string().min(3).describe('Pregunta de investigación en nomenclatura clínica'),
+  max_results: z.number().int().min(1).max(20)
     .optional()
-    .describe('Número máximo de resultados'),
+    .describe('Número máximo de artículos (1-20). Default: 8.'),
 });
 
-/** search_evidence_for_reflection — Supervisor Evidence Search (external) */
-export const searchEvidenceForReflectionSchema = z.object({
-  query: z.string().describe('Consulta de evidencia para reflexión clínica'),
-  max_results: z.number().int().positive()
+/** get_patient_memories — Clinical Memory Retrieval (read-only) */
+export const getPatientMemoriesSchema = z.object({
+  patientId: z.string().min(1).describe('ID del paciente en Firestore'),
+  category: z.enum(['observation', 'pattern', 'therapeutic-preference'])
     .optional()
-    .describe('Número máximo de resultados'),
+    .describe('Filtrar por categoría de memoria'),
+  limit: z.number().int().min(1).max(50)
+    .optional()
+    .describe('Número máximo de memorias. Default: 10.'),
 });
 
-/** search_evidence_for_documentation — Documentation Evidence Search (external) */
-export const searchEvidenceForDocumentationSchema = z.object({
-  query: z.string().describe('Consulta de evidencia para documentación clínica'),
-  max_results: z.number().int().positive()
+/** get_patient_record — Patient Record Retrieval (read-only) */
+export const getPatientRecordSchema = z.object({
+  patientId: z.string().min(1).describe('ID del paciente en Firestore'),
+});
+
+/** save_clinical_memory — Clinical Memory Persistence (write) */
+export const saveClinicalMemorySchema = z.object({
+  patientId: z.string().min(1).describe('ID del paciente en Firestore'),
+  category: z.enum(['observation', 'pattern', 'therapeutic-preference'])
+    .describe('Tipo de memoria clínica'),
+  content: z.string().min(10).max(2000)
+    .describe('Contenido de la memoria en lenguaje clínico conciso'),
+  confidence: z.number().min(0).max(1)
+    .describe('Nivel de confianza (0.0-1.0)'),
+  tags: z.array(z.string()).max(10)
     .optional()
-    .describe('Número máximo de resultados'),
+    .describe('Etiquetas clínicas para recuperación futura'),
+});
+
+/** google_search — Gemini native grounding (external) */
+export const googleSearchSchema = z.object({
+  query: z.string().describe('Términos de búsqueda'),
+});
+
+// ============================================================================
+// LEGACY SCHEMAS (backward compat for sessions with old tool names)
+// ============================================================================
+
+const legacySearchSchema = z.object({
+  query: z.string().describe('Consulta de evidencia'),
+  max_results: z.number().int().positive().optional(),
 });
 
 // ============================================================================
@@ -118,22 +74,19 @@ export const searchEvidenceForDocumentationSchema = z.object({
 
 /**
  * Central lookup for tool input schemas by declaration name.
- * Used by the orchestrator to validate LLM payloads before execution.
+ * Used by the tool orchestrator to validate payloads before execution.
  */
 export const toolInputSchemas: Record<string, z.ZodType> = {
-  // Registered tools (tool-registry.ts)
-  'formulate_clarifying_question': formulateClarifyingQuestionSchema,
-  'identify_core_emotion': identifyCoreEmotionSchema,
-  'generate_validating_statement': generateValidatingStatementSchema,
-  'detect_pattern': detectPatternSchema,
-  'reframe_perspective': reframePerspectiveSchema,
-  'propose_behavioral_experiment': proposeBehavioralExperimentSchema,
+  // Unified agent tools
+  'search_academic_literature': searchAcademicLiteratureSchema,
+  'get_patient_memories': getPatientMemoriesSchema,
+  'get_patient_record': getPatientRecordSchema,
+  'save_clinical_memory': saveClinicalMemorySchema,
   'google_search': googleSearchSchema,
 
-  // Dynamic tools (known SDK-managed, not in ToolRegistry)
-  'search_academic_literature': searchAcademicLiteratureSchema,
-  'search_evidence_for_reflection': searchEvidenceForReflectionSchema,
-  'search_evidence_for_documentation': searchEvidenceForDocumentationSchema,
+  // Legacy tool names (may appear in existing Gemini chat sessions)
+  'search_evidence_for_reflection': legacySearchSchema,
+  'search_evidence_for_documentation': legacySearchSchema,
 };
 
 // ============================================================================
