@@ -262,7 +262,8 @@ export async function POST(request: NextRequest) {
                           sourcesFound: chunk.metadata.sourcesFound,
                           sourcesValidated: chunk.metadata.sourcesValidated
                         },
-                        academicSources: chunk.metadata.academicSources
+                        academicSources: chunk.metadata.academicSources,
+                        completionDetail: chunk.metadata.completionDetail,
                       }
                     })
                   }

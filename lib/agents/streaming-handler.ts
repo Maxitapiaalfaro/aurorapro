@@ -12,6 +12,7 @@ import { vertexLinkConverter } from "../vertex-link-converter"
 import { checkToolPermission } from "../security/tool-permissions"
 import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
+import { ProgressQueue } from "../utils/progress-queue"
 import { createLogger } from "@/lib/logger"
 
 const logger = createLogger('agent')
@@ -348,6 +349,54 @@ async function executeToolCall(
   return { name: call.name, response: null };
 }
 
+// ---- Query & completion detail helpers for UX transparency ----
+
+/**
+ * Extracts the most user-relevant argument from a tool call for display in the timeline.
+ */
+function extractQueryFromArgs(toolName: string, args: Record<string, unknown> | undefined): string | undefined {
+  if (!args) return undefined;
+  switch (toolName) {
+    case 'search_academic_literature':
+    case 'search_evidence_for_reflection':
+    case 'search_evidence_for_documentation':
+      return args.query as string | undefined;
+    case 'research_evidence':
+      return args.research_question as string | undefined;
+    case 'explore_patient_context':
+      return args.context_hint as string | undefined;
+    case 'generate_clinical_document':
+      return args.document_type as string | undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Builds a human-readable completion summary for the ExecutionTimeline accordion detail.
+ */
+function extractCompletionDetail(resp: { name: string; response: unknown }): string | undefined {
+  const data = resp.response as Record<string, unknown> | null;
+  if (!data || data.error) return undefined;
+  switch (resp.name) {
+    case 'explore_patient_context':
+      return `Sintetizó: ${data.memoriesCount ?? 0} memorias, ${formatMs(data.durationMs)}`;
+    case 'generate_clinical_document':
+      return `Documento ${data.documentType || '?'}, ${formatMs(data.durationMs)}`;
+    case 'research_evidence':
+      return `${data.sourcesCount ?? 0} fuentes, ${formatMs(data.durationMs)}`;
+    case 'analyze_longitudinal_patterns':
+      return `${data.sessionCount ?? 0} sesiones, ${formatMs(data.durationMs)}`;
+    default:
+      return undefined;
+  }
+}
+
+function formatMs(ms: unknown): string {
+  if (typeof ms !== 'number') return '';
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 // ---- Streaming handlers ----
 
 /**
@@ -514,13 +563,13 @@ export async function handleStreamingWithTools(
             metadata: {
               type: "tool_call_start",
               toolName: call.name,
-              query: call.args?.query || call.args?.research_question || call.args?.patientId || call.args?.document_type || undefined,
+              query: extractQueryFromArgs(call.name, call.args),
             }
           }
         }
 
-        // 🎨 Progress queue: sub-agents push messages here, polling loop drains them
-        const progressQueue: Array<{toolName: string, message: string}> = [];
+        // 🎨 ProgressQueue: sub-agents push messages, generator drains them in real-time
+        const progressQueue = new ProgressQueue<{toolName: string, message: string}>();
         const createProgressCallback = (toolName: string) => (message: string) => {
           progressQueue.push({ toolName, message });
         };
@@ -530,45 +579,12 @@ export async function handleStreamingWithTools(
           prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name))
         );
 
-        // 🎨 Progress polling loop: execute tools in background, drain progress queue every 200ms
-        let functionResponses: ToolCallResult[];
-        let executionDone = false;
-        const executionPromise = executeToolsSafely(preparedCalls, { maxConcurrent: 3 }).then((results) => {
-          executionDone = true;
-          return results;
-        });
+        // Start tool execution WITHOUT awaiting — drain progress concurrently
+        const executionPromise = executeToolsSafely(preparedCalls, { maxConcurrent: 3 })
+          .then(results => { progressQueue.finish(); return results; });
 
-        // Small helper — resolves after `ms` with undefined
-        const sleep = (ms: number) => new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms));
-
-        while (!executionDone) {
-          // Drain any progress messages that accumulated
-          while (progressQueue.length > 0) {
-            const p = progressQueue.shift()!;
-            yield {
-              text: "",
-              metadata: {
-                type: "tool_call_progress",
-                toolName: p.toolName,
-                message: p.message,
-              }
-            };
-          }
-          // Wait 200ms or until tools finish, whichever comes first
-          const raceResult = await Promise.race([executionPromise, sleep(200)]);
-          if (raceResult !== undefined) {
-            functionResponses = raceResult;
-            break;
-          }
-        }
-        // If loop exited via executionDone flag (edge case), await the result
-        if (!functionResponses!) {
-          functionResponses = await executionPromise;
-        }
-
-        // Drain any remaining progress messages
-        while (progressQueue.length > 0) {
-          const p = progressQueue.shift()!;
+        // Drain progress events in real-time while tools execute
+        for await (const p of progressQueue) {
           yield {
             text: "",
             metadata: {
@@ -578,6 +594,9 @@ export async function handleStreamingWithTools(
             }
           };
         }
+
+        // Tools are done — get results
+        const functionResponses = await executionPromise;
 
         // Filter out null responses
         const validResponses = functionResponses.filter(response => response !== null)
@@ -592,7 +611,10 @@ export async function handleStreamingWithTools(
               toolName: resp.name,
               sourcesFound: responseData?.total_found || responseData?.sourcesCount || responseData?.count || 0,
               sourcesValidated: responseData?.validated_count || responseData?.sourcesCount || 0,
-              academicSources: resp.name === 'search_academic_literature' ? academicReferences : undefined,
+              academicSources: (resp.name === 'search_academic_literature' || resp.name === 'research_evidence')
+                ? (academicReferences.length > 0 ? academicReferences : undefined)
+                : undefined,
+              completionDetail: extractCompletionDetail(resp),
             }
           }
         }

@@ -211,7 +211,7 @@ export function snapshotExecutionTimeline(
       status: tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),
+      detail: fullQuery.length > 60 ? fullQuery : (buildToolResultDetail(tool.result, tool.status) || tool.completionDetail),
       result: tool.result,
       sources: tool.academicSources
     })
@@ -328,7 +328,7 @@ export function buildLiveTimeline(
       status: isToolActive ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: fullQuery.length > 60 ? fullQuery : buildToolResultDetail(tool.result, tool.status),  // 🔧 FIX: Full query as detail for expandable accordion
+      detail: fullQuery.length > 60 ? fullQuery : (buildToolResultDetail(tool.result, tool.status) || tool.completionDetail),  // 🔧 FIX: Full query as detail for expandable accordion
       result: tool.result,
       sources: tool.academicSources
     })

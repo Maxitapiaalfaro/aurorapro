@@ -52,6 +52,8 @@ export interface ExecutionStep {
   }
   /** Academic sources retrieved from Parallel AI, displayed as a readable list */
   sources?: AcademicSourceReference[]
+  /** Human-readable summary of what the tool/sub-agent did */
+  completionDetail?: string
 }
 
 /** A single academic source reference for display in the execution timeline */
@@ -111,6 +113,8 @@ export interface ToolExecutionEvent {
   }
   /** Academic sources from Parallel AI, attached on completion */
   academicSources?: AcademicSourceReference[]
+  /** Human-readable summary of what the tool/sub-agent did (e.g. "12 fuentes, 8.2s") */
+  completionDetail?: string
 }
 
 // Granular message processing status for transparency UI

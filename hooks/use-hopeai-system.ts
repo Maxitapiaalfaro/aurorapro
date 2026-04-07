@@ -775,7 +775,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
                     if (!matched && t.toolName === tool.toolName && (t.status === 'started' || t.status === 'in_progress')) {
                       matched = true
-                      return { ...t, status: tool.status, result: tool.result, academicSources: tool.academicSources } as ToolExecutionEvent
+                      return { ...t, status: tool.status, result: tool.result, academicSources: tool.academicSources, completionDetail: tool.completionDetail } as ToolExecutionEvent
                     }
                     return t
                   })
