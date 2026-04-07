@@ -743,9 +743,9 @@ function calculateDynamicConfidenceThreshold(metadata: OperationalMetadata): num
     threshold += 0.10;
   }
 
-  // Decrease threshold slightly for very short sessions (allow initial routing flexibility)
+  // Increase threshold for very short sessions (avoid premature switches before enough context)
   if (metadata.session_duration_minutes < 5) {
-    threshold += 0.05; // Actually increase — avoid premature switches
+    threshold += 0.05;
   }
 
   return Math.min(0.95, threshold);

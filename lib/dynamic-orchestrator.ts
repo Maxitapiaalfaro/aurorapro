@@ -20,7 +20,7 @@ import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
 import { createLogger } from '@/lib/logger';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
-import type { ClinicalFile } from '@/types/clinical-types';
+import type { ClinicalFile, AgentType } from '@/types/clinical-types';
 import type { OperationalMetadata, RoutingDecision } from '@/types/operational-metadata';
 
 /**
@@ -81,6 +81,17 @@ interface DynamicOrchestratorConfig {
   dominantTopicsUpdateInterval?: number;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
+
+/**
+ * US timezone identifiers used for region detection.
+ * America/* timezones NOT in this list are classified as LATAM.
+ */
+const US_TIMEZONES = new Set([
+  'America/New_York', 'America/Chicago', 'America/Denver',
+  'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage',
+  'America/Honolulu', 'America/Detroit', 'America/Indianapolis',
+  'America/Boise', 'America/Juneau', 'America/Adak'
+]);
 
 /**
  * Orquestador Dinámico Principal
@@ -301,7 +312,7 @@ export class DynamicOrchestrator {
     // Detect region from timezone
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     let region: 'LATAM' | 'EU' | 'US' | 'ASIA' | 'OTHER' = 'OTHER';
-    if (timezone.startsWith('America/') && !['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'America/Honolulu'].includes(timezone)) {
+    if (timezone.startsWith('America/') && !US_TIMEZONES.has(timezone)) {
       region = 'LATAM';
     } else if (timezone.startsWith('Europe/')) {
       region = 'EU';
@@ -318,18 +329,22 @@ export class DynamicOrchestrator {
     const consecutiveSwitches = recentTransitions.length;
 
     // Count turns per agent
-    const agentTurnCounts: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+    const agentTurnCounts: Record<AgentType, number> = { socratico: 0, clinico: 0, academico: 0, orquestador: 0 };
     for (const transition of session.agentTransitions) {
-      if (agentTurnCounts[transition.to] !== undefined) {
-        agentTurnCounts[transition.to]++;
+      const agent = transition.to as AgentType;
+      if (agentTurnCounts[agent] !== undefined) {
+        agentTurnCounts[agent]++;
       }
     }
     // Count current agent's interactions
-    if (session.currentAgent && agentTurnCounts[session.currentAgent] !== undefined) {
-      agentTurnCounts[session.currentAgent] = Math.max(
-        agentTurnCounts[session.currentAgent],
-        session.sessionMetadata.totalInteractions - session.agentTransitions.length
-      );
+    if (session.currentAgent) {
+      const currentAgent = session.currentAgent as AgentType;
+      if (agentTurnCounts[currentAgent] !== undefined) {
+        agentTurnCounts[currentAgent] = Math.max(
+          agentTurnCounts[currentAgent],
+          session.sessionMetadata.totalInteractions - session.agentTransitions.length
+        );
+      }
     }
 
     const lastTransition = session.agentTransitions.length > 0
@@ -353,12 +368,12 @@ export class DynamicOrchestrator {
 
       // Agent history metadata
       agent_transitions: session.agentTransitions.map(t => ({
-        from: t.from as any,
-        to: t.to as any,
+        from: t.from as AgentType,
+        to: t.to as AgentType,
         timestamp: t.timestamp,
         reason: t.reason
       })),
-      agent_turn_counts: agentTurnCounts as any,
+      agent_turn_counts: agentTurnCounts,
       last_agent_switch: lastTransition?.timestamp || null,
       consecutive_switches: consecutiveSwitches,
 
