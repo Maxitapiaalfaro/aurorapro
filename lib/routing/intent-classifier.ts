@@ -324,6 +324,24 @@ export function detectExplicitAgentRequest(userInput: string): {
 
 // ─── Keyword sets shared across heuristic and context analysis ───────────────
 
+/** Number of recent messages to analyze for conversation context (3 user turns ≈ current flow direction) */
+const CONVERSATION_CONTEXT_WINDOW = 6;
+
+/** Normalization factor for per-message context scoring (lower = more sensitive to few matches) */
+const CONTEXT_SCORE_NORMALIZATION_FACTOR = 0.3;
+
+/** Minimum score for an agent to be considered dominant in conversation context */
+const MIN_DOMINANT_SCORE = 0.05;
+
+/** Minimum score margin between top and second agent to declare dominance */
+const MIN_SCORE_MARGIN = 0.02;
+
+/** Weight of current message keywords in combined scoring (vs conversation context) */
+const MESSAGE_WEIGHT = 0.7;
+
+/** Weight of conversation context momentum in combined scoring (vs current message) */
+const CONTEXT_WEIGHT = 0.3;
+
 const KEYWORD_SETS: Record<string, string[]> = {
   socratico: [
     'reflexionar', 'explorar', 'pensar', 'analizar', 'insight',
@@ -364,8 +382,8 @@ const KEYWORD_SETS: Record<string, string[]> = {
 export function analyzeConversationContext(
   sessionContext: Content[]
 ): { scores: Record<string, number>; dominantAgent: string | null; turnCount: number } {
-  // Take the last 6 messages (3 user turns ≈ current flow direction)
-  const recent = sessionContext.slice(-6);
+  // Take the recent messages (≈3 user turns for current flow direction)
+  const recent = sessionContext.slice(-CONVERSATION_CONTEXT_WINDOW);
   if (recent.length === 0) {
     return { scores: { socratico: 0, clinico: 0, academico: 0 }, dominantAgent: null, turnCount: 0 };
   }
@@ -385,8 +403,8 @@ export function analyzeConversationContext(
       for (const kw of keywords) {
         if (text.includes(kw)) matches++;
       }
-      // Normalize per-message score: count / (keywords * factor)
-      scores[agent] += matches / (keywords.length * 0.3);
+      // Normalize per-message score
+      scores[agent] += matches / (keywords.length * CONTEXT_SCORE_NORMALIZATION_FACTOR);
     }
   }
 
@@ -400,7 +418,7 @@ export function analyzeConversationContext(
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
   const [topAgent, topScore] = sorted[0];
   const [, secondScore] = sorted[1];
-  const dominantAgent = (topScore > 0.05 && topScore - secondScore > 0.02) ? topAgent : null;
+  const dominantAgent = (topScore > MIN_DOMINANT_SCORE && topScore - secondScore > MIN_SCORE_MARGIN) ? topAgent : null;
 
   return { scores, dominantAgent, turnCount: messageCount };
 }
@@ -452,10 +470,8 @@ export function classifyIntentByHeuristic(
     ? analyzeConversationContext(sessionContext)
     : null;
 
-  // ── Combine signals: message keywords (70%) + context momentum (30%) ──────
+  // ── Combine signals: message keywords + context momentum ────────────────────
   const combinedScores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
-  const MESSAGE_WEIGHT = 0.7;
-  const CONTEXT_WEIGHT = 0.3;
 
   for (const agent of Object.keys(combinedScores)) {
     const msgScore = messageScores[agent];

@@ -93,6 +93,9 @@ const US_TIMEZONES = new Set([
   'America/Boise', 'America/Juneau', 'America/Adak'
 ]);
 
+/** Time window (ms) for counting recent agent transitions */
+const RECENT_TRANSITIONS_WINDOW_MS = 5 * 60 * 1000;
+
 /**
  * Orquestador Dinámico Principal
  * 
@@ -324,7 +327,7 @@ export class DynamicOrchestrator {
 
     // Count agent transitions and consecutive switches
     const recentTransitions = session.agentTransitions.filter(
-      t => now.getTime() - t.timestamp.getTime() < 5 * 60 * 1000 // Last 5 minutes
+      t => now.getTime() - t.timestamp.getTime() < RECENT_TRANSITIONS_WINDOW_MS
     );
     const consecutiveSwitches = recentTransitions.length;
 
