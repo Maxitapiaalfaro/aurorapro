@@ -1,20 +1,23 @@
 /**
- * Intelligent Intent Router — Thin facade
+ * Intelligent Intent Router — Metadata-informed routing facade
  *
- * R1: Deterministic routing via keyword heuristics.
- * Eliminates the LLM pre-classification call (~300-700ms saved per message).
+ * Implements the Metadata-Informed Routing architecture:
+ *   1. Edge case detection (risk, stress, sensitive content) → clinico override
+ *   2. Explicit regex detection (unchanged)
+ *   3. Keyword heuristic scoring (Tier 2) → informed by operational metadata
+ *   4. Sticky routing to current agent (Tier 3)
  *
- * Routing tiers:
- *   1. Explicit regex detection (unchanged)
- *   2. Keyword heuristic scoring (new — replaces LLM call)
- *   3. Sticky routing to current agent (new default)
+ * When operational metadata is provided, the router uses it to detect
+ * edge cases and make intelligent routing decisions. When metadata is
+ * not available, falls back to deterministic keyword heuristics.
  *
- * @version 4.0.0 (R1 single-call architecture)
+ * @version 5.0.0 (Metadata-informed routing)
  */
 
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry } from './tool-registry';
 import { createLogger } from '@/lib/logger';
+import type { OperationalMetadata, RoutingDecision } from '@/types/operational-metadata';
 
 const logger = createLogger('orchestration');
 
@@ -36,13 +39,16 @@ import type {
 import {
   detectExplicitAgentRequest,
   classifyIntentByHeuristic,
+  classifyIntentWithMetadata,
 } from './routing/intent-classifier';
 
 /**
  * Orquestador de Intenciones Inteligente
  *
- * Deterministic router — zero LLM calls.
- * Preserves the original class API for backward compatibility.
+ * Metadata-informed router with edge case detection.
+ * When OperationalMetadata is provided, uses intelligent routing
+ * that considers risk, stress, therapeutic phase, and session context.
+ * Falls back to deterministic heuristics when metadata is unavailable.
  */
 export class IntelligentIntentRouter {
   private toolRegistry: ToolRegistry;
@@ -64,18 +70,55 @@ export class IntelligentIntentRouter {
   }
 
   /**
-   * Main orchestration method — deterministic, zero LLM calls.
+   * Main orchestration method — metadata-informed routing.
    *
-   * Tier 1: Explicit regex detection (microseconds)
-   * Tier 2: Keyword heuristic scoring (<5ms)
-   * Tier 3: Sticky routing to current agent (0ms)
+   * When operationalMetadata is provided:
+   *   Step 1: Edge case detection (risk/stress/sensitive content) → clinico
+   *   Step 2: Explicit regex detection → direct routing
+   *   Step 3: Keyword heuristic + metadata-informed scoring
+   *   Step 4: Therapeutic phase influence
+   *   Step 5: Sticky routing with stability
+   *   Step 6: Fallback to socratico
+   *
+   * When operationalMetadata is NOT provided:
+   *   Falls back to deterministic keyword heuristics (backward compat)
    */
   async orchestrateWithTools(
     userInput: string,
     _sessionContext: Content[] = [],
-    previousAgent?: string
-  ): Promise<OrchestrationResult> {
+    previousAgent?: string,
+    operationalMetadata?: OperationalMetadata
+  ): Promise<OrchestrationResult & { routingDecision?: RoutingDecision }> {
     try {
+      // Use metadata-informed routing when metadata is available
+      if (operationalMetadata) {
+        const routingDecision = classifyIntentWithMetadata(userInput, previousAgent, operationalMetadata);
+        const basicTools = this.toolRegistry.getBasicTools();
+
+        if (this.config.enableLogging) {
+          logger.info('[IntentRouter] Metadata-informed routing', {
+            selectedAgent: routingDecision.agent,
+            confidence: routingDecision.confidence.toFixed(2),
+            reason: routingDecision.reason,
+            isEdgeCase: routingDecision.is_edge_case,
+            edgeCaseType: routingDecision.edge_case_type || 'none',
+            previousAgent: previousAgent || 'none'
+          });
+        }
+
+        return {
+          selectedAgent: routingDecision.agent,
+          contextualTools: basicTools.map(tool => tool.declaration),
+          toolMetadata: basicTools,
+          confidence: routingDecision.confidence,
+          reasoning: routingDecision.is_edge_case
+            ? `⚠️ ${routingDecision.reason}: ${routingDecision.metadata_factors.join(', ')}`
+            : `${routingDecision.agent} seleccionado — ${routingDecision.reason}`,
+          routingDecision
+        };
+      }
+
+      // Fallback: deterministic heuristic routing (no metadata)
       // Tier 1: Explicit regex — catches "activar modo X" commands
       const explicitRequest = detectExplicitAgentRequest(userInput);
       if (explicitRequest.isExplicit) {
@@ -95,7 +138,7 @@ export class IntelligentIntentRouter {
       const basicTools = this.toolRegistry.getBasicTools();
 
       if (this.config.enableLogging) {
-        logger.debug('[IntentRouter] Heuristic routing', {
+        logger.debug('[IntentRouter] Heuristic routing (no metadata)', {
           selectedAgent: heuristicResult.selectedAgent,
           confidence: heuristicResult.confidence.toFixed(2),
           previousAgent: previousAgent || 'none'

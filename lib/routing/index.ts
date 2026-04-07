@@ -23,6 +23,10 @@ export {
 export {
   classifyIntentAndExtractEntities,
   classifyIntentByHeuristic,
+  classifyIntentWithMetadata,
+  isEdgeCaseRisk,
+  isEdgeCaseStress,
+  isEdgeCaseSensitiveContent,
   validateFunctionCall,
   calculateEnhancedConfidence,
   calculateCombinedConfidence,

@@ -838,13 +838,16 @@ export class HopeAISystem {
             sessionContext: orchestrationResult.sessionContext,
             patient_reference: enrichedSessionContext.patient_reference,
             patient_summary: enrichedSessionContext.patient_summary
-          }
+          },
+          routingDecision: orchestrationResult.routingDecision
         }
 
         sessionLogger.info('🎯 Advanced orchestration result', {
           selectedAgent: orchestrationResult.selectedAgent,
           confidence: orchestrationResult.confidence,
-          toolsSelected: orchestrationResult.contextualTools.length
+          toolsSelected: orchestrationResult.contextualTools.length,
+          isEdgeCase: orchestrationResult.routingDecision?.is_edge_case || false,
+          routingReason: orchestrationResult.routingDecision?.reason || 'N/A'
         })
 
         if (onAgentSelected) {

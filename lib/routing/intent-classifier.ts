@@ -16,7 +16,8 @@ import { EntityExtractionEngine, type ExtractedEntity, type EntityExtractionResu
 import { ContextWindowManager, type ContextWindowConfig, type ContextProcessingResult } from '../context-window-manager';
 import { INTENT_FUNCTION_DECLARATIONS, VALID_INTENT_FUNCTIONS, AGENT_DISPLAY_NAMES } from './intent-declarations';
 import type { Content, IntentClassificationResult, RouterConfig, EnrichedContext, ToolSelectionContext } from './routing-types';
-import type { OperationalMetadata } from '@/types/operational-metadata';
+import type { OperationalMetadata, RoutingDecision, EdgeCaseDetectionResult } from '@/types/operational-metadata';
+import { DEFAULT_EDGE_CASE_CONFIG, RoutingReason } from '@/types/operational-metadata';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('orchestration');
@@ -407,6 +408,347 @@ export function classifyIntentByHeuristic(
     confidence: 0.85,
     reasoning: `${displayName} mantenido por continuidad de sesión`
   };
+}
+
+// ─── Metadata-Informed Routing ────────────────────────────────────────────────
+
+/**
+ * Detects edge cases based on clinical risk metadata.
+ * Routes to 'clinico' (most robust agent) when risk is detected.
+ */
+export function isEdgeCaseRisk(metadata: OperationalMetadata): EdgeCaseDetectionResult {
+  const factors: string[] = [];
+  const config = DEFAULT_EDGE_CASE_CONFIG;
+
+  if (metadata.risk_level === 'critical') {
+    factors.push('risk_level_critical');
+  }
+  if (metadata.risk_level === 'high') {
+    factors.push('risk_level_high');
+  }
+  if (metadata.requires_immediate_attention) {
+    factors.push('requires_immediate_attention');
+  }
+  if (metadata.risk_flags_active.length > 0) {
+    factors.push(...metadata.risk_flags_active.map(f => `risk_flag_${f}`));
+  }
+
+  const isEdgeCase = factors.length > 0;
+
+  return {
+    is_edge_case: isEdgeCase,
+    edge_case_type: isEdgeCase ? 'risk' : undefined,
+    detected_factors: factors,
+    recommended_agent: 'clinico',
+    confidence: isEdgeCase ? 1.0 : 0,
+    reasoning: isEdgeCase
+      ? `Riesgo clínico detectado: ${factors.join(', ')}. Enrutando a Especialista en Documentación (agente más robusto).`
+      : ''
+  };
+}
+
+/**
+ * Detects edge cases based on system stress indicators.
+ * Ping-pong switching, extended sessions, or late-night long sessions.
+ */
+export function isEdgeCaseStress(metadata: OperationalMetadata): EdgeCaseDetectionResult {
+  const factors: string[] = [];
+  const config = DEFAULT_EDGE_CASE_CONFIG;
+
+  if (metadata.consecutive_switches > config.stress.max_consecutive_switches) {
+    factors.push('consecutive_switches_extreme');
+  }
+  if (metadata.session_duration_minutes > config.stress.max_session_duration_minutes) {
+    factors.push('session_very_extended');
+  }
+  if (
+    metadata.time_of_day === 'night' &&
+    metadata.session_duration_minutes > config.stress.night_session_threshold_minutes
+  ) {
+    factors.push('night_session_extended');
+  }
+
+  const isEdgeCase = factors.length > 0;
+
+  return {
+    is_edge_case: isEdgeCase,
+    edge_case_type: isEdgeCase ? 'stress' : undefined,
+    detected_factors: factors,
+    recommended_agent: 'clinico',
+    confidence: isEdgeCase ? 1.0 : 0,
+    reasoning: isEdgeCase
+      ? `Estrés del sistema detectado: ${factors.join(', ')}. Enrutando a Especialista en Documentación para estabilizar.`
+      : ''
+  };
+}
+
+/**
+ * Detects sensitive content in user input combined with risk context.
+ * Checks for critical keywords and high-risk keywords.
+ */
+export function isEdgeCaseSensitiveContent(
+  userInput: string,
+  metadata: OperationalMetadata
+): EdgeCaseDetectionResult {
+  const config = DEFAULT_EDGE_CASE_CONFIG;
+  const inputLower = userInput.toLowerCase();
+  const factors: string[] = [];
+
+  const hasCriticalKeyword = config.risk.critical_keywords.some(kw => inputLower.includes(kw));
+  const hasHighRiskKeyword = config.risk.high_risk_keywords.some(kw => inputLower.includes(kw));
+
+  if (hasCriticalKeyword) {
+    factors.push('critical_keyword_detected');
+  }
+  if (hasHighRiskKeyword) {
+    factors.push('high_risk_keyword_detected');
+  }
+
+  // If require_context_for_detection is false, keywords alone trigger the edge case.
+  // If true, we also need risk flags or elevated risk level.
+  const hasRiskContext =
+    !config.risk.require_context_for_detection ||
+    metadata.risk_flags_active.length > 0 ||
+    metadata.risk_level === 'high' ||
+    metadata.risk_level === 'critical';
+
+  const isEdgeCase = factors.length > 0 && hasRiskContext;
+
+  if (isEdgeCase && metadata.risk_flags_active.length > 0) {
+    factors.push(...metadata.risk_flags_active.map(f => `risk_flag_${f}`));
+  }
+
+  return {
+    is_edge_case: isEdgeCase,
+    edge_case_type: isEdgeCase ? 'sensitive_content' : undefined,
+    detected_factors: factors,
+    recommended_agent: 'clinico',
+    confidence: isEdgeCase ? 1.0 : 0,
+    reasoning: isEdgeCase
+      ? `Contenido sensible detectado: ${factors.join(', ')}. Enrutando a Especialista en Documentación (agente más robusto y restrictivo).`
+      : ''
+  };
+}
+
+/**
+ * Metadata-informed intent classification.
+ *
+ * Replaces pure keyword-based routing with a layered decision strategy:
+ *   1. Edge case detection (risk, stress, sensitive content) → clinico override
+ *   2. Explicit agent request detection (regex) → direct routing
+ *   3. Keyword heuristic scoring (Tier 2) → switch if strong signal
+ *   4. Sticky routing (Tier 3) → stay with current agent
+ *   5. Fallback → socratico
+ *
+ * The metadata is used to:
+ * - Override routing in critical situations (risk, stress)
+ * - Adjust confidence thresholds dynamically
+ * - Prevent socratico from handling high-risk cases
+ * - Provide enriched decision context with justification
+ */
+export function classifyIntentWithMetadata(
+  userInput: string,
+  previousAgent?: string,
+  metadata?: OperationalMetadata
+): RoutingDecision {
+  // If no metadata is provided, fall back to heuristic-only routing (backward compat)
+  if (!metadata) {
+    const heuristic = classifyIntentByHeuristic(userInput, previousAgent);
+    return {
+      agent: heuristic.selectedAgent as 'socratico' | 'clinico' | 'academico',
+      confidence: heuristic.confidence,
+      reason: RoutingReason.NORMAL_CLASSIFICATION,
+      metadata_factors: ['no_metadata_available'],
+      is_edge_case: false
+    };
+  }
+
+  // ── Step 1: Edge case detection ────────────────────────────────────────────
+
+  // 1a. Critical/high risk override → clinico
+  const riskResult = isEdgeCaseRisk(metadata);
+  if (riskResult.is_edge_case) {
+    logger.warn('🚨 EDGE CASE: Risk detected, routing to clinico', {
+      factors: riskResult.detected_factors,
+      riskLevel: metadata.risk_level
+    });
+    return {
+      agent: 'clinico',
+      confidence: 1.0,
+      reason: metadata.risk_level === 'critical'
+        ? RoutingReason.CRITICAL_RISK_OVERRIDE
+        : RoutingReason.HIGH_RISK_OVERRIDE,
+      metadata_factors: riskResult.detected_factors,
+      is_edge_case: true,
+      edge_case_type: 'risk'
+    };
+  }
+
+  // 1b. System stress override → clinico
+  const stressResult = isEdgeCaseStress(metadata);
+  if (stressResult.is_edge_case) {
+    logger.warn('⚠️ EDGE CASE: Stress detected, routing to clinico', {
+      factors: stressResult.detected_factors
+    });
+    return {
+      agent: 'clinico',
+      confidence: 1.0,
+      reason: RoutingReason.STRESS_OVERRIDE,
+      metadata_factors: stressResult.detected_factors,
+      is_edge_case: true,
+      edge_case_type: 'stress'
+    };
+  }
+
+  // 1c. Sensitive content + risk context → clinico
+  const sensitiveResult = isEdgeCaseSensitiveContent(userInput, metadata);
+  if (sensitiveResult.is_edge_case) {
+    logger.warn('⚠️ EDGE CASE: Sensitive content detected, routing to clinico', {
+      factors: sensitiveResult.detected_factors
+    });
+    return {
+      agent: 'clinico',
+      confidence: 1.0,
+      reason: RoutingReason.SENSITIVE_CONTENT_OVERRIDE,
+      metadata_factors: sensitiveResult.detected_factors,
+      is_edge_case: true,
+      edge_case_type: 'sensitive_content'
+    };
+  }
+
+  // ── Step 2: Explicit agent request (regex) ─────────────────────────────────
+  const explicitRequest = detectExplicitAgentRequest(userInput);
+  if (explicitRequest.isExplicit) {
+    const agent = explicitRequest.requestType as 'socratico' | 'clinico' | 'academico';
+    // Prevent socratico in elevated risk sessions (even with explicit request)
+    if (agent === 'socratico' && (metadata.risk_level === 'high' || metadata.risk_level === 'critical')) {
+      logger.warn('⚠️ Explicit socratico request blocked due to elevated risk, routing to clinico');
+      return {
+        agent: 'clinico',
+        confidence: 0.95,
+        reason: RoutingReason.HIGH_RISK_OVERRIDE,
+        metadata_factors: ['explicit_request_blocked_by_risk', `risk_level_${metadata.risk_level}`],
+        is_edge_case: true,
+        edge_case_type: 'risk'
+      };
+    }
+    return {
+      agent,
+      confidence: 1.0,
+      reason: RoutingReason.EXPLICIT_USER_REQUEST,
+      metadata_factors: ['explicit_agent_request'],
+      is_edge_case: false
+    };
+  }
+
+  // ── Step 3: Keyword heuristic scoring ──────────────────────────────────────
+  const heuristic = classifyIntentByHeuristic(userInput, previousAgent);
+
+  // Adjust confidence threshold based on metadata
+  const dynamicThreshold = calculateDynamicConfidenceThreshold(metadata);
+
+  // If heuristic gave a strong signal (switched agent) and confidence is above dynamic threshold
+  if (heuristic.selectedAgent !== (previousAgent || 'socratico') && heuristic.confidence >= dynamicThreshold) {
+    const selectedAgent = heuristic.selectedAgent as 'socratico' | 'clinico' | 'academico';
+    // Prevent routing to socratico if risk is elevated
+    if (selectedAgent === 'socratico' && (metadata.risk_level === 'high' || metadata.risk_level === 'critical')) {
+      return {
+        agent: previousAgent as 'socratico' | 'clinico' | 'academico' || 'clinico',
+        confidence: 0.85,
+        reason: RoutingReason.HIGH_RISK_OVERRIDE,
+        metadata_factors: ['heuristic_socratico_blocked_by_risk', `risk_level_${metadata.risk_level}`],
+        is_edge_case: true,
+        edge_case_type: 'risk'
+      };
+    }
+    return {
+      agent: selectedAgent,
+      confidence: heuristic.confidence,
+      reason: RoutingReason.HIGH_CONFIDENCE_CLASSIFICATION,
+      metadata_factors: ['keyword_heuristic_match'],
+      is_edge_case: false
+    };
+  }
+
+  // ── Step 4: Therapeutic phase influence ────────────────────────────────────
+  // Therapeutic phase influence applies when heuristic didn't find a strong
+  // keyword signal (i.e., stayed with current agent via sticky routing).
+  const heuristicStayed = heuristic.selectedAgent === (previousAgent || 'socratico');
+
+  if (metadata.therapeutic_phase === 'closure' && metadata.session_count > 10) {
+    // In closure phase with many sessions, bias toward documentation
+    if (heuristicStayed && heuristic.selectedAgent !== 'clinico') {
+      return {
+        agent: 'clinico',
+        confidence: 0.82,
+        reason: RoutingReason.CLOSURE_PHASE_SUGGESTED,
+        metadata_factors: ['closure_phase', `session_count_${metadata.session_count}`],
+        is_edge_case: false
+      };
+    }
+  }
+
+  if (metadata.therapeutic_phase === 'assessment') {
+    // In assessment phase, bias toward socratico for exploration
+    if (heuristicStayed && heuristic.selectedAgent !== 'socratico' && heuristic.selectedAgent !== 'academico') {
+      return {
+        agent: 'socratico',
+        confidence: 0.80,
+        reason: RoutingReason.ASSESSMENT_PHASE_SUGGESTED,
+        metadata_factors: ['assessment_phase'],
+        is_edge_case: false
+      };
+    }
+  }
+
+  // ── Step 5: Sticky routing with stability ──────────────────────────────────
+  const defaultAgent = (previousAgent || 'socratico') as 'socratico' | 'clinico' | 'academico';
+
+  // If there have been frequent recent switches, penalize further switching
+  if (metadata.consecutive_switches > 2) {
+    return {
+      agent: defaultAgent,
+      confidence: 0.85,
+      reason: RoutingReason.STABILITY_OVERRIDE,
+      metadata_factors: [`consecutive_switches_${metadata.consecutive_switches}`],
+      is_edge_case: false
+    };
+  }
+
+  // ── Step 6: Default — maintain current agent or fallback to socratico ──────
+  return {
+    agent: defaultAgent,
+    confidence: 0.85,
+    reason: RoutingReason.CONTINUITY_MAINTAINED,
+    metadata_factors: ['no_strong_signal'],
+    is_edge_case: false
+  };
+}
+
+/**
+ * Calculates a dynamic confidence threshold based on operational metadata.
+ * Higher thresholds = more reluctant to switch agents.
+ */
+function calculateDynamicConfidenceThreshold(metadata: OperationalMetadata): number {
+  const config = DEFAULT_EDGE_CASE_CONFIG;
+  let threshold = config.confidence.high_confidence_threshold; // 0.75 default
+
+  // Increase threshold if risk flags are active (be more cautious about switching)
+  if (metadata.risk_flags_active.length > 0) {
+    threshold = Math.max(threshold, 0.85);
+  }
+
+  // Increase threshold if there have been frequent switches (prevent ping-pong)
+  if (metadata.consecutive_switches > 2) {
+    threshold += 0.10;
+  }
+
+  // Decrease threshold slightly for very short sessions (allow initial routing flexibility)
+  if (metadata.session_duration_minutes < 5) {
+    threshold += 0.05; // Actually increase — avoid premature switches
+  }
+
+  return Math.min(0.95, threshold);
 }
 
 /**

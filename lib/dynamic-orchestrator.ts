@@ -21,6 +21,7 @@ import { ToolRegistry, ClinicalTool } from './tool-registry';
 import { createLogger } from '@/lib/logger';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
 import type { ClinicalFile } from '@/types/clinical-types';
+import type { OperationalMetadata, RoutingDecision } from '@/types/operational-metadata';
 
 /**
  * Tipo para el contenido de conversación
@@ -45,6 +46,13 @@ interface SessionContext {
     dominantTopics: string[];
     clinicalFocus?: string;
   };
+  // Metadata-informed routing: track agent transitions
+  agentTransitions: Array<{
+    from: string;
+    to: string;
+    timestamp: Date;
+    reason: string;
+  }>;
 }
 
 /**
@@ -58,6 +66,7 @@ interface DynamicOrchestrationResult {
   sessionContext: SessionContext;
   confidence: number;
   reasoning: string;
+  routingDecision?: RoutingDecision;
 }
 
 /**
@@ -145,11 +154,15 @@ export class DynamicOrchestrator {
       // 2. Actualizar historial de conversación con archivos adjuntos (usuario)
       this.updateConversationHistory(sessionContext, userInput, sessionFiles);
       
-      // 3. Realizar orquestación inteligente PRIMERO para obtener el agente correcto
+      // 2.5 Collect operational metadata for intelligent routing
+      const operationalMetadata = this.collectOperationalMetadata(sessionContext);
+      
+      // 3. Realizar orquestación inteligente con metadata
       const orchestrationResult = await this.intentRouter.orchestrateWithTools(
         userInput,
         sessionContext.conversationHistory,
-        sessionContext.currentAgent
+        sessionContext.currentAgent,
+        operationalMetadata
       );
 
       // 4. Optimizar selección de herramientas
@@ -168,6 +181,14 @@ export class DynamicOrchestrator {
 
       // Registrar cambio de agente si es diferente al anterior
       if (sessionContext.currentAgent && sessionContext.currentAgent !== orchestrationResult.selectedAgent) {
+        // Track transition for metadata-informed routing
+        sessionContext.agentTransitions.push({
+          from: sessionContext.currentAgent,
+          to: orchestrationResult.selectedAgent,
+          timestamp: new Date(),
+          reason: orchestrationResult.reasoning
+        });
+
         this.metricsTracker.trackAgentSwitch({
           userId,
           sessionId,
@@ -188,7 +209,8 @@ export class DynamicOrchestrator {
         toolMetadata: orchestrationResult.toolMetadata,
         sessionContext,
         confidence: orchestrationResult.confidence,
-        reasoning: orchestrationResult.reasoning
+        reasoning: orchestrationResult.reasoning,
+        routingDecision: (orchestrationResult as any).routingDecision
       };
 
       this.log('info', `Orquestación completada: ${orchestrationResult.selectedAgent} con ${optimizedTools.length} herramientas`);
@@ -214,6 +236,7 @@ export class DynamicOrchestrator {
         userId,
         conversationHistory: [],
         activeTools: [],
+        agentTransitions: [],
         sessionMetadata: {
           startTime: new Date(),
           totalInteractions: 0,
@@ -255,6 +278,98 @@ export class DynamicOrchestrator {
     if (session.conversationHistory.length > 40) {
       session.conversationHistory = session.conversationHistory.slice(-40);
     }
+  }
+
+  /**
+   * Collects operational metadata from session context for metadata-informed routing.
+   * This metadata is used by the router to detect edge cases and make
+   * intelligent routing decisions.
+   */
+  private collectOperationalMetadata(session: SessionContext): OperationalMetadata {
+    const now = new Date();
+    const sessionDurationMs = now.getTime() - session.sessionMetadata.startTime.getTime();
+    const sessionDurationMinutes = Math.floor(sessionDurationMs / 60000);
+
+    // Determine time of day
+    const hour = now.getHours();
+    let timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+    if (hour >= 6 && hour < 12) timeOfDay = 'morning';
+    else if (hour >= 12 && hour < 18) timeOfDay = 'afternoon';
+    else if (hour >= 18 && hour < 22) timeOfDay = 'evening';
+    else timeOfDay = 'night';
+
+    // Detect region from timezone
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let region: 'LATAM' | 'EU' | 'US' | 'ASIA' | 'OTHER' = 'OTHER';
+    if (timezone.startsWith('America/') && !['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Phoenix', 'America/Anchorage', 'America/Honolulu'].includes(timezone)) {
+      region = 'LATAM';
+    } else if (timezone.startsWith('Europe/')) {
+      region = 'EU';
+    } else if (timezone.startsWith('America/')) {
+      region = 'US';
+    } else if (timezone.startsWith('Asia/')) {
+      region = 'ASIA';
+    }
+
+    // Count agent transitions and consecutive switches
+    const recentTransitions = session.agentTransitions.filter(
+      t => now.getTime() - t.timestamp.getTime() < 5 * 60 * 1000 // Last 5 minutes
+    );
+    const consecutiveSwitches = recentTransitions.length;
+
+    // Count turns per agent
+    const agentTurnCounts: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+    for (const transition of session.agentTransitions) {
+      if (agentTurnCounts[transition.to] !== undefined) {
+        agentTurnCounts[transition.to]++;
+      }
+    }
+    // Count current agent's interactions
+    if (session.currentAgent && agentTurnCounts[session.currentAgent] !== undefined) {
+      agentTurnCounts[session.currentAgent] = Math.max(
+        agentTurnCounts[session.currentAgent],
+        session.sessionMetadata.totalInteractions - session.agentTransitions.length
+      );
+    }
+
+    const lastTransition = session.agentTransitions.length > 0
+      ? session.agentTransitions[session.agentTransitions.length - 1]
+      : null;
+
+    return {
+      // Risk metadata (defaults — can be overridden by patient context)
+      risk_flags_active: [],
+      risk_level: 'low',
+      last_risk_assessment: null,
+      requires_immediate_attention: false,
+
+      // Temporal metadata
+      timestamp_utc: now.toISOString(),
+      timezone,
+      local_time: now.toLocaleString('es-ES', { timeZone: timezone }),
+      region,
+      session_duration_minutes: sessionDurationMinutes,
+      time_of_day: timeOfDay,
+
+      // Agent history metadata
+      agent_transitions: session.agentTransitions.map(t => ({
+        from: t.from as any,
+        to: t.to as any,
+        timestamp: t.timestamp,
+        reason: t.reason
+      })),
+      agent_turn_counts: agentTurnCounts as any,
+      last_agent_switch: lastTransition?.timestamp || null,
+      consecutive_switches: consecutiveSwitches,
+
+      // Patient context (defaults — enriched by caller when available)
+      patient_id: null,
+      patient_summary_available: false,
+      therapeutic_phase: null,
+      session_count: 0,
+      last_session_date: null,
+      treatment_modality: null
+    };
   }
 
   /**
@@ -356,6 +471,7 @@ export class DynamicOrchestrator {
       userId,
       conversationHistory: [],
       activeTools: [],
+      agentTransitions: [],
       sessionMetadata: {
         startTime: new Date(),
         totalInteractions: 0,
