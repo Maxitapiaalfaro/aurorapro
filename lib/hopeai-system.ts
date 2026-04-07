@@ -758,6 +758,20 @@ export class HopeAISystem {
         confidence: 0
       }
 
+      // 🧠 CLINICAL MEMORIES: Inject relevant inter-session memories if patient is active
+      if (patientReference && currentState.userId) {
+        try {
+          const { getRelevantMemories } = await import('./clinical-memory-system')
+          const clinicalMemories = await getRelevantMemories(currentState.userId, patientReference, message, 5)
+          if (clinicalMemories.length > 0) {
+            ;(enrichedSessionContext as any).clinicalMemories = clinicalMemories
+            sessionLogger.info(`🧠 Clinical memories injected: ${clinicalMemories.length} memories for patient ${patientReference}`)
+          }
+        } catch (memoryError) {
+          sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: memoryError instanceof Error ? memoryError.message : String(memoryError) })
+        }
+      }
+
       // 📊 METADATA COLLECTION: Recolectar metadata operativa ANTES de routing
       // Esta metadata está disponible para todos los tipos de routing
       sessionLogger.debug('📊 Collecting operational metadata')
@@ -1139,6 +1153,11 @@ export class HopeAISystem {
               } catch (saveError) {
                 sessionLogger.error('❌ Failed to save streaming response to history', { error: saveError instanceof Error ? saveError.message : String(saveError) })
               }
+
+              // 🧠 MEMORY EXTRACTION: Extract and save clinical memories (fire-and-forget)
+              self.extractAndSaveMemoriesAsync(currentState, message, accumulatedText, sessionId).catch(err => {
+                sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+              })
             }
           }
         })();
@@ -1180,6 +1199,11 @@ export class HopeAISystem {
           // Don't block user flow, just log the error
         })
       }
+
+      // 🧠 MEMORY EXTRACTION: Extract and save clinical memories (fire-and-forget)
+      this.extractAndSaveMemoriesAsync(currentState, message, responseContent, sessionId).catch(err => {
+        sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+      })
 
       // 📊 METRICS TRACKING for non-streaming
       // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
@@ -1617,6 +1641,85 @@ Por favor, genera una confirmación precisa y académica que refleje mi enfoque 
       metrics: sessionMetrics.snapshot,
       behavioralInsights: sessionMetrics.interactions
     };
+  }
+
+  /**
+   * 🧠 CLINICAL MEMORY: Extract observations, patterns and preferences from model responses
+   * and persist them as inter-session memories. Fire-and-forget — never blocks user flow.
+   *
+   * Runs every 3rd user message for a patient to avoid overloading Firestore writes.
+   */
+  private async extractAndSaveMemoriesAsync(
+    chatState: ChatState,
+    userMessage: string,
+    modelResponse: string,
+    sessionId: string
+  ): Promise<void> {
+    const patientId = chatState.clinicalContext?.patientId
+    if (!patientId || !chatState.userId) return
+
+    // Only run every 3rd interaction to limit writes
+    const userMessages = chatState.history.filter(msg => msg.role === 'user')
+    if (userMessages.length % 3 !== 0) return
+
+    if (!modelResponse || modelResponse.length < 50) return
+
+    try {
+      const { saveMemory } = await import('./clinical-memory-system')
+
+      type MemoryPattern = {
+        regex: RegExp
+        category: 'observation' | 'pattern' | 'therapeutic-preference'
+      }
+
+      const patterns: MemoryPattern[] = [
+        { regex: /(?:el |la )?paciente\s+(?:reporta|menciona|describe|indica)\s+(.{10,80})/gi, category: 'observation' },
+        { regex: /se\s+(?:observa|detecta|identifica|nota)\s+(.{10,80})/gi, category: 'observation' },
+        { regex: /patr[oó]n\s+(?:recurrente|persistente|identificado)\s+(.{10,60})/gi, category: 'pattern' },
+        { regex: /(?:evita|evitaci[oó]n|resistencia)\s+.{0,40}(?:hablar|abordar|mencionar)\s+(.{5,60})/gi, category: 'pattern' },
+        { regex: /responde\s+(?:bien|positivamente|favorablemente)\s+a\s+(.{10,80})/gi, category: 'therapeutic-preference' },
+        { regex: /(?:t[eé]cnica|enfoque|intervenci[oó]n)\s+(?:recomendad|efectiv|sugerid)\w*\s*:?\s*(.{10,80})/gi, category: 'therapeutic-preference' },
+      ]
+
+      const memories: Array<{ content: string; category: 'observation' | 'pattern' | 'therapeutic-preference' }> = []
+
+      for (const { regex, category } of patterns) {
+        let match: RegExpExecArray | null
+        while ((match = regex.exec(modelResponse)) !== null) {
+          // Take the full matched sentence context, not just the capture group
+          const content = match[0].trim()
+          if (content.length >= 15) {
+            memories.push({ content, category })
+          }
+          if (memories.length >= 5) break
+        }
+        if (memories.length >= 5) break
+      }
+
+      if (memories.length === 0) return
+
+      for (const mem of memories) {
+        const memoryDoc = {
+          memoryId: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          patientId,
+          psychologistId: chatState.userId,
+          category: mem.category,
+          content: mem.content,
+          sourceSessionIds: [sessionId],
+          confidence: 0.7,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isActive: true,
+          tags: [],
+          relevanceScore: 0.5,
+        }
+        await saveMemory(memoryDoc)
+      }
+
+      sessionLogger.info(`🧠 Clinical memories extracted and saved: ${memories.length} memories for patient ${patientId}`)
+    } catch (error) {
+      sessionLogger.warn('⚠️ Memory extraction error (non-blocking)', { error: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   /**

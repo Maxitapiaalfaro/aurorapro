@@ -102,6 +102,16 @@ export function getAgentSpecialtyName(agentType: AgentType): string {
 }
 
 /**
+ * METADATA SECTION: Memorias clínicas inter-sesión
+ * Inyecta memorias relevantes del paciente al contexto del agente
+ */
+export function buildClinicalMemoriesSection(memories: any[]): string {
+  if (!memories || memories.length === 0) return '';
+  const formatted = memories.map(m => `- [${m.category}] ${m.content}`).join('\n');
+  return `Memorias clínicas inter-sesión del paciente:\n${formatted}`;
+}
+
+/**
  * Adds subtle transition context when switching agents to maintain conversational flow
  */
 export function addAgentTransitionContext(geminiHistory: any[], newAgentType: AgentType): any[] {
@@ -159,6 +169,12 @@ export function buildEnhancedMessage(originalMessage: string, enrichedContext: a
   if (enrichedContext.patient_reference) {
     contextSections.push(buildClinicalCaseContextSection(enrichedContext))
     logger.info(`Clinical case context included`)
+  }
+
+  // 4.5. MEMORIAS CLÍNICAS INTER-SESIÓN (si están disponibles)
+  if (enrichedContext.clinicalMemories?.length > 0) {
+    contextSections.push(buildClinicalMemoriesSection(enrichedContext.clinicalMemories))
+    logger.info(`Clinical memories included: ${enrichedContext.clinicalMemories.length}`)
   }
 
   // 5. ENTIDADES EXTRAÍDAS (si están disponibles)
