@@ -3,7 +3,7 @@
 **Date**: 2026-04-06 | **Updated**: 2026-04-07
 **Purpose**: Enable a second agent to work in parallel with the primary agent session.
 
-> **⚠ Update 2026-04-07**: P2 (Dead Code Purge), P3 (Decompose clinical-agent-router), P4 (Orchestration Simplification), and **R1 (Single-Call Architecture)** are all **COMPLETED**. R1 eliminated the LLM pre-classification call — orchestration is now deterministic (<5ms). Task D (Clinical Memory System) has been **IMPLEMENTED**. Consult `aurora-architecture.md` for the current codebase state.
+> **⚠ Update 2026-04-07**: P2 (Dead Code Purge), P3 (Decompose clinical-agent-router), P4 (Orchestration Simplification), **R1 (Single-Call Architecture)**, and **Gap P2.1 (Clinical Memory Wiring)** are all **COMPLETED**. Firebase CLI config files created (`firebase.json`, `.firebaserc`) — manual deploy pending. Consult `aurora-architecture.md` for the current codebase state.
 
 ---
 
@@ -78,21 +78,26 @@ Pick from these tasks in order of priority.
 
 ---
 
-### Task B: Deploy Firestore Security Rules — PENDING
+### Task B: Deploy Firestore Security Rules — PARTIALLY COMPLETE
 
 **Goal**: Deploy the existing `firestore.rules` file to the Firebase project.
 
 **Context**:
 - `firestore.rules` exists at project root with uid-scoped rules
-- No `firebase.json` or `.firebaserc` exists yet — Firebase CLI hasn't been initialized
+- `firebase.json` and `.firebaserc` now exist — Firebase CLI can connect
 - Firebase Auth is already integrated — all client-side calls go through authenticated contexts
 
-**Deliverables**:
-1. Run `firebase init` to create `firebase.json` and `.firebaserc` (select only Firestore rules)
-2. Deploy rules with `firebase deploy --only firestore:rules`
-3. Verify rules work by testing authenticated read/write
+**Completed**:
+1. ✅ Created `firebase.json` — points to `firestore.rules`
+2. ✅ Created `.firebaserc` — maps to project `project-f72e4c83-5347-45b1-bb2`
 
-**Files you CAN touch**: `firebase.json` (new), `.firebaserc` (new), `firestore.rules` (existing).
+**Remaining (manual)**:
+1. Install Firebase CLI: `npm install -g firebase-tools`
+2. Login: `firebase login`
+3. Deploy: `firebase deploy --only firestore:rules`
+4. Verify rules work by testing authenticated read/write
+
+**Files created**: `firebase.json`, `.firebaserc`.
 
 ---
 
@@ -115,25 +120,27 @@ Pick from these tasks in order of priority.
 
 ---
 
-### Task D: Clinical Inter-Session Memory System (Gap Analysis P2.1) — ✅ COMPLETED
+### Task D: Clinical Inter-Session Memory System (Gap Analysis P2.1) — ✅ FULLY COMPLETED
 
 **Goal**: Build the foundation for a persistent clinical memory system that remembers observations across patient sessions.
 
 **Context**:
 - Firestore already stores session data at `psychologists/{uid}/patients/{pid}/sessions/{sid}/messages/{mid}`
-- No semantic memory extraction exists yet
-- The system should extract clinical observations at session end and inject relevant ones at session start
-- Reference pattern: Claude Code's `memdir/` system (see `docs/architecture/claude/claude-code-main/`)
+- The system extracts clinical observations from model responses and injects relevant ones into agent context
 
-**Deliverables**:
-1. Create `types/memory-types.ts` — memory document types (categories: observations, patterns, therapeutic-preferences)
-2. Create `lib/clinical-memory-system.ts` — extraction, storage (Firestore), retrieval functions
-3. Define Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
-4. DO NOT wire into `hopeai-system.ts` yet — that integration happens after P2
+**Completed**:
+1. ✅ `types/memory-types.ts` — ClinicalMemory, ClinicalMemoryCategory, ClinicalMemoryQueryOptions
+2. ✅ `lib/clinical-memory-system.ts` — CRUD + keyword relevance search (291 lines)
+3. ✅ `lib/agents/message-context-builder.ts` — Added `buildClinicalMemoriesSection()` + section 4.5 in `buildEnhancedMessage()`
+4. ✅ `lib/hopeai-system.ts` — Memory injection (retrieves 5 relevant memories) + `extractAndSaveMemoriesAsync()` fire-and-forget extraction
 
-**Delivered**: Both `types/memory-types.ts` and `lib/clinical-memory-system.ts` (291 lines) now exist.
+**Memory extraction**:
+- Runs every 3rd user message for patient sessions
+- Regex-based extraction of observations, patterns, therapeutic preferences from model responses
+- Categories: `observation` | `pattern` | `therapeutic-preference`
+- Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
 
-**Files created**: `types/memory-types.ts`, `lib/clinical-memory-system.ts`.
+**Files modified**: `types/memory-types.ts`, `lib/clinical-memory-system.ts`, `lib/agents/message-context-builder.ts`, `lib/hopeai-system.ts`.
 
 ---
 

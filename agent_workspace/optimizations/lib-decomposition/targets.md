@@ -2,7 +2,7 @@
 
 **Date**: 2026-04-06 (original) | **Updated**: 2026-04-07
 **Baseline Commit**: 7d483bd (main branch)
-**Update context**: Post P0, P1, P2, partial P5/P6 execution.
+**Update context**: Post P0, P1, P2, partial P5/P6 execution, Promptware 2026 prompt audit.
 
 > **Status Notes (2026-04-07):**
 > - P0 (Firebase Auth) and P1 (Firestore offline-first migration) are COMPLETE.
@@ -114,7 +114,7 @@ Per ADR-001 (`decision-log/001-storage-migration-before-decomposition.md`), this
 
 | Actual File | Lines | Responsibility |
 |-------------|------:|----------------|
-| `agents/agent-definitions.ts` | 1,182 | Agent system prompt templates and config maps |
+| `agents/agent-definitions.ts` | 456 | Agent system prompt templates and config maps (Promptware 2026 optimized, 68% reduction from 1,182) |
 | `agents/streaming-handler.ts` | 798 | Streaming dispatch with tool/function-call handling |
 | `agents/message-context-builder.ts` | 150 | File context injection and format conversion |
 
@@ -152,8 +152,8 @@ Per ADR-001 (`decision-log/001-storage-migration-before-decomposition.md`), this
 
 | Metric | Baseline (2026-04-06) | Current (2026-04-07) |
 |--------|----------------------:|---------------------:|
-| Total lines across targets | 11,490 | 4,176 (P2+P7+P3+P6 remaining) |
-| Total lines in `lib/` | ~30,010 | ~23,368 |
+| Total lines across targets | 11,490 | 3,450 (P2+P7+P3+P6 remaining; agent-definitions reduced 1,182→456) |
+| Total lines in `lib/` | ~30,010 | ~22,642 |
 | Files >700 lines | 7 | 4 |
 | Decomposition targets remaining | 7 | 3 (P2, P3, P7) + re-evaluate P4 |
 | Executed decompositions | 0 | 2 partial (P5, P6) |

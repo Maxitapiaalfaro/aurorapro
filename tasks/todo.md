@@ -35,6 +35,16 @@
 - [x] TypeScript compilation verified — zero new errors | Status: done
 - **Impact**: 2→1 LLM calls per message, 300-700ms orchestration latency → <5ms, ~800 tokens/msg overhead eliminated
 
+### Promptware 2026 Audit — COMPLETE (2026-04-07)
+- [x] Audit agent system prompts against Promptware Engineering 2026 / SCORE framework | Priority: H | Status: done
+- [x] Refactor GLOBAL_BASE_INSTRUCTION v5.1 → v6.0 (~480 → ~220 tokens) | Priority: H | Status: done
+- [x] Refactor Supervisor Clínico (socratico) (~3,680 → ~2,320 tokens) | Priority: H | Status: done
+- [x] Refactor Documentación (clinico) (~3,880 → ~2,220 tokens) | Priority: H | Status: done
+- [x] Refactor Académico (academico) (~5,680 → ~3,020 tokens) | Priority: H | Status: done
+- [x] `agent-definitions.ts` reduced from 1,414 → 456 lines (**68% reduction**) | Status: done
+- [x] TypeScript compilation verified — zero new errors | Status: done
+- **Methodology**: "Calidez como Protocolo Conductual" — warmth encoded as 5 deterministic behavioral rules (registro_conversacional) instead of abstract adjectives. Negations → positive affirmations. Meta-reasoning duplication eliminated (thinkingLevel handles it). Search protocol consolidated (Académico: 3 sections → 1).
+
 ### P5: Further Module Decomposition (MEDIUM)
 - [ ] Decompose `clinical-pattern-analyzer.ts` → `lib/patterns/` | Priority: M | Status: pending
 - [ ] Decompose `entity-extraction-engine.ts` → `lib/entities/` | Priority: M | Status: pending
@@ -49,11 +59,17 @@
 - [ ] Consolidate 5 metrics modules into unified tracker | Priority: L | Status: pending
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
 
-### Gap Analysis: Clinical Memory (P2.1)
+### Gap Analysis: Clinical Memory (P2.1) — COMPLETE (2026-04-07)
 - [x] Create `types/memory-types.ts` (ClinicalMemory types) | Priority: H | Status: done
 - [x] Create `lib/clinical-memory-system.ts` (CRUD + relevance search) | Priority: H | Status: done
-- [ ] Wire into `hopeai-system.ts` (after P2 merges) | Priority: M | Status: pending
-- [ ] Add memory extraction at session end | Priority: M | Status: pending
+- [x] Wire into `hopeai-system.ts` — memory injection + extraction | Priority: M | Status: done
+- [x] Add memory extraction post-response (fire-and-forget) | Priority: M | Status: done
+- [x] Add `buildClinicalMemoriesSection()` to `message-context-builder.ts` | Priority: M | Status: done
+
+### Firebase CLI Configuration — COMPLETE (2026-04-07)
+- [x] Create `firebase.json` (firestore rules pointer) | Priority: H | Status: done
+- [x] Create `.firebaserc` (project ID mapping) | Priority: H | Status: done
+- [ ] Deploy rules via `firebase deploy --only firestore:rules` | Priority: H | Status: pending (manual)
 
 ### Server-Side Subcollection Alignment (Phase 4a)
 - [x] Add `addMessage()` to `firestore-storage-adapter.ts` | Priority: H | Status: done
@@ -122,6 +138,14 @@
   - `intelligent-intent-router.ts`: 559 → 216 lines (**61% reduction**)
   - Net reduction: ~340 lines removed
   - Verification: zero new TypeScript errors, zero dangling references
+- [x] 2026-04-07: **Gap P2.1 — Clinical Memory System Wiring** (COMPLETE)
+  - Created `firebase.json` and `.firebaserc` for Firebase CLI deployment
+  - Added `buildClinicalMemoriesSection()` to `message-context-builder.ts`
+  - Wired memory injection in `hopeai-system.ts` — retrieves up to 5 relevant memories when patient is active
+  - Added `extractAndSaveMemoriesAsync()` — fire-and-forget regex-based memory extraction from model responses
+  - Extraction runs every 3rd user message for patient sessions, extracts observations/patterns/therapeutic-preferences
+  - Memories injected as section 4.5 in XML-tagged context (`<contexto_sistema>`)
+  - Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
 
 ## Review Notes
 <!-- Post-task review observations -->

@@ -36,9 +36,23 @@
 - **Decision:** Replaced LLM-based intent classification (3 agents) with deterministic keyword heuristic. The decision space is small (3 options), the keywords are predictable, and the main model can handle cross-domain queries natively.
 - **Rule:** LLM calls for routing/classification are only justified when the decision space is large, when the options themselves change dynamically, or when natural language understanding is genuinely required. For fixed categories with strong keyword signals, heuristics are faster, cheaper, and more predictable.
 
+### 2026-04-07: Encode warmth as deterministic behavioral protocols, not abstract adjectives
+- **Problem:** Promptware 2026 best practices demand eliminating abstract adjectives ("sé cálida", "profesional"), but clinical agents need conversational warmth to avoid robotic output.
+- **Solution:** "Calidez como Protocolo Conductual" — 5 deterministic communication rules (VALIDACIÓN-PRIMERO, ENMARCADO COLABORATIVO, ESPEJO EMOCIONAL, NOMBRAMIENTO DEL ACIERTO, LÍMITE EMPÁTICO) that produce warm output through observable behaviors.
+- **Rule:** If a prompt quality (e.g., "warmth", "empathy") can't be observed in the output, it doesn't belong in the prompt. Convert abstract qualities into specific behavioral rules with measurable constraints (e.g., "≤1 oración", "≤10 palabras").
+
+### 2026-04-07: Eliminate meta-reasoning instructions when API-level thinking is configured
+- **Discovery:** All 3 agents had "think before responding" prompt sections (~20-40 lines each) that duplicated `thinkingLevel: 'medium'` already in the Gemini API config.
+- **Rule:** When the model API provides a thinking/reasoning parameter (e.g., Gemini's `thinkingConfig`), remove all prompt-level meta-reasoning instructions. They waste tokens and can conflict with the API behavior.
+
+### 2026-04-07: Convert negations to positive affirmations with routes
+- **Pattern:** Per SCORE framework, "NO eres un transcriptor" keeps residual attention on "transcriptor". Better: "Sintetizas información clínica en documentación profesional" — directs attention to the desired behavior.
+- **Rule:** Replace "NO hagas X" / "NUNCA hagas X" with "Haz Y" where Y is the positive behavior. Include the verb + specific output format when possible.
+
 ## Session Log
 
 - **2026-04-06:** User corrected priority ordering. Static decomposition analysis missed the Firebase offline-first migration spec. Updated P1 from file decomposition to migration completion. Lesson captured above.
 - **2026-04-06:** Cross-agent analysis synthesis completed. Both Claude and Copilot agents converge on cascading LLM calls + dead code as primary bottlenecks. New P2 (dead code purge) inserted before orchestration decomposition. Firebase Auth promoted to P0 (blocks all storage work). ADR-002 recorded.
 - **2026-04-06:** P0 (Firebase Auth) and P1 (Firestore offline-first migration) completed. 3 client files deleted (~1,195 lines), replaced by `firestore-client-storage.ts` (545 lines). Net reduction: 650 lines. 5 hooks + 5 components + server-side patient reads migrated.
 - **2026-04-07:** R1 (Single-Call Architecture) completed. LLM pre-classification eliminated. 2→1 LLM calls per message. 300-700ms→<5ms orchestration latency. Key discovery: contextualTools were never consumed by chat sessions.
+- **2026-04-07:** Promptware 2026 audit completed. All 3 agent prompts refactored: 1,414→456 lines (68% reduction), ~13,134→~5,520 tokens. Key synthesis: "Calidez como Protocolo Conductual" — encoding warmth as behavioral rules instead of abstract adjectives. 3 lessons captured above.

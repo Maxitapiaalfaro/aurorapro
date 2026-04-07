@@ -2,7 +2,7 @@
 
 **Date**: 2026-04-06 (original) | **Updated**: 2026-04-07
 **Baseline Commit**: 7d483bd (main branch)
-**Update context**: Post P0 (Firebase Auth), P1 (Firestore migration), P2 (dead code purge), partial P5/P6 decomposition.
+**Update context**: Post P0 (Firebase Auth), P1 (Firestore migration), P2 (dead code purge), partial P5/P6 decomposition, Promptware 2026 prompt audit.
 
 ---
 
@@ -25,7 +25,7 @@ lib/utils/                    ( 1 file)
 | File | Lines | Description |
 |------|------:|-------------|
 | `hopeai-system.ts` | 1,684 | Top-level HopeAI system orchestrator |
-| `agents/agent-definitions.ts` | 1,182 | Agent system prompt templates and config maps |
+| `agents/agent-definitions.ts` | 456 | Agent system prompt templates and config maps (post-Promptware 2026 audit) |
 | `entity-extraction-engine.ts` | 806 | NLP entity extraction for clinical conversations |
 | `agents/streaming-handler.ts` | 798 | Streaming message dispatch with tool/function-call handling |
 | `clinical-pattern-analyzer.ts` | 686 | Longitudinal therapeutic pattern analysis |
@@ -116,7 +116,7 @@ lib/utils/                    ( 1 file)
 
 ### A. AI/LLM Orchestration (24% — 5,547 lines)
 - `hopeai-system.ts` (1,684) — Top-level system facade
-- `agents/agent-definitions.ts` (1,182) — Agent system prompt templates
+- `agents/agent-definitions.ts` (456) — Agent system prompt templates (Promptware 2026 optimized)
 - `agents/streaming-handler.ts` (798) — Streaming dispatch with tool/function-call handling
 - `clinical-agent-router.ts` (612) — Core agent routing (slim facade)
 - `dynamic-orchestrator.ts` (388) — Dynamic agent/tool selection
@@ -263,7 +263,7 @@ These three files form the remaining strongly connected orchestration component.
 | File | Lines | Responsibilities | SRP Status |
 |------|------:|:----------------|:-----------|
 | `hopeai-system.ts` | 1,684 | 7+ (facade, sensitive content, metadata, history, docs, analytics) | SEVERE — P7 decomposition pending |
-| `agents/agent-definitions.ts` | 1,182 | Agent prompt templates across all agent types | MODERATE — extracted from clinical-agent-router.ts |
+| `agents/agent-definitions.ts` | 456 | Agent prompt templates (Promptware 2026 optimized) | LOW — reduced from 1,182 via token density optimization |
 | `entity-extraction-engine.ts` | 806 | 5+ (dictionaries, synonyms, extraction, dedup, validation) | MODERATE — P3 decomposition pending |
 | `agents/streaming-handler.ts` | 798 | Streaming dispatch + function-call resolution | MODERATE — extracted from clinical-agent-router.ts |
 | `clinical-pattern-analyzer.ts` | 686 | 6 (extraction, categorization, unexplored, reflection, alliance, meta) | MODERATE — P2 decomposition pending |
