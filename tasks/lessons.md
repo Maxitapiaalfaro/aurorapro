@@ -2,6 +2,21 @@
 
 ## Patterns & Rules
 
+### 2026-04-07: Never read-before-write in Firestore when using set({merge:true})
+- **Error:** `saveChatSessionBoth` ran `loadChatSession()` (collectionGroup + ALL messages) before every `saveChatSession()` just to check existence. Called 3-5x per message = 260+ unnecessary reads per message for a 50-msg session.
+- **Root Cause:** Defensive "check-then-set" pattern that made sense with a non-idempotent backend but is pure waste with Firestore's `set({merge:true})`.
+- **Rule:** If the storage layer uses `set({merge:true})` (creates or updates idempotently), NEVER read before writing. The caller already knows whether the session exists from the initial load.
+
+### 2026-04-07: Use O(1) message appends, not O(N) full-history rewrites
+- **Error:** `saveChatSession()` batch-wrote the entire `history[]` on every save. For a 50-message session saved 3-5x per request → 150-250 message writes per user message.
+- **Root Cause:** `addMessage()` existed (O(1) per message) but was never wired to `HopeAISystem`. All code used the full-session save.
+- **Rule:** For subcollection-based message storage, use `addMessage()` for incremental saves. Only use full-history writes on initial session creation. Separate `saveSessionMetadataOnly()` from `saveChatSession()`.
+
+### 2026-04-07: Parallelize independent Firestore reads with Promise.all
+- **Error:** `sendMessage()` ran 10+ sequential Firestore reads (patient record, fichas, memories, files, metadata) before calling the AI. Total sequential latency: 400-1200ms.
+- **Root Cause:** Organic accumulation of features — each feature added its own await without considering the pipeline.
+- **Rule:** At the start of any request handler, identify all independent I/O operations and run them in a single `Promise.all`. Pass prefetched results to downstream functions instead of having each function fetch its own data.
+
 ### 2026-04-07: Server and client storage backends MUST match
 - **Error:** After migrating client to Firestore, the server-side `ServerStorageAdapter` continued using SQLite (HIPAACompliantStorage) in local dev because the backend selection depended on `VERCEL` env var — which is only set in production. Server wrote to SQLite, client read from Firestore → zero persistence visible to the user.
 - **Root Cause:** Backend selection logic was environment-based (`isVercel`) instead of capability-based (Firebase credentials available). The migration added Firestore support but gated it behind a Vercel-only condition, leaving local dev on the old backend.

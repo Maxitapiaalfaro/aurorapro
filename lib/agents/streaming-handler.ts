@@ -265,7 +265,8 @@ export function prepareFunctionCallWithSecurity(
   psychologistId: string | null,
   sessionId: string,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  patientId?: string
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -317,7 +318,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, onProgress }),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress }),
   } as PreparedToolCall;
 }
 
@@ -485,7 +486,8 @@ export async function handleStreamingWithTools(
   sessionId: string,
   ctx: StreamingContext,
   interactionId?: string,
-  psychologistId?: string
+  psychologistId?: string,
+  patientId?: string
 ): Promise<any> {
   const sessionData = ctx.activeChatSessions.get(sessionId)
   if (!sessionData) {
@@ -576,7 +578,7 @@ export async function handleStreamingWithTools(
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name))
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId)
         );
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
@@ -796,7 +798,8 @@ export async function handleNonStreamingWithTools(
   result: any,
   sessionId: string,
   ctx: StreamingContext,
-  psychologistId?: string
+  psychologistId?: string,
+  patientId?: string
 ): Promise<any> {
   const functionCalls = result.functionCalls
   let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
@@ -804,7 +807,7 @@ export async function handleNonStreamingWithTools(
   if (functionCalls && functionCalls.length > 0) {
     // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
     const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences)
+      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId)
     );
 
     // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation

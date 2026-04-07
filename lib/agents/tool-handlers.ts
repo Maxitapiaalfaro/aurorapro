@@ -115,7 +115,7 @@ registerToolHandler('get_patient_memories', async (args, ctx) => {
   try {
     const { getPatientMemories } = await import('../clinical-memory-system');
 
-    const patientId = args.patientId as string;
+    const patientId = ctx.patientId || args.patientId as string;
     const category = args.category as string | undefined;
     const limit = (args.limit as number) || 10;
 
@@ -160,7 +160,7 @@ registerToolHandler('get_patient_record', async (args, ctx) => {
     // is a module-level function in hopeai-system.ts
     const { loadPatientFromFirestore } = await import('../hopeai-system');
 
-    const patientId = args.patientId as string;
+    const patientId = ctx.patientId || args.patientId as string;
 
     logger.info(`[tool:get_patient_record] patient=${patientId}`);
 
@@ -202,7 +202,7 @@ registerToolHandler('save_clinical_memory', async (args, ctx) => {
   try {
     const { saveMemory } = await import('../clinical-memory-system');
 
-    const patientId = args.patientId as string;
+    const patientId = ctx.patientId || args.patientId as string;
     const category = args.category as 'observation' | 'pattern' | 'therapeutic-preference';
     const content = args.content as string;
     const confidence = args.confidence as number;
