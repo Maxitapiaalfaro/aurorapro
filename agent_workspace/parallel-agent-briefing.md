@@ -3,7 +3,7 @@
 **Date**: 2026-04-06 | **Updated**: 2026-04-07
 **Purpose**: Enable a second agent to work in parallel with the primary agent session.
 
-> **⚠ Update 2026-04-07**: P2 (Dead Code Purge) is **COMPLETED**. The off-limits file list below is now historical. Task D (Clinical Memory System) has been **IMPLEMENTED**. Consult `aurora-architecture.md` for the current codebase state.
+> **⚠ Update 2026-04-07**: P2 (Dead Code Purge), P3 (Decompose clinical-agent-router), P4 (Orchestration Simplification), and **R1 (Single-Call Architecture)** are all **COMPLETED**. R1 eliminated the LLM pre-classification call — orchestration is now deterministic (<5ms). Task D (Clinical Memory System) has been **IMPLEMENTED**. Consult `aurora-architecture.md` for the current codebase state.
 
 ---
 

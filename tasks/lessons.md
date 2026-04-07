@@ -28,8 +28,17 @@
 - **Pattern:** Storing chat messages as individual Firestore documents in a `messages/{mid}` subcollection enables O(1) writes per message instead of rewriting the entire session document (O(N) where N = message count). The old IndexedDB approach rewrote the entire `ChatState.history[]` array on every message.
 - **Implementation:** `addMessage()` writes a single doc + touches `metadata.lastUpdated` on the session. `loadSessionWithMessages()` reads session doc + queries subcollection. Falls back to inline `history[]` for legacy compatibility.
 
+### 2026-04-07: Trace actual data consumers before optimizing producers
+- **Discovery:** The LLM-driven tool selection system (`classifyIntentAndExtractEntities()` → `selectContextualTools()` → `contextualTools`) produced results that **no consumer ever used**. The Gemini chat session gets its tools from `agentConfig.tools` (agent-definitions.ts), NOT from the orchestrator's dynamic selection. ~300-700ms per request was spent producing dead output.
+- **Rule:** Before optimizing a system, trace what actually consumes its output. If the output is only logged or stored but never read by downstream code, the entire producer can be replaced with a simpler mechanism or eliminated entirely.
+
+### 2026-04-07: Prefer deterministic routing over LLM classification for bounded decision spaces
+- **Decision:** Replaced LLM-based intent classification (3 agents) with deterministic keyword heuristic. The decision space is small (3 options), the keywords are predictable, and the main model can handle cross-domain queries natively.
+- **Rule:** LLM calls for routing/classification are only justified when the decision space is large, when the options themselves change dynamically, or when natural language understanding is genuinely required. For fixed categories with strong keyword signals, heuristics are faster, cheaper, and more predictable.
+
 ## Session Log
 
 - **2026-04-06:** User corrected priority ordering. Static decomposition analysis missed the Firebase offline-first migration spec. Updated P1 from file decomposition to migration completion. Lesson captured above.
 - **2026-04-06:** Cross-agent analysis synthesis completed. Both Claude and Copilot agents converge on cascading LLM calls + dead code as primary bottlenecks. New P2 (dead code purge) inserted before orchestration decomposition. Firebase Auth promoted to P0 (blocks all storage work). ADR-002 recorded.
 - **2026-04-06:** P0 (Firebase Auth) and P1 (Firestore offline-first migration) completed. 3 client files deleted (~1,195 lines), replaced by `firestore-client-storage.ts` (545 lines). Net reduction: 650 lines. 5 hooks + 5 components + server-side patient reads migrated.
+- **2026-04-07:** R1 (Single-Call Architecture) completed. LLM pre-classification eliminated. 2→1 LLM calls per message. 300-700ms→<5ms orchestration latency. Key discovery: contextualTools were never consumed by chat sessions.

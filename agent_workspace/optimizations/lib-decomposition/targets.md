@@ -76,29 +76,31 @@ Per ADR-001 (`decision-log/001-storage-migration-before-decomposition.md`), this
 
 ---
 
-### P4: `dynamic-orchestrator.ts` — 388 lines (LOW risk) — SCOPE REDUCED
+### P4: `dynamic-orchestrator.ts` — 370 lines (LOW risk) — SCOPE REDUCED + R1
 
-**Previous size:** 1,091 lines. Reduced to 388 by P2 dead code purge (bullets, recommendations, preferences removed).
+**Previous size:** 1,091 lines → 388 (P2 dead code purge) → **370 lines** (R1: removed EntityExtractionEngine + GoogleGenAI dependencies, keyword-frequency dominant topics).
 **Exports:** 3 (`DynamicOrchestrator` class, factory, type re-exports)
 **Dependents:** 1 (`hopeai-system`) — was 4, but `hopeai-orchestration-bridge`, `orchestrator-monitoring`, `index.ts` all deleted.
-**Dependencies:** reduced from 7 to ~4 modules.
+**Dependencies:** reduced from 7 to 4 modules (removed `entity-extraction-engine`, `google-genai-config`, `@google/genai.GoogleGenAI`).
 
-**Decomposition assessment:** At 388 lines with reduced responsibility, this file may no longer warrant decomposition. Re-evaluate after P7.
+**Decomposition assessment:** At 370 lines with reduced responsibility and zero LLM calls, this file does not warrant further decomposition.
 
 ---
 
-### P5: `intelligent-intent-router.ts` — ✅ EXECUTED
+### P5: `intelligent-intent-router.ts` — ✅ EXECUTED + R1
 
-**Previous size:** 1,786 lines → **Current size:** 200 lines (slim facade).
+**Previous size:** 1,786 lines → 200 lines (P4 decomposition) → **135 lines** (R1: eliminated LLM dependency, deterministic heuristic router).
+
+**R1 changes:** Removed `EntityExtractionEngine`, `ContextWindowManager`, `classifyIntentAndExtractEntities()` call. Now uses `classifyIntentByHeuristic()` — zero LLM calls, deterministic routing.
 
 **Decomposed into `lib/routing/` (4 files):**
 
 | Actual File | Lines | Responsibility |
 |-------------|------:|----------------|
-| `routing/intent-classifier.ts` | 499 | Intent classification via Gemini API with retry |
+| `routing/intent-classifier.ts` | ~580 | Heuristic + LLM classification (LLM deprecated), confidence scoring |
 | `routing/intent-declarations.ts` | 171 | Function declaration constants |
 | `routing/routing-types.ts` | 81 | Exported interfaces for routing |
-| `routing/index.ts` | 34 | Barrel re-export |
+| `routing/index.ts` | 35 | Barrel re-export |
 
 **Diff from original plan:** `edge-case-detector.ts` and `agent-mapper.ts` were not created as separate files. Edge-case detection and agent mapping were absorbed into `intent-classifier.ts` or removed during P2.
 
