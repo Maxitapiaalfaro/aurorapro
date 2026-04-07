@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { clinicalAgentRouter } from "./clinical-agent-router"
-import { createIntelligentIntentRouter, type EnrichedContext } from "./intelligent-intent-router"
+import { type EnrichedContext } from "./intelligent-intent-router"
 import { DynamicOrchestrator } from "./dynamic-orchestrator"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { trackAgentSwitch } from "./sentry-metrics-tracker"
@@ -41,9 +41,8 @@ async function loadPatientFromFirestore(userId: string, patientId: string): Prom
 export class HopeAISystem {
   private _initialized = false
   private storage: any = null
-  private intentRouter: any = null
   private dynamicOrchestrator: DynamicOrchestrator | null = null
-  
+
   // Public getter for initialization status
   public get initialized(): boolean {
     return this._initialized
@@ -91,7 +90,7 @@ export class HopeAISystem {
       systemLogger.info('🔧 Starting PARALLEL initialization...')
 
       // 🚀 OPTIMIZACIÓN: Inicializar componentes en PARALELO para reducir cold start
-      const [storage, intentRouter, orchestrator] = await Promise.all([
+      const [storage, orchestrator] = await Promise.all([
         // 1. Storage adapter
         (async () => {
           systemLogger.debug('🔧 Getting storage adapter...')
@@ -111,20 +110,7 @@ export class HopeAISystem {
           return storageAdapter
         })(),
 
-        // 2. Intent router (independiente del storage)
-        (async () => {
-          systemLogger.debug('🔧 Creating intent router...')
-          const router = createIntelligentIntentRouter(clinicalAgentRouter, {
-            confidenceThreshold: 0.8,
-            fallbackAgent: 'socratico',
-            enableLogging: true,
-            maxRetries: 2
-          })
-          systemLogger.info('✅ Intent router created')
-          return router
-        })(),
-
-        // 3. Dynamic orchestrator (independiente del storage)
+        // 2. Dynamic orchestrator (independiente del storage)
         (async () => {
           systemLogger.debug('🔧 Creating dynamic orchestrator...')
           const orch = new DynamicOrchestrator(clinicalAgentRouter, {
@@ -143,7 +129,6 @@ export class HopeAISystem {
 
       // Asignar resultados
       this.storage = storage
-      this.intentRouter = intentRouter
       this.dynamicOrchestrator = orchestrator
 
       const initTime = Date.now() - startTime

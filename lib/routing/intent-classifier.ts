@@ -322,6 +322,94 @@ export function detectExplicitAgentRequest(userInput: string): {
 }
 
 /**
+ * R1: Deterministic intent classification via keyword heuristics.
+ * Replaces the LLM-based classifyIntentAndExtractEntities() call,
+ * saving 300-700ms per message.
+ *
+ * Tier 2 (keyword scoring): scores user input against enriched keyword
+ * sets per agent. If one agent scores substantially above the rest AND
+ * differs from the current agent, recommend a switch.
+ *
+ * Tier 3 (sticky routing): if no strong signal, keep the current agent.
+ * The main Gemini Pro model handles cross-domain queries natively.
+ */
+export function classifyIntentByHeuristic(
+  userInput: string,
+  previousAgent?: string
+): { selectedAgent: string; confidence: number; reasoning: string } {
+  const input = userInput.toLowerCase();
+
+  const KEYWORD_SETS: Record<string, string[]> = {
+    socratico: [
+      'reflexionar', 'explorar', 'pensar', 'analizar', 'insight',
+      'cuestionamiento', 'profundo', 'socrático', 'socratico',
+      'caso', 'paciente', 'supervisar', 'hipótesis', 'hipotesis',
+      'formulación', 'formulacion', 'creencias', 'autoconocimiento',
+      'introspección', 'perspectiva', 'bloqueado', 'resistencia',
+      'transferencia', 'contratransferencia', 'vínculo', 'alianza'
+    ],
+    clinico: [
+      'documentar', 'notas', 'resumen', 'soap', 'expediente',
+      'bitácora', 'bitacora', 'redactar', 'estructurar', 'formato',
+      'plan de tratamiento', 'progreso', 'nota de evolución', 'evolución',
+      'pirp', 'dap', 'birp', 'registro', 'historial', 'síntesis',
+      'sintesis', 'ficha', 'informe', 'reporte', 'archivo'
+    ],
+    academico: [
+      'investigación', 'investigacion', 'estudio', 'estudios',
+      'evidencia', 'research', 'paper', 'papers', 'científico',
+      'cientifico', 'avala', 'metaanálisis', 'metaanalisis',
+      'ensayos', 'rct', 'revisión sistemática', 'revision sistematica',
+      'guidelines', 'protocolos', 'empírico', 'empirico',
+      'literatura', 'validación', 'validacion', 'publicaciones'
+    ]
+  };
+
+  // Score each agent by counting keyword matches
+  const scores: Record<string, number> = { socratico: 0, clinico: 0, academico: 0 };
+
+  for (const [agent, keywords] of Object.entries(KEYWORD_SETS)) {
+    let matches = 0;
+    for (const kw of keywords) {
+      if (input.includes(kw)) matches++;
+    }
+    scores[agent] = matches / (keywords.length * 0.15);
+  }
+
+  // File-attachment heuristic: bias toward clinico
+  if (input.includes('contexto para orquestación') || input.includes('adjuntó') || input.includes('adjunto')) {
+    scores.clinico += 0.2;
+  }
+
+  // Find best and second-best
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const [bestAgent, bestScore] = sorted[0];
+  const [, secondScore] = sorted[1];
+  const margin = bestScore - secondScore;
+
+  const defaultAgent = previousAgent || 'socratico';
+
+  // Tier 2: Strong keyword signal → switch
+  if (bestScore > 0.3 && margin > 0.15 && bestAgent !== defaultAgent) {
+    const confidence = Math.min(0.9, 0.7 + bestScore * 0.2);
+    const displayName = AGENT_DISPLAY_NAMES[`activar_modo_${bestAgent}`] || bestAgent;
+    return {
+      selectedAgent: bestAgent,
+      confidence,
+      reasoning: `${displayName} seleccionado por señal de keywords (score: ${bestScore.toFixed(2)}, margen: ${margin.toFixed(2)})`
+    };
+  }
+
+  // Tier 3: No strong signal → sticky routing
+  const displayName = AGENT_DISPLAY_NAMES[`activar_modo_${defaultAgent}`] || defaultAgent;
+  return {
+    selectedAgent: defaultAgent,
+    confidence: 0.85,
+    reasoning: `${displayName} mantenido por continuidad de sesión`
+  };
+}
+
+/**
  * Maps function name to agent type.
  */
 export function mapFunctionToAgent(functionName: string): 'socratico' | 'clinico' | 'academico' {

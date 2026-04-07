@@ -1,19 +1,19 @@
 /**
  * Intelligent Intent Router — Thin facade
- * 
- * Coordinates intent classification, entity extraction, and agent routing.
- * Core logic extracted to lib/routing/ during P4 decomposition:
- *   - routing-types.ts: shared type definitions
- *   - intent-declarations.ts: Gemini function-calling schemas
- *   - intent-classifier.ts: LLM classification, confidence scoring, prompt building
- * 
- * @version 3.0.0 (P4 decomposition)
+ *
+ * R1: Deterministic routing via keyword heuristics.
+ * Eliminates the LLM pre-classification call (~300-700ms saved per message).
+ *
+ * Routing tiers:
+ *   1. Explicit regex detection (unchanged)
+ *   2. Keyword heuristic scoring (new — replaces LLM call)
+ *   3. Sticky routing to current agent (new default)
+ *
+ * @version 4.0.0 (R1 single-call architecture)
  */
 
 import { ClinicalAgentRouter } from './clinical-agent-router';
-import { EntityExtractionEngine } from './entity-extraction-engine';
-import { ToolRegistry, ClinicalTool, ClinicalDomain } from './tool-registry';
-import { ContextWindowManager, type ContextWindowConfig } from './context-window-manager';
+import { ToolRegistry } from './tool-registry';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('orchestration');
@@ -29,49 +29,31 @@ export type {
 
 import type {
   Content,
-  ToolSelectionContext,
   OrchestrationResult,
   RouterConfig,
 } from './routing/routing-types';
 
 import {
-  classifyIntentAndExtractEntities,
-  calculateCombinedConfidence,
   detectExplicitAgentRequest,
-  mapFunctionToAgent,
-  generateOrchestrationReasoning,
-  extractRecentTopics,
+  classifyIntentByHeuristic,
 } from './routing/intent-classifier';
 
 /**
  * Orquestador de Intenciones Inteligente
- * 
- * Thin facade that delegates to extracted routing modules.
+ *
+ * Deterministic router — zero LLM calls.
  * Preserves the original class API for backward compatibility.
  */
 export class IntelligentIntentRouter {
-  private agentRouter: ClinicalAgentRouter;
-  private entityExtractor: EntityExtractionEngine;
   private toolRegistry: ToolRegistry;
-  private contextWindowManager: ContextWindowManager;
   private config: RouterConfig;
 
   constructor(
-    agentRouter: ClinicalAgentRouter,
+    _agentRouter: ClinicalAgentRouter,
     config: Partial<RouterConfig> = {}
   ) {
-    this.agentRouter = agentRouter;
-    this.entityExtractor = new EntityExtractionEngine();
     this.toolRegistry = ToolRegistry.getInstance();
-    
-    const contextConfig: Partial<ContextWindowConfig> = {
-      maxExchanges: 10,
-      triggerTokens: 25000,
-      targetTokens: 10000,
-      enableLogging: config.enableLogging || true
-    };
-    this.contextWindowManager = new ContextWindowManager(contextConfig);
-    
+
     this.config = {
       confidenceThreshold: 0.65,
       fallbackAgent: 'socratico',
@@ -82,20 +64,23 @@ export class IntelligentIntentRouter {
   }
 
   /**
-   * Main orchestration method with dynamic tool selection.
-   * Delegates to classifyIntentAndExtractEntities for single-LLM-call optimization.
+   * Main orchestration method — deterministic, zero LLM calls.
+   *
+   * Tier 1: Explicit regex detection (microseconds)
+   * Tier 2: Keyword heuristic scoring (<5ms)
+   * Tier 3: Sticky routing to current agent (0ms)
    */
   async orchestrateWithTools(
     userInput: string,
-    sessionContext: Content[] = [],
+    _sessionContext: Content[] = [],
     previousAgent?: string
   ): Promise<OrchestrationResult> {
     try {
-      // Fast path: detect explicit agent switch requests (regex only, no LLM)
+      // Tier 1: Explicit regex — catches "activar modo X" commands
       const explicitRequest = detectExplicitAgentRequest(userInput);
       if (explicitRequest.isExplicit) {
         const basicTools = this.toolRegistry.getBasicTools();
-        logger.info(`[IntentRouter] Explicit agent request detected: ${explicitRequest.requestType}`);
+        logger.info(`[IntentRouter] Explicit agent request: ${explicitRequest.requestType}`);
         return {
           selectedAgent: explicitRequest.requestType,
           contextualTools: basicTools.map(tool => tool.declaration),
@@ -105,88 +90,38 @@ export class IntelligentIntentRouter {
         };
       }
 
-      const combinedResult = await classifyIntentAndExtractEntities(
-        userInput, sessionContext, this.entityExtractor, this.contextWindowManager, this.config
-      );
-      
-      if (!combinedResult.intentResult) {
-        return this.createFallbackOrchestration(userInput, sessionContext, 'Intent classification failed');
+      // Tier 2 + 3: Heuristic classification (replaces LLM call)
+      const heuristicResult = classifyIntentByHeuristic(userInput, previousAgent);
+      const basicTools = this.toolRegistry.getBasicTools();
+
+      if (this.config.enableLogging) {
+        logger.debug('[IntentRouter] Heuristic routing', {
+          selectedAgent: heuristicResult.selectedAgent,
+          confidence: heuristicResult.confidence.toFixed(2),
+          previousAgent: previousAgent || 'none'
+        });
       }
-    
-      const toolSelectionContext: ToolSelectionContext = {
-        conversationHistory: sessionContext,
-        currentIntent: combinedResult.intentResult.functionName,
-        extractedEntities: combinedResult.entityResult.entities,
-        sessionMetadata: {
-          previousAgent,
-          sessionLength: sessionContext.length,
-          recentTopics: extractRecentTopics(sessionContext)
-        }
-      };
-    
-      const selectedTools = await this.selectContextualTools(toolSelectionContext);
-      const selectedAgent = mapFunctionToAgent(combinedResult.intentResult.functionName);
-    
+
       return {
-        selectedAgent,
-        contextualTools: selectedTools.map(tool => tool.declaration),
-        toolMetadata: selectedTools,
-        confidence: calculateCombinedConfidence(
-          combinedResult.intentResult.confidence, 
-          combinedResult.entityResult.confidence, 
-          combinedResult.intentResult.functionName
-        ),
-        reasoning: generateOrchestrationReasoning(
-          combinedResult.intentResult, 
-          combinedResult.entityResult, 
-          selectedTools
-        )
+        selectedAgent: heuristicResult.selectedAgent,
+        contextualTools: basicTools.map(tool => tool.declaration),
+        toolMetadata: basicTools,
+        confidence: heuristicResult.confidence,
+        reasoning: heuristicResult.reasoning
       };
 
     } catch (error) {
-      logger.error('[IntelligentIntentRouter] Error en orquestación:', { error });
-      return this.createFallbackOrchestration(userInput, sessionContext, `Orchestration error: ${error}`);
+      logger.error('[IntelligentIntentRouter] Error:', { error });
+      return this.createFallbackOrchestration();
     }
-  }
-
-  /**
-   * Selects contextual tools based on intent and entities.
-   */
-  private async selectContextualTools(context: ToolSelectionContext): Promise<ClinicalTool[]> {
-    const relevantDomains = this.mapIntentToDomains(context.currentIntent);
-    const entityTypes = context.extractedEntities.map(e => e.type);
-    
-    return this.toolRegistry.getToolsForContext({
-      domains: relevantDomains,
-      entityTypes,
-      sessionLength: context.sessionMetadata.sessionLength,
-      previousAgent: context.sessionMetadata.previousAgent
-    });
-  }
-
-  /**
-   * Maps intents to clinical domains.
-   */
-  private mapIntentToDomains(intent: string): ClinicalDomain[] {
-    const mapping: Record<string, ClinicalDomain[]> = {
-      'activar_modo_socratico': [ClinicalDomain.GENERAL, ClinicalDomain.ANXIETY],
-      'activar_modo_clinico': [ClinicalDomain.GENERAL, ClinicalDomain.DEPRESSION],
-      'activar_modo_academico': [ClinicalDomain.GENERAL, ClinicalDomain.TRAUMA]
-    };
-    
-    return mapping[intent] || [ClinicalDomain.GENERAL];
   }
 
   /**
    * Creates fallback orchestration result.
    */
-  private createFallbackOrchestration(
-    userInput: string,
-    sessionContext: Content[],
-    reason: string
-  ): OrchestrationResult {
+  private createFallbackOrchestration(): OrchestrationResult {
     const fallbackTools = this.toolRegistry.getBasicTools();
-    
+
     return {
       selectedAgent: this.config.fallbackAgent,
       contextualTools: fallbackTools.map(tool => tool.declaration),

@@ -14,14 +14,12 @@
  * @version 2.0.0
  */
  
-import { GoogleGenAI, FunctionDeclaration } from '@google/genai';
+import { FunctionDeclaration } from '@google/genai';
 import { IntelligentIntentRouter, OrchestrationResult } from './intelligent-intent-router';
 import { ClinicalAgentRouter } from './clinical-agent-router';
 import { ToolRegistry, ClinicalTool } from './tool-registry';
 import { createLogger } from '@/lib/logger';
-import { EntityExtractionEngine, ExtractedEntity } from './entity-extraction-engine';
 import { SentryMetricsTracker } from './sentry-metrics-tracker';
-import { ai } from './google-genai-config';
 import type { ClinicalFile } from '@/types/clinical-types';
 
 /**
@@ -87,11 +85,9 @@ interface DynamicOrchestratorConfig {
 const logger = createLogger('orchestration');
 
 export class DynamicOrchestrator {
-  private ai: GoogleGenAI;
   private intentRouter: IntelligentIntentRouter;
   private agentRouter: ClinicalAgentRouter;
   private toolRegistry: ToolRegistry;
-  private entityExtractor: EntityExtractionEngine;
   private metricsTracker: SentryMetricsTracker;
   private activeSessions: Map<string, SessionContext> = new Map();
   private config: DynamicOrchestratorConfig;
@@ -100,11 +96,9 @@ export class DynamicOrchestrator {
     agentRouter: ClinicalAgentRouter,
     config?: Partial<DynamicOrchestratorConfig>
   ) {
-    this.ai = ai;
     this.agentRouter = agentRouter;
     this.intentRouter = new IntelligentIntentRouter(agentRouter);
     this.toolRegistry = ToolRegistry.getInstance();
-    this.entityExtractor = new EntityExtractionEngine();
     this.metricsTracker = SentryMetricsTracker.getInstance();
     this.activeSessions = new Map();
 
@@ -165,7 +159,7 @@ export class DynamicOrchestrator {
       );
       
       // 5. Actualizar contexto de sesión
-      await this.updateSessionContext(
+      this.updateSessionContext(
         sessionContext,
         orchestrationResult.selectedAgent,
         optimizedTools
@@ -293,55 +287,60 @@ export class DynamicOrchestrator {
   /**
    * Actualiza el contexto de sesión después de la orquestación
    */
-  private async updateSessionContext(
+  private updateSessionContext(
     session: SessionContext,
     selectedAgent: string,
     tools: FunctionDeclaration[]
-  ): Promise<void> {
+  ): void {
     session.currentAgent = selectedAgent;
     session.activeTools = tools;
-    
+
     // Actualizar tópicos dominantes
-    await this.updateDominantTopics(session);
+    this.updateDominantTopics(session);
   }
 
   /**
-   * Actualiza los tópicos dominantes de la sesión (con optimización de frecuencia)
+   * R1: Keyword-frequency dominant topics (replaces LLM call).
+   * Runs every N interactions, extracts top words from recent messages.
    */
-  private async updateDominantTopics(session: SessionContext): Promise<void> {
+  private updateDominantTopics(session: SessionContext): void {
     if (session.conversationHistory.length < 2) return;
-    
-    // 🚀 OPTIMIZACIÓN: Solo actualizar cada N interacciones
+
     const shouldUpdate = session.sessionMetadata.totalInteractions % (this.config.dominantTopicsUpdateInterval || 5) === 0;
     if (!shouldUpdate) {
       this.log('debug', `Skipping dominant topics update (interval: ${this.config.dominantTopicsUpdateInterval})`);
       return;
     }
-    
-    try {
-      const recentMessages = session.conversationHistory.slice(-6);
-      const conversationText = recentMessages
-        .map(msg => msg.parts?.map(part => 'text' in part ? part.text : '').join(' '))
-        .join(' ');
-      
-      // Extraer entidades para identificar tópicos
-      const entityResult = await this.entityExtractor.extractEntities(conversationText);
-      
-      const topics = entityResult.entities
-        .filter(entity => entity.confidence > 0.7)
-        .map(entity => entity.value)
-        .slice(0, 5);
-      
-      session.sessionMetadata.dominantTopics = Array.from(new Set([
-        ...topics,
-        ...session.sessionMetadata.dominantTopics
-      ])).slice(0, 10);
-      
-      this.log('debug', `Updated dominant topics: ${topics.length} new topics identified`);
-      
-    } catch (error) {
-      this.log('warn', `Error actualizando tópicos dominantes: ${error}`);
-    }
+
+    const STOP_WORDS = new Set([
+      'sobre', 'tiene', 'cuando', 'desde', 'entre', 'puede', 'porque',
+      'como', 'para', 'donde', 'hasta', 'después', 'también', 'usuario',
+      'asistente', 'sistema', 'mensaje', 'contexto', 'quiero', 'necesito',
+      'puedes', 'ayuda', 'favor', 'gracias', 'hola', 'bueno', 'manera'
+    ]);
+
+    const recentMessages = session.conversationHistory.slice(-6);
+    const text = recentMessages
+      .map(msg => msg.parts?.map(part => 'text' in part ? part.text : '').join(' '))
+      .join(' ')
+      .toLowerCase();
+
+    const wordFreq = new Map<string, number>();
+    text.split(/\s+/)
+      .filter(w => w.length > 5 && !STOP_WORDS.has(w))
+      .forEach(w => wordFreq.set(w, (wordFreq.get(w) || 0) + 1));
+
+    const topics = Array.from(wordFreq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([word]) => word);
+
+    session.sessionMetadata.dominantTopics = Array.from(new Set([
+      ...topics,
+      ...session.sessionMetadata.dominantTopics
+    ])).slice(0, 10);
+
+    this.log('debug', `Updated dominant topics: ${topics.length} new topics identified`);
   }
 
   /**
