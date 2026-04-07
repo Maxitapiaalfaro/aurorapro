@@ -35,7 +35,8 @@
 
 ### P7: Observability & Performance (LOW)
 - [x] PII/PHI redaction in logger + Sentry (Gap P0.2) | Priority: H | Status: done
-- [ ] Replace remaining ~300 console.log calls with structured logger | Priority: M | Status: pending
+- [x] Replace console.log in orchestration layer (116/164 calls, 71%): `hopeai-system.ts`, `clinical-agent-router.ts`, `dynamic-orchestrator.ts`, `intelligent-intent-router.ts`, `routing/intent-classifier.ts` | Priority: M | Status: done
+- [ ] Replace remaining ~48 console.log calls in `lib/agents/` (streaming-handler.ts, message-context-builder.ts) | Priority: M | Status: pending (parallel agent)
 - [ ] Consolidate 5 metrics modules into unified tracker | Priority: L | Status: pending
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
 
