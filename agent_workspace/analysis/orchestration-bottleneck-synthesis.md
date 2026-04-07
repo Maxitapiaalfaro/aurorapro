@@ -1,9 +1,11 @@
 # Orchestration Bottleneck Synthesis — Cross-Agent Consensus Report
 
-**Date**: 2026-04-06
+**Date**: 2026-04-06 | **Updated**: 2026-04-07
 **Sources**: `docs/reports/claude_analisis.md` (Agent A), `docs/reports/copilot_analisis.md` (Agent B)
 **Synthesized by**: Claude Opus 4.6 (this session)
 **Baseline ref**: `docs/architecture/claude/claude-code-main/src/`
+
+> **⚠ Update 2026-04-07**: Several recommendations from this report have been executed. Completed items are annotated with ✅. Metrics and layer counts have shifted — see `aurora-architecture.md` for the current state.
 
 ---
 
@@ -51,7 +53,7 @@ Call 5: clinicalAgentRouter.sendMessage()    → actual response (streaming)
 
 **Key nuance from Agent B**: The combined `orchestrateWithTools()` path (1 LLM call) coexists with the unoptimized `routeUserInput()` path (2–3 LLM calls). Both are public API. It's unclear which callers use which, creating risk of accidentally taking the slow path.
 
-### F2: Bridge Layer Is Dead Code (Completed Migration)
+### F2: Bridge Layer Is Dead Code (Completed Migration) ✅ RESOLVED
 
 Both agents found identical evidence:
 - `migrationPercentage: 100` (line ~104)
@@ -59,7 +61,7 @@ Both agents found identical evidence:
 - `handleLegacyOrchestration()` and `handleHybridOrchestration()` are unreachable
 - Agent B discovered fabricated metrics: `processTime * 0.7` reported as "orchestrationTime"
 
-**Verdict**: Delete `hopeai-orchestration-bridge.ts` entirely. Call `DynamicOrchestrator` directly.
+**Verdict**: ~~Delete `hopeai-orchestration-bridge.ts` entirely. Call `DynamicOrchestrator` directly.~~ **DONE** — File deleted during P2 dead code purge.
 
 ### F3: Entity Extraction Has 3 Entry Points (Redundancy Risk)
 
@@ -70,34 +72,34 @@ Both agents traced the same 3 code paths:
 
 In the best case, only path 1 fires. In the worst case, all 3 fire sequentially.
 
-### F4: Dead Features Still Allocated
+### F4: Dead Features Still Allocated — PARTIALLY RESOLVED
 
 Both agents catalogued disabled-but-present systems:
 
-| System | Lines | Config Status | Agent(s) |
-|--------|------:|:------------:|:--------:|
-| Bullet generation | ~600 | `// DISABLED` comment | A |
-| Recommendations engine | ~400 | `enableRecommendations: false` | A, B |
-| User preferences/learning | ~800 | Feed into disabled recs | A |
-| Edge-case forced routing | ~400 | `// DISABLED` comment | A |
-| Legacy/hybrid orchestration | ~200 | `migrationPercentage: 100` | A, B |
+| System | Lines | Config Status | Agent(s) | **Current Status** |
+|--------|------:|:------------:|:--------:|:------------------:|
+| Bullet generation | ~600 | `// DISABLED` comment | A | ✅ Purged in P2 |
+| Recommendations engine | ~400 | `enableRecommendations: false` | A, B | ✅ Purged in P2 |
+| User preferences/learning | ~800 | Feed into disabled recs | A | ✅ `user-preferences-manager.ts` deleted |
+| Edge-case forced routing | ~400 | `// DISABLED` comment | A | ✅ Purged in P2 |
+| Legacy/hybrid orchestration | ~200 | `migrationPercentage: 100` | A, B | ✅ Bridge + singleton + monitoring deleted |
 
-**Total dead code**: ~2,400 lines still loaded, parsed, and (in some cases) allocating memory.
+**Total dead code purged**: ~2,400+ lines removed across P2. `dynamic-orchestrator.ts` reduced from 1,091 to 388 lines.
 
 ---
 
 ## 4. Unique Findings (Single Agent)
 
-### F5: Session Memory Bloat — 8 Maps (Agent B only)
+### F5: Session Memory Bloat — Maps (Agent B only) — PARTIALLY RESOLVED
 
 Agent B performed a detailed memory analysis that Agent A did not:
 
-| Component | Maps | Data |
-|-----------|:----:|------|
-| `DynamicOrchestrator` | 2 | `activeSessions`, `recommendationsCache` |
-| `ClinicalAgentRouter` | 6 | `activeChatSessions`, `sessionFileCache`, `verifiedActiveMap`, `filesFullySentMap`, `sessionLastActivity`, per-session maps |
+| Component | Maps (baseline) | Maps (post-P2/P6) | Notes |
+|-----------|:----:|:----:|------|
+| `DynamicOrchestrator` | 2 | ~1 | `recommendationsCache` removed with recommendations engine |
+| `ClinicalAgentRouter` | 6 | Reduced | Session management partially extracted to `agents/` |
 
-Memory per session: ~565KB (text only), ~1.1MB with files. At 100 concurrent sessions: ~55–110MB. No LRU eviction; relies on 60-minute timeout that "may not run reliably."
+Memory per session: reduced from baseline but not yet fully bounded. LRU eviction still pending (R4).
 
 **Claude Code equivalent**: 1 `mutableMessages` array + 1 bounded LRU `ReadFileCache` per session.
 
@@ -146,44 +148,45 @@ Aurora uses **4.7x more tokens** per request for orchestration metadata.
 ## 6. Architectural Recommendations (Consensus + Prioritized)
 
 ### R1: Eliminate Cascading LLM Calls → Single-Call Architecture
-**Priority**: CRITICAL
+**Priority**: CRITICAL | **Status**: PENDING
 **Both agents agree**: Merge intent classification + entity extraction + main response into one streaming call. The LLM can decide intent, extract entities, and route itself through well-designed system prompts and tool declarations — no pre-classification needed.
 
 **Impact**: Remove 300–1,000ms of pre-processing latency. Reduce token usage by ~60%.
 
-### R2: Delete Orchestration Bridge
-**Priority**: HIGH
+### R2: Delete Orchestration Bridge ✅ COMPLETED (P2)
+**Priority**: HIGH | **Status**: DONE
 **Both agents agree**: `hopeai-orchestration-bridge.ts` is dead code. Migration percentage is 100%. Delete entirely, call `DynamicOrchestrator` directly.
 
-**Impact**: Remove 501 lines, eliminate fabricated metrics, save ~10ms/request.
+**Executed**: File deleted. `orchestration-singleton.ts`, `orchestrator-monitoring.ts`, and `index.ts` also deleted as cascade cleanup.
 
-### R3: Remove All Disabled Features
-**Priority**: HIGH
+### R3: Remove All Disabled Features ✅ COMPLETED (P2)
+**Priority**: HIGH | **Status**: DONE
 **Both agents agree**: Delete bullet generation, recommendations, user preferences/learning, edge-case detection code.
 
-**Impact**: Remove ~2,400 lines. Reduce bundle size, cognitive load, and memory allocation.
+**Executed**: ~2,400+ lines purged. `dynamic-orchestrator.ts` reduced from 1,091 to 388 lines. `user-preferences-manager.ts` deleted entirely.
 
 ### R4: Unify Session State
-**Priority**: MEDIUM
-**Agent B's finding**: Consolidate 8 Maps across 2 components into a single bounded state structure with LRU eviction.
+**Priority**: MEDIUM | **Status**: PARTIALLY ADDRESSED
+**Agent B's finding**: Consolidate Maps across components into a single bounded state structure with LRU eviction.
 
-**Impact**: Prevent unbounded memory growth. Reduce memory footprint by ~50%.
+**Progress**: `recommendationsCache` removed. Some session state extracted to `agents/` during P6. Full LRU eviction still pending.
 
 ### R5: Replace console.log with Structured Telemetry
-**Priority**: MEDIUM
-**Agent B's finding**: Replace 30+ emoji-decorated console.log calls with structured telemetry events. Gate behind `NODE_ENV !== 'production'` or use compile-time elimination.
+**Priority**: MEDIUM | **Status**: PENDING
+**Agent B's finding**: Replace emoji-decorated console.log calls with structured telemetry events. Gate behind `NODE_ENV !== 'production'` or use compile-time elimination.
 
 **Impact**: Remove 200–500ms I/O overhead per request in production.
+**Note**: This was identified as Task A in `parallel-agent-briefing.md`.
 
 ### R6: Simplify Tool Registry
-**Priority**: LOW
+**Priority**: LOW | **Status**: PENDING
 **Agent A's finding**: Remove unused `category`, `priority`, `keywords`, `domains` metadata from tool definitions. Keep only `name`, `declaration`, `securityCategory`.
 
 **Impact**: Reduce tool selection from 50–100ms to <10ms. Simplify registration.
 
 ### R7: Consolidate Metrics
-**Priority**: LOW
-**Agent A's finding**: Track metrics once at API route level, not in every orchestration layer. 5 separate metrics modules with overlapping scopes → 1 unified tracker.
+**Priority**: LOW | **Status**: PENDING
+**Agent A's finding**: Track metrics once at API route level, not in every orchestration layer. 4 separate metrics modules with overlapping scopes → 1 unified tracker (was 5, `orchestrator-monitoring.ts` deleted in P2).
 
 **Impact**: Remove 20–40ms/request. Reduce Sentry call volume by ~70%.
 
@@ -195,11 +198,11 @@ These findings align with and reinforce the existing priority order in `tasks/to
 
 1. **P1 (Firebase Auth + Storage Migration)**: Remains top priority. Orthogonal to orchestration — different subsystem entirely. Both reports focus on orchestration, not storage.
 
-2. **P2 (Decompose `clinical-agent-router.ts`)**: Both reports confirm this file (3,248 lines) is the terminal node where all orchestration converges. Extracting the ~1,400 lines of agent prompts remains the single highest-ROI quick win.
+2. **P2 (Dead Code Purge)**: ✅ COMPLETED. ~2,400+ lines of dead code removed. Bridge, singleton, monitoring, preferences all deleted.
 
-3. **NEW — Bridge Deletion**: Insert as a subtask in P4 (`dynamic-orchestrator.ts` decomposition). The bridge connects to the orchestrator; deleting it simplifies the orchestrator decomposition.
+3. **P5/P6 (Partial Decomposition)**: ✅ PARTIALLY COMPLETED. `clinical-agent-router.ts` decomposed from 3,248 to 612 lines (agent-definitions.ts, streaming-handler.ts, message-context-builder.ts extracted). `intelligent-intent-router.ts` decomposed from 1,786 to 200 lines (intent-classifier.ts, intent-declarations.ts, routing-types.ts extracted).
 
-4. **NEW — Dead Code Purge**: Insert as a standalone task before P4. Removing 2,400 lines of dead code before decomposing the orchestrator reduces scope and avoids decomposing code that should be deleted.
+4. **Remaining**: P3 (entity-extraction decomposition), P4 (dynamic-orchestrator decomposition), P7 (hopeai-system decomposition) still pending.
 
 ---
 
@@ -210,9 +213,9 @@ These findings align with and reinforce the existing priority order in `tasks/to
 | TTFB (time to first byte) | 850–1,000ms | <200ms | SSE response timing |
 | LLM calls per request | 2–3 | 1 | Server-side logging |
 | Token overhead per request | ~9,400 | <3,000 | Gemini API usage dashboard |
-| Orchestration code volume | ~8,600 lines | <3,000 lines | `wc -l` on orchestration files |
-| Session memory (100 sessions) | ~55MB | <15MB | Process memory profiling |
-| Console.log calls per request | 30+ | 0 (production) | Grep + runtime audit |
+| Orchestration code volume | ~8,600 lines → ~5,547 (post-P2/P5/P6) | <3,000 lines | `wc -l` on orchestration files |
+| Session memory (100 sessions) | ~55MB (reduced, not yet measured) | <15MB | Process memory profiling |
+| Console.log calls per request | 30+ (not yet addressed) | 0 (production) | Grep + runtime audit |
 
 ---
 

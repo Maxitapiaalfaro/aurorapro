@@ -1,7 +1,9 @@
 # Parallel Agent Briefing — Aurora/HopeAI
 
-**Date**: 2026-04-06
+**Date**: 2026-04-06 | **Updated**: 2026-04-07
 **Purpose**: Enable a second agent to work in parallel with the primary agent session.
+
+> **⚠ Update 2026-04-07**: P2 (Dead Code Purge) is **COMPLETED**. The off-limits file list below is now historical. Task D (Clinical Memory System) has been **IMPLEMENTED**. Consult `aurora-architecture.md` for the current codebase state.
 
 ---
 
@@ -36,29 +38,28 @@ Aurora/HopeAI is a Next.js 15 clinical AI assistant for mental health profession
 
 ---
 
-## What the Primary Agent Is Doing (DO NOT TOUCH THESE FILES)
+## What the Primary Agent Did (P2: Dead Code Purge) — ✅ COMPLETED
 
-The primary agent is executing **P2: Dead Code Purge**. These files are being actively modified:
+The primary agent executed **P2: Dead Code Purge**. The following files were **deleted**:
 
-### OFF-LIMITS (will cause merge conflicts):
-- `lib/dynamic-orchestrator.ts` — Removing ~630 lines (bullets + recommendations)
-- `lib/intelligent-intent-router.ts` — Removing ~230 lines (edge-case routing)
-- `lib/hopeai-orchestration-bridge.ts` — DELETING entire file (501 lines)
-- `lib/user-preferences-manager.ts` — DELETING entire file (316 lines)
-- `lib/search-query-middleware.ts` — DELETING (empty file)
-- `lib/academic-search-enhancer.ts` — DELETING (empty file)
-- `lib/index.ts` — Cascade cleanup of bridge imports
-- `lib/orchestrator-monitoring.ts` — Cascade cleanup
-- `lib/orchestration-singleton.ts` — Cascade cleanup
-- `lib/hopeai-system.ts` — Import cleanup (removing dead orchestration references)
+### Deleted Files:
+- `lib/dynamic-orchestrator.ts` — Reduced from ~1,091 to 388 lines (dead features purged)
+- `lib/intelligent-intent-router.ts` — Reduced from ~1,786 to 200 lines (decomposed into `lib/routing/`)
+- `lib/hopeai-orchestration-bridge.ts` — **DELETED** entirely (501 lines)
+- `lib/user-preferences-manager.ts` — **DELETED** entirely (316 lines)
+- `lib/search-query-middleware.ts` — **DELETED** (empty file)
+- `lib/academic-search-enhancer.ts` — **DELETED** (empty file)
+- `lib/index.ts` — **DELETED** (549 lines, barrel file)
+- `lib/orchestrator-monitoring.ts` — **DELETED** (722 lines)
+- `lib/orchestration-singleton.ts` — **DELETED** (169 lines)
 
 ---
 
-## Your Assigned Tasks (safe for parallel work)
+## Remaining Tasks (safe for parallel work)
 
-Pick from these tasks in order of priority. All are confirmed to have ZERO file overlap with P2.
+Pick from these tasks in order of priority.
 
-### Task A: PII Filtering in Logs (Gap Analysis P0.2)
+### Task A: PII Filtering in Logs (Gap Analysis P0.2) — PENDING
 
 **Goal**: Ensure clinical PII (patient names, diagnoses, RUTs, session content) is never written to console logs or Sentry breadcrumbs.
 
@@ -73,11 +74,11 @@ Pick from these tasks in order of priority. All are confirmed to have ZERO file 
 2. Configure Sentry to exclude breadcrumbs containing clinical content
 3. Progressively replace raw `console.log` calls in `lib/` files with the safe logger
 
-**Files you CAN touch**: `lib/logger.ts`, `lib/security/console-blocker.ts`, Sentry config, any `lib/` file for `console.log` replacement EXCEPT the off-limits files listed above.
+**Files you CAN touch**: `lib/logger.ts`, `lib/security/console-blocker.ts`, Sentry config, any `lib/` file for `console.log` replacement.
 
 ---
 
-### Task B: Deploy Firestore Security Rules
+### Task B: Deploy Firestore Security Rules — PENDING
 
 **Goal**: Deploy the existing `firestore.rules` file to the Firebase project.
 
@@ -95,7 +96,7 @@ Pick from these tasks in order of priority. All are confirmed to have ZERO file 
 
 ---
 
-### Task C: Server-Side Messages Subcollection (Phase 4a)
+### Task C: Server-Side Messages Subcollection (Phase 4a) — PENDING
 
 **Goal**: Update the server-side Firestore adapter to use messages subcollection (matching client-side pattern).
 
@@ -111,11 +112,10 @@ Pick from these tasks in order of priority. All are confirmed to have ZERO file 
 4. Add pass-through methods to `lib/server-storage-adapter.ts`
 
 **Files you CAN touch**: `lib/firestore-storage-adapter.ts`, `lib/server-storage-adapter.ts`.
-**DO NOT touch**: `lib/hopeai-system.ts` (primary agent is modifying it for P2).
 
 ---
 
-### Task D: Clinical Inter-Session Memory System (Gap Analysis P2.1)
+### Task D: Clinical Inter-Session Memory System (Gap Analysis P2.1) — ✅ COMPLETED
 
 **Goal**: Build the foundation for a persistent clinical memory system that remembers observations across patient sessions.
 
@@ -131,7 +131,9 @@ Pick from these tasks in order of priority. All are confirmed to have ZERO file 
 3. Define Firestore path: `psychologists/{uid}/patients/{pid}/memories/{memoryId}`
 4. DO NOT wire into `hopeai-system.ts` yet — that integration happens after P2
 
-**Files you CAN touch**: `types/memory-types.ts` (new), `lib/clinical-memory-system.ts` (new).
+**Delivered**: Both `types/memory-types.ts` and `lib/clinical-memory-system.ts` (291 lines) now exist.
+
+**Files created**: `types/memory-types.ts`, `lib/clinical-memory-system.ts`.
 
 ---
 
@@ -150,7 +152,6 @@ Pick from these tasks in order of priority. All are confirmed to have ZERO file 
 
 ## Coordination
 
-- **DO NOT modify any file in the off-limits list** without explicit coordination
-- Write progress to `tasks/todo.md` when starting/completing tasks
-- If you discover issues that affect P2, document them in `tasks/lessons.md`
-- If you need to touch `lib/hopeai-system.ts`, STOP and coordinate — the primary agent owns that file during P2
+- P2 off-limits restrictions are **LIFTED** — all files are now available for editing.
+- Write progress to `tasks/todo.md` when starting/completing tasks.
+- If you discover issues, document them in `tasks/lessons.md`.

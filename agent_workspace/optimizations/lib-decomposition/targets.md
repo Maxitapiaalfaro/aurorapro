@@ -1,82 +1,52 @@
 # Lib Decomposition Targets — Priority Analysis
 
-**Date**: 2026-04-06
-**Commit**: 7d483bd (main branch)
-**Updated**: 2026-04-06 — Post P0/P1 completion
+**Date**: 2026-04-06 (original) | **Updated**: 2026-04-07
+**Baseline Commit**: 7d483bd (main branch)
+**Update context**: Post P0, P1, P2, partial P5/P6 execution.
 
-> **Status Notes:**
+> **Status Notes (2026-04-07):**
 > - P0 (Firebase Auth) and P1 (Firestore offline-first migration) are COMPLETE.
-> - 3 client-side storage files have been DELETED: `clinical-context-storage.ts` (354 lines), `patient-persistence.ts` (325 lines), `client-context-persistence.ts` (516 lines).
-> - `hipaa-compliant-storage.ts` is a SERVER-SIDE file still used by `hopeai-system.ts` — cannot be eliminated until P6/P7.
-> - Decomposition priorities below refer to the remaining files. Dead code purge (P2) should happen first.
-> - The total `lib/` line count is now reduced by ~1,195 lines from the baseline below.
+> - P2 (Dead Code Purge) is COMPLETE — ~2,400+ lines purged, 7 files deleted.
+> - P5 (intent-router decomposition) PARTIALLY EXECUTED — `lib/routing/` created with 4 files.
+> - P6 (agent-router decomposition) PARTIALLY EXECUTED — `lib/agents/` created with 3 files.
+> - `hipaa-compliant-storage.ts` is slated for **elimination** during Firestore server migration (per ADR-001), NOT decomposition.
+> - The total `lib/` is now 68 files across 5 directories, ~23,368 lines.
 
 ---
 
 ## Overview
 
-7 files exceed 700 lines and represent 40.6% of all `lib/` code (11,490 of 28,333 lines). This report analyzes each for decomposition potential and ranks them by implementation priority.
+Post-purge and partial decomposition, **4 files** exceed 700 lines. The remaining decomposition targets focus on these files plus pending extractions from partially decomposed modules.
 
 ---
 
-## Priority Ranking Summary
+## Priority Ranking Summary (Updated)
 
-| Priority | File | Lines | Risk | Quick Win |
-|:--------:|------|------:|:----:|:---------:|
-| P1 | `hipaa-compliant-storage.ts` | 778 | LOW | Schema + cache extraction |
-| P2 | `clinical-pattern-analyzer.ts` | 773 | LOW | Types + domain extractor |
-| P3 | `entity-extraction-engine.ts` | 834 | LOW | Static dictionaries |
-| P4 | `dynamic-orchestrator.ts` | 1,091 | MED | Reasoning bullet generator |
-| P5 | `intelligent-intent-router.ts` | 1,786 | MED | Function declarations |
-| P6 | `clinical-agent-router.ts` | 3,248 | HIGH | Agent prompt templates (~1,400 lines) |
-| P7 | `hopeai-system.ts` | 1,980 | CRIT | Decompose last (God Object) |
+| Priority | File | Lines (current) | Risk | Status |
+|:--------:|------|----------------:|:----:|:------:|
+| ~~P1~~ | ~~`hipaa-compliant-storage.ts`~~ | 657 | — | **REMOVED** — ADR-001: will be eliminated, not decomposed |
+| P2 | `clinical-pattern-analyzer.ts` | 686 | LOW | PENDING |
+| P3 | `entity-extraction-engine.ts` | 806 | LOW | PENDING |
+| P4 | `dynamic-orchestrator.ts` | 388 | LOW | **SCOPE REDUCED** — was 1,091; dead code purged |
+| P5 | `intelligent-intent-router.ts` | 200 | — | ✅ **EXECUTED** — decomposed into `lib/routing/` |
+| P6 | `clinical-agent-router.ts` | 612 | MED | ✅ **PARTIALLY EXECUTED** — decomposed into `lib/agents/` |
+| P7 | `hopeai-system.ts` | 1,684 | CRIT | PENDING |
 
 ---
 
 ## Detailed Analysis
 
-### P1: `hipaa-compliant-storage.ts` — 778 lines (LOW risk)
+### ~~P1: `hipaa-compliant-storage.ts`~~ — REMOVED FROM TARGETS
 
-**Exports:** 1 (`HIPAACompliantStorage` class)
-**Dependents:** 1 (`server-storage-adapter.ts` via dynamic import)
-**Dependencies:** `encryption-utils`
-
-**Responsibilities:**
-1. SQLite schema creation and migration
-2. Session CRUD with AES-256-GCM encryption at rest
-3. Hot cache (RAM) with TTL-based eviction
-4. Clinical file storage and retrieval
-5. Ficha clinica (clinical record) persistence
-6. HIPAA audit logging for all data access
-
-**Decomposition Plan → `lib/storage/`:**
-
-| New Module | Lines | Responsibility |
-|------------|------:|----------------|
-| `hipaa-schema.ts` | ~100 | Schema DDL, migrations |
-| `hipaa-cache.ts` | ~100 | Hot cache, TTL eviction, cleanup |
-| `hipaa-audit.ts` | ~80 | Audit logging, log retrieval |
-| `clinical-file-storage.ts` | ~120 | File CRUD operations |
-| `ficha-clinica-storage.ts` | ~100 | Ficha clinica CRUD |
-| `hipaa-compliant-storage.ts` | ~280 | Session CRUD, composition facade |
-
-**Why P1:** Only 1 dependent (dynamic import). Self-contained. Zero circular dependency risk. Establishes the `lib/storage/` pattern as proof-of-concept.
+Per ADR-001 (`decision-log/001-storage-migration-before-decomposition.md`), this file is slated for elimination during the Firestore server-side migration, not decomposition. Current size: 657 lines.
 
 ---
 
-### P2: `clinical-pattern-analyzer.ts` — 773 lines (LOW risk)
+### P2: `clinical-pattern-analyzer.ts` — 686 lines (LOW risk) — PENDING
 
 **Exports:** 8 (1 enum, 3 interfaces, 1 type, 1 config interface, 1 class, 1 factory)
 **Dependents:** 4 (`pattern-analysis-storage.ts`, 1 API route, 2 components)
 **Dependencies:** `google-genai-config`
-
-**Responsibilities:**
-1. Domain extraction via Gemini function-calling
-2. Domain categorization and frequency analysis
-3. Unexplored domain identification
-4. Reflective question generation
-5. Therapeutic alliance analysis
-6. Meta-insight generation
 
 **Decomposition Plan → `lib/patterns/`:**
 
@@ -87,22 +57,13 @@
 | `insight-generator.ts` | ~150 | Reflective questions, alliance analysis, meta-insights |
 | `clinical-pattern-analyzer.ts` | ~250 | Composition class, factory |
 
-**Why P2:** Clean domain boundary. Types importable independently. No circular deps.
-
 ---
 
-### P3: `entity-extraction-engine.ts` — 834 lines (LOW risk)
+### P3: `entity-extraction-engine.ts` — 806 lines (LOW risk) — PENDING
 
 **Exports:** 8 (4 interfaces, 1 type, 1 class, 1 factory, 1 singleton)
-**Dependents:** 3 (all internal: `intelligent-intent-router`, `dynamic-orchestrator`, `entity-extraction-plugin-registry`)
+**Dependents:** 3 (`routing/intent-classifier`, `dynamic-orchestrator`, `entity-extraction-plugin-registry`)
 **Dependencies:** `google-genai-config`
-
-**Responsibilities:**
-1. Known entity dictionary initialization (~250 lines of static data)
-2. Synonym map management
-3. Gemini function-calling-based extraction
-4. Entity deduplication and confidence scoring
-5. Entity validation against dictionaries
 
 **Decomposition Plan → `lib/entities/`:**
 
@@ -113,116 +74,62 @@
 | `entity-validator.ts` | ~100 | Validation against known entities |
 | `entity-extraction-engine.ts` | ~420 | Core extraction, factory, singleton |
 
-**Why P3:** Static dictionaries are trivial to extract (30% of file). Zero behavioral risk.
-
 ---
 
-### P4: `dynamic-orchestrator.ts` — 1,091 lines (MEDIUM risk)
+### P4: `dynamic-orchestrator.ts` — 388 lines (LOW risk) — SCOPE REDUCED
 
+**Previous size:** 1,091 lines. Reduced to 388 by P2 dead code purge (bullets, recommendations, preferences removed).
 **Exports:** 3 (`DynamicOrchestrator` class, factory, type re-exports)
-**Dependents:** 4 (`hopeai-system`, `hopeai-orchestration-bridge`, `orchestrator-monitoring`, `index.ts`)
-**Dependencies:** 7 modules
+**Dependents:** 1 (`hopeai-system`) — was 4, but `hopeai-orchestration-bridge`, `orchestrator-monitoring`, `index.ts` all deleted.
+**Dependencies:** reduced from 7 to ~4 modules.
 
-**Responsibilities:**
-1. Session management with conversation history
-2. Reasoning bullet generation (streaming async generator, ~350 lines)
-3. Tool selection optimization
-4. Recommendation generation and caching
-5. Interaction learning and session analytics
-6. Expired session cleanup
-
-**Decomposition Plan → `lib/orchestration/`:**
-
-| New Module | Lines | Responsibility |
-|------------|------:|----------------|
-| `reasoning-bullet-generator.ts` | ~350 | Prompt construction, streaming generator |
-| `recommendation-engine.ts` | ~200 | Recommendation generation, caching |
-| `session-context-manager.ts` | ~200 | Session CRUD, history, topic tracking, cleanup |
-| `dynamic-orchestrator.ts` | ~340 | Slim coordination facade |
-
-**Why P4:** Reasoning bullet generator is self-contained and the largest single concern.
+**Decomposition assessment:** At 388 lines with reduced responsibility, this file may no longer warrant decomposition. Re-evaluate after P7.
 
 ---
 
-### P5: `intelligent-intent-router.ts` — 1,786 lines (MEDIUM risk)
+### P5: `intelligent-intent-router.ts` — ✅ EXECUTED
 
-**Exports:** 7 (5 interfaces, 1 class, 1 factory)
-**Dependents:** 3 (`dynamic-orchestrator`, `hopeai-system`, `index.ts`)
-**Dependencies:** 5 modules
+**Previous size:** 1,786 lines → **Current size:** 200 lines (slim facade).
 
-**Responsibilities:**
-1. Intent classification via Gemini function-calling (inlined declarations ~200 lines)
-2. Combined intent + entity extraction optimization
-3. Edge case detection (risk signals, stress markers)
-4. Agent routing with confidence thresholds
-5. Context optimization for prompts
-6. Retry with exponential backoff
+**Decomposed into `lib/routing/` (4 files):**
 
-**Decomposition Plan → `lib/routing/`:**
+| Actual File | Lines | Responsibility |
+|-------------|------:|----------------|
+| `routing/intent-classifier.ts` | 499 | Intent classification via Gemini API with retry |
+| `routing/intent-declarations.ts` | 171 | Function declaration constants |
+| `routing/routing-types.ts` | 81 | Exported interfaces for routing |
+| `routing/index.ts` | 34 | Barrel re-export |
 
-| New Module | Lines | Responsibility |
-|------------|------:|----------------|
-| `intent-function-declarations.ts` | ~200 | Function declaration constants |
-| `intent-classifier.ts` | ~300 | Gemini API call, retry, parsing |
-| `edge-case-detector.ts` | ~200 | Risk/stress/sensitive detection |
-| `agent-mapper.ts` | ~150 | Function-to-agent mapping, transitions |
-| `routing-types.ts` | ~80 | All exported interfaces |
-| `intelligent-intent-router.ts` | ~800 | Composition, factory |
-
-**Why P5:** Function declarations and edge-case detection are clean extractions. The combined optimization path ties to EntityExtractionEngine.
+**Diff from original plan:** `edge-case-detector.ts` and `agent-mapper.ts` were not created as separate files. Edge-case detection and agent mapping were absorbed into `intent-classifier.ts` or removed during P2.
 
 ---
 
-### P6: `clinical-agent-router.ts` — 3,248 lines (HIGH risk)
+### P6: `clinical-agent-router.ts` — ✅ PARTIALLY EXECUTED
 
-**Exports:** 2 (`ClinicalAgentRouter` class, `clinicalAgentRouter` singleton)
-**Dependents:** 6 files (the highest in the codebase)
-**Dependencies:** 10 modules (the highest fan-out)
+**Previous size:** 3,248 lines → **Current size:** 612 lines.
 
-**Responsibilities:**
-1. Agent system prompt construction (~1,400 lines of inlined templates)
-2. Gemini chat session lifecycle management
-3. Streaming message dispatch with tool/function-call handling
-4. Multi-round recursive function call resolution
-5. Academic search tool orchestration
-6. File context injection and format conversion
-7. Reactive context compaction
-8. Session cleanup with TTL-based GC
-9. Metrics streaming wrapper
+**Decomposed into `lib/agents/` (3 files):**
 
-**Decomposition Plan → `lib/agents/`:**
+| Actual File | Lines | Responsibility |
+|-------------|------:|----------------|
+| `agents/agent-definitions.ts` | 1,182 | Agent system prompt templates and config maps |
+| `agents/streaming-handler.ts` | 798 | Streaming dispatch with tool/function-call handling |
+| `agents/message-context-builder.ts` | 150 | File context injection and format conversion |
 
-| New Module | Lines | Responsibility |
-|------------|------:|----------------|
-| `agent-definitions.ts` | ~800 | System prompt constants, agent config maps |
-| `agent-session-manager.ts` | ~400 | Chat session lifecycle, cleanup |
-| `streaming-handler.ts` | ~600 | Streaming dispatch, function-call resolution |
-| `tool-execution-bridge.ts` | ~500 | Tool call prep, academic search orchestration |
-| `file-context-builder.ts` | ~300 | File injection, format conversion |
-| `context-compaction.ts` | ~200 | Reactive compaction, token estimation |
-| `clinical-agent-router.ts` | ~400 | Thin facade preserving class + singleton API |
+**Diff from original plan:** `agent-session-manager.ts`, `tool-execution-bridge.ts`, `context-compaction.ts`, and `file-context-builder.ts` were not created. Session management remains in `clinical-agent-router.ts`. `message-context-builder.ts` replaced the proposed `file-context-builder.ts`.
 
-**Why P6:** Highest impact (removes 43% of largest file just by extracting prompts), but 6 dependents make interface changes risky. Must preserve public API exactly.
-
-**Quick win:** Extract the ~1,400 lines of agent prompt templates first. Zero behavioral risk, massive size reduction.
+**Remaining extraction opportunities:**
+- Session lifecycle management (~200 lines still in `clinical-agent-router.ts`)
+- Tool execution orchestration (in `streaming-handler.ts`, could be separated if it grows)
 
 ---
 
-### P7: `hopeai-system.ts` — 1,980 lines (CRITICAL risk)
+### P7: `hopeai-system.ts` — 1,684 lines (CRITICAL risk) — PENDING
 
+**Previous size:** 1,980 → **Current size:** 1,684 lines (reduced by P2 import cleanup).
 **Exports:** 8 (2 classes, 4 functions, 1 re-export, 1 utility)
-**Dependents:** 10+ files (API routes, hooks, bridge, singleton, index)
-**Dependencies:** 8 modules
-
-**Responsibilities:**
-1. Top-level orchestration facade
-2. Sensitive content detection
-3. Operational metadata collection
-4. Conversation history management
-5. Document upload/removal lifecycle
-6. System status and analytics
-7. Async pattern analysis triggering
-8. Singleton management with initialization promises
+**Dependents:** Reduced from 10+ (bridge, singleton, index deleted) to ~6 (API routes, hooks)
+**Dependencies:** Reduced from 8 to ~5 modules
 
 **Decomposition Plan → `lib/system/`:**
 
@@ -233,21 +140,20 @@
 | `document-manager.ts` | ~200 | Upload, removal, retrieval |
 | `session-analytics.ts` | ~200 | User/session analytics, status |
 | `conversation-manager.ts` | ~300 | History, title derivation, streaming capture |
-| `singleton.ts` | ~150 | HopeAISystemSingleton, init promise |
-| `hopeai-system.ts` | ~700 | Slim HopeAISystem composing the above |
+| `hopeai-system.ts` | ~500 | Slim HopeAISystem composing the above |
 
-**Why P7 (last):** God Object. 10+ dependents. 8 exports that must remain stable. Decompose only after its dependencies (P4, P5, P6) have been simplified first.
+**Why P7 (last):** Still a God Object. Decompose only after its dependencies have stabilized.
 
 ---
 
-## Summary
+## Summary (Updated)
 
-| Metric | Value |
-|--------|-------|
-| Total lines across 7 targets | 11,490 |
-| Total lines in `lib/` | ~30,010 |
-| Concentration ratio | 38.3% of all lib code in 7 files |
-| Proposed new modules | 37 |
-| New subdirectories | 6 (`agents/`, `system/`, `routing/`, `orchestration/`, `entities/`, `patterns/`, `storage/`) |
-| Est. post-decomposition max file | ~800 lines |
-| Single highest-ROI action | Extract ~1,400 lines of agent prompts from `clinical-agent-router.ts` |
+| Metric | Baseline (2026-04-06) | Current (2026-04-07) |
+|--------|----------------------:|---------------------:|
+| Total lines across targets | 11,490 | 4,176 (P2+P7+P3+P6 remaining) |
+| Total lines in `lib/` | ~30,010 | ~23,368 |
+| Files >700 lines | 7 | 4 |
+| Decomposition targets remaining | 7 | 3 (P2, P3, P7) + re-evaluate P4 |
+| Executed decompositions | 0 | 2 partial (P5, P6) |
+| New subdirectories created | 0 of 6 | 2 of 6 (`agents/`, `routing/`) |
+| Single highest-ROI remaining action | Extract agent prompts (done) | Decompose `hopeai-system.ts` (P7) |
