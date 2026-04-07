@@ -213,7 +213,8 @@ export function snapshotExecutionTimeline(
       query: tool.query,
       detail: fullQuery.length > 60 ? fullQuery : (buildToolResultDetail(tool.result, tool.status) || tool.completionDetail),
       result: tool.result,
-      sources: tool.academicSources
+      sources: tool.academicSources,
+      progressSteps: tool.progressSteps,
     })
   }
 
@@ -313,12 +314,10 @@ export function buildLiveTimeline(
   // 3. Tool executions – each gets its own step
   for (const tool of processingStatus.toolExecutions) {
     const isToolActive = tool.status === 'started' || tool.status === 'in_progress'
-    // When in_progress, show the progress message instead of the generic label
-    const toolLabel = tool.status === 'in_progress' && tool.progressMessage
-      ? tool.progressMessage
-      : tool.query
-        ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
-        : tool.displayName
+    // Keep the tool label stable — don't replace it with the progress message
+    const toolLabel = tool.query
+      ? `${tool.displayName}: "${truncate(tool.query, 60)}"`
+      : tool.displayName
 
     const fullQuery = tool.query || tool.displayName
 
@@ -328,9 +327,10 @@ export function buildLiveTimeline(
       status: isToolActive ? 'active' : tool.status === 'error' ? 'error' : 'completed',
       toolName: tool.toolName,
       query: tool.query,
-      detail: fullQuery.length > 60 ? fullQuery : (buildToolResultDetail(tool.result, tool.status) || tool.completionDetail),  // 🔧 FIX: Full query as detail for expandable accordion
+      detail: fullQuery.length > 60 ? fullQuery : (buildToolResultDetail(tool.result, tool.status) || tool.completionDetail),
       result: tool.result,
-      sources: tool.academicSources
+      sources: tool.academicSources,
+      progressSteps: tool.progressSteps,
     })
   }
 

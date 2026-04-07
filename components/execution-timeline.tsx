@@ -103,7 +103,8 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
   // Build the detail string to show inside the expanded area
   const detailText = buildDetailText(step)
   const hasSources = step.sources && step.sources.length > 0
-  const hasDetail = !!detailText || hasSources
+  const hasProgressSteps = step.progressSteps && step.progressSteps.length > 0
+  const hasExpandableContent = !!detailText || hasSources
   const [isOpen, setIsOpen] = useState(!defaultCollapsed && step.status === 'active')
 
   // Auto-collapse when a step transitions from active → completed
@@ -121,8 +122,9 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
       ? <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
       : <CheckCircle className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
 
-  if (!hasDetail) {
-    // Simple action statement — no toggle
+  // Steps with progress sub-items OR expandable detail get the bordered container
+  if (!hasProgressSteps && !hasExpandableContent) {
+    // Simple action statement — no sub-items, no toggle
     return (
       <motion.li
         initial={{ opacity: 0, y: 4 }}
@@ -140,7 +142,7 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
     )
   }
 
-  // Expandable accordion item
+  // Tool step with progress sub-items and/or expandable detail
   return (
     <motion.li
       initial={{ opacity: 0, y: 4 }}
@@ -151,27 +153,50 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
         step.status === 'active' && "border-clarity-blue-500/30 bg-secondary/30"
       )}
     >
-      <button
-        type="button"
-        onClick={() => setIsOpen(prev => !prev)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-secondary/40 transition-colors"
-      >
-        <div className="flex-shrink-0">{icon}</div>
-        <span className={cn(
-          "text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate",
-          step.status === 'active' && "animate-pulse"
-        )}>
-          {step.label}
-        </span>
-        {step.status === 'active' && <ElapsedTimer />}
-        {isOpen
-          ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
-          : <ChevronRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
-        }
-      </button>
+      {/* Main label row — clickable if there's expandable detail */}
+      {hasExpandableContent ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(prev => !prev)}
+          className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-secondary/40 transition-colors"
+        >
+          <div className="flex-shrink-0">{icon}</div>
+          <span className={cn(
+            "text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate",
+            step.status === 'active' && "animate-pulse"
+          )}>
+            {step.label}
+          </span>
+          {step.status === 'active' && <ElapsedTimer />}
+          {isOpen
+            ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+            : <ChevronRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+          }
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 px-2 py-1">
+          <div className="flex-shrink-0">{icon}</div>
+          <span className={cn(
+            "text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0 truncate",
+            step.status === 'active' && "animate-pulse"
+          )}>
+            {step.label}
+          </span>
+          {step.status === 'active' && <ElapsedTimer />}
+        </div>
+      )}
 
+      {/* Progress sub-steps — always visible (not collapsible) */}
+      {hasProgressSteps && (
+        <ProgressStepsList
+          steps={step.progressSteps!}
+          isActive={step.status === 'active'}
+        />
+      )}
+
+      {/* Expandable detail section (collapsed by default for historical) */}
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && hasExpandableContent && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -187,6 +212,44 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
         )}
       </AnimatePresence>
     </motion.li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Progress sub-steps – rendered inline under the tool label (always visible)
+// ---------------------------------------------------------------------------
+
+function ProgressStepsList({ steps, isActive }: { steps: string[]; isActive: boolean }) {
+  return (
+    <div className="px-2 pb-1.5 pl-7 space-y-0.5">
+      {steps.map((msg, idx) => {
+        const isLast = idx === steps.length - 1
+        const isCurrentStep = isActive && isLast
+        return (
+          <motion.div
+            key={`${idx}-${msg}`}
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.12, delay: 0.02 }}
+            className="flex items-center gap-1.5"
+          >
+            {isCurrentStep ? (
+              <Loader2 className="w-2.5 h-2.5 animate-spin text-clarity-blue-500/70 flex-shrink-0" />
+            ) : (
+              <CheckCircle className="w-2.5 h-2.5 text-serene-teal-500/50 flex-shrink-0" />
+            )}
+            <span className={cn(
+              "text-[10px] leading-relaxed",
+              isCurrentStep
+                ? "text-muted-foreground/80 animate-pulse"
+                : "text-muted-foreground/60"
+            )}>
+              {msg}
+            </span>
+          </motion.div>
+        )
+      })}
+    </div>
   )
 }
 

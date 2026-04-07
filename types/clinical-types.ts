@@ -54,9 +54,9 @@ export interface ExecutionStep {
   sources?: AcademicSourceReference[]
   /** Human-readable summary of what the tool/sub-agent did */
   completionDetail?: string
+  /** Accumulated progress steps from sub-agent execution (rendered as sub-items in accordion) */
+  progressSteps?: string[]
 }
-
-/** A single academic source reference for display in the execution timeline */
 export interface AcademicSourceReference {
   title: string
   url: string
@@ -107,6 +107,8 @@ export interface ToolExecutionEvent {
   timestamp: Date
   /** Optional progress message for intermediate states */
   progressMessage?: string
+  /** Accumulated progress steps from sub-agent internal execution (displayed as sub-items) */
+  progressSteps?: string[]
   result?: {
     sourcesFound?: number
     sourcesValidated?: number

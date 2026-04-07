@@ -755,10 +755,17 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                     }
                   }
                   if (tool.status === 'in_progress') {
-                    // Update progress message on the matching started tool
+                    // Accumulate progress steps and update progress message on the matching tool
                     const updatedExecutions = prev.processingStatus.toolExecutions.map(t => {
                       if (t.toolName === tool.toolName && (t.status === 'started' || t.status === 'in_progress')) {
-                        return { ...t, status: 'in_progress' as const, progressMessage: tool.progressMessage }
+                        const prevSteps = t.progressSteps || []
+                        const newStep = tool.progressMessage
+                        return {
+                          ...t,
+                          status: 'in_progress' as const,
+                          progressMessage: tool.progressMessage,
+                          progressSteps: newStep ? [...prevSteps, newStep] : prevSteps,
+                        }
                       }
                       return t
                     })
