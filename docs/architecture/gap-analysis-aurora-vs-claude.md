@@ -18,6 +18,13 @@
 > - Server-side messages subcollection alignment completado: `firestore-storage-adapter.ts` ahora escribe mensajes a subcollection (O(1)), lee con fallback legacy.
 > - Archivos eliminados: `clinical-context-storage.ts`, `patient-persistence.ts`, `client-context-persistence.ts`. Las referencias a estos archivos en este documento son históricas.
 > - Archivos servidor (`hipaa-compliant-storage.ts`, `server-storage-adapter.ts`, `server-storage-memory.ts`) siguen en uso.
+>
+> **Estado actualizado (2026-04-08) — ARCH-1 Agent-Tree/MCP improvements:**
+> - **P2.2 (Delegación paralela):** COMPLETADO. `lib/agents/subagents/research-evidence.ts` ahora ejecuta búsquedas en paralelo con `Promise.all()` + error isolation por query. Antes: loop secuencial.
+> - **P2.1 (Memoria semántica):** MEJORADO. `lib/clinical-memory-system.ts` tiene nueva función `getRelevantMemoriesSemantic()` que usa Gemini Flash para selección semántica de memorias (análogo a Claude Code `findRelevantMemories.ts`). Fallback automático a keywords si LLM falla. Wired a `explore_patient_context` sub-agente.
+> - **MCP Foundation:** NUEVO. `lib/mcp/` creado con tipos (`types.ts`), wrapper de herramientas (`mcp-tool-wrapper.ts`) y registry singleton (`mcp-registry.ts`). Las herramientas MCP se integran al mismo pipeline de permisos + orquestación que las nativas. Patrón de naming: `mcp__<serverId>__<toolName>`.
+> - Análisis detallado de la relación Agent-Tree ↔ MCP en `docs/architecture/agent-tree-mcp-relationship-analysis.md`.
+> - **Recomendaciones pendientes:** P1.3 (Zod schemas completos), P2.3 (hooks pre/post-tool), Aurora como MCP Server.
 
 ---
 

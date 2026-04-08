@@ -7,27 +7,27 @@
 > Based on PR analysis `copilot/revise-agent-architecture-relationship`
 > Source: `docs/architecture/agent-tree-mcp-relationship-analysis.md`
 
-#### Phase 2: Sub-Agent Parallelization | Priority: H
-- [ ] 2a. Convert `research-evidence.ts` sequential search loop → parallel Promise.all with per-query error isolation
-- [ ] 2b. Add progress reporting that works with parallel execution (report when each search completes, not just start)
-- [ ] 2c. Verify no regressions with vitest
+#### Phase 2: Sub-Agent Parallelization | Priority: H ✅ DONE
+- [x] 2a. Convert `research-evidence.ts` sequential search loop → parallel Promise.all with per-query error isolation
+- [x] 2b. Add progress reporting that works with parallel execution (report when each search completes, not just start)
+- [x] 2c. Verify no regressions with vitest
 
-#### Phase 3: Semantic Memory Selection | Priority: H
-- [ ] 3a. Add `getRelevantMemoriesSemantic()` to `clinical-memory-system.ts` that uses Gemini Flash to select top-K relevant memories
-- [ ] 3b. Automatic fallback to keyword-based `getRelevantMemories()` on LLM failure
-- [ ] 3c. Wire new function to `explore_patient_context.ts` sub-agent (replace `getRelevantMemories` call)
-- [ ] 3d. Verify no regressions with vitest
+#### Phase 3: Semantic Memory Selection | Priority: H ✅ DONE
+- [x] 3a. Add `getRelevantMemoriesSemantic()` to `clinical-memory-system.ts` that uses Gemini Flash to select top-K relevant memories
+- [x] 3b. Automatic fallback to keyword-based `getRelevantMemories()` on LLM failure
+- [x] 3c. Wire new function to `explore_patient_context.ts` sub-agent (replace `getRelevantMemories` call)
+- [x] 3d. Verify no regressions with vitest
 
-#### Phase 4: MCP Foundation Types | Priority: M
-- [ ] 4a. Create `lib/mcp/types.ts` — MCPServerConfig, MCPToolDefinition, MCPToolResult interfaces
-- [ ] 4b. Create `lib/mcp/mcp-tool-wrapper.ts` — wraps MCP tool calls into ToolHandler interface
-- [ ] 4c. Create `lib/mcp/mcp-registry.ts` — singleton registry for MCP server connections
-- [ ] 4d. Create `lib/mcp/index.ts` — barrel export
-- [ ] 4e. Verify type-check passes (`npx tsc --noEmit` on new files only)
+#### Phase 4: MCP Foundation Types | Priority: M ✅ DONE
+- [x] 4a. Create `lib/mcp/types.ts` — MCPServerConfig, MCPToolDefinition, MCPToolResult interfaces
+- [x] 4b. Create `lib/mcp/mcp-tool-wrapper.ts` — wraps MCP tool calls into ToolHandler interface
+- [x] 4c. Create `lib/mcp/mcp-registry.ts` — singleton registry for MCP server connections
+- [x] 4d. Create `lib/mcp/index.ts` — barrel export
+- [x] 4e. Verify type-check passes (no new errors in lib/mcp/)
 
-#### Phase 5: Documentation Update | Priority: L
-- [ ] 5a. Update `gap-analysis-aurora-vs-claude.md` status section
-- [ ] 5b. Add ARCH-1 results to `tasks/todo.md` completed section
+#### Phase 5: Documentation Update | Priority: L ✅ DONE
+- [x] 5a. Update `gap-analysis-aurora-vs-claude.md` status section
+- [x] 5b. Add ARCH-1 results to `tasks/todo.md` completed section
 
 #### Phase 6: Validation
 - [ ] 6a. Run parallel_validation for code review + CodeQL security scan
@@ -66,3 +66,7 @@
 - [x] 2026-04-07: PT — Patient Tools (`create_patient` + `list_patients`, 6 files, +256 lines)
 - [x] 2026-04-07: patientId Threading — Fixed `save_clinical_memory` tool failure (3 files)
 - [x] 2026-04-07: SRF — Session Recovery Fix — non-blocking sessionMeta, eliminated double-read, defensive dates (3 files)
+- [x] 2026-04-08: ARCH-1 — Agent-Tree/MCP Architecture Improvements (3 phases):
+  - Phase 2: Sub-agent parallel search execution (research-evidence.ts: sequential→Promise.all)
+  - Phase 3: Semantic memory selection via Gemini Flash (clinical-memory-system.ts + explore-patient-context.ts)
+  - Phase 4: MCP foundation types (`lib/mcp/`: types, tool wrapper, registry — 4 files, +538 lines)
