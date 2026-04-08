@@ -5,7 +5,6 @@ import { useAuth } from "@/providers/auth-provider"
 import {
   listUserSessions,
   findSessionById,
-  loadSessionWithMessages,
   deleteSession,
   saveSessionMetadata,
 } from "@/lib/firestore-client-storage"
@@ -230,21 +229,15 @@ export function usePatientConversationHistory(): UsePatientConversationHistoryRe
     try {
       logger.info(`Abriendo conversacion: ${sessionId}`)
 
+      // findSessionById already loads the full session + messages from subcollection
       const result = await findSessionById(psychologistId, sessionId)
 
       if (!result) {
         throw new Error('Conversacion no encontrada')
       }
 
-      // Load full session with messages
-      const chatState = await loadSessionWithMessages(psychologistId, result.patientId, sessionId)
-
-      if (!chatState) {
-        throw new Error('Conversacion no encontrada')
-      }
-
       logger.info(`Conversacion cargada exitosamente`)
-      return chatState
+      return result.session
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error abriendo conversacion: ${errorMessage}`)

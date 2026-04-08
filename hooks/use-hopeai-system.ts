@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, PatientSessionMeta, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
 import {
   findSessionById,
   saveSessionMetadata,
@@ -154,55 +154,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         throw new Error(`Sesión no encontrada: ${sessionId}`)
       }
 
-      // 🏥 FIX: Try to use sessionMeta from storage first, then reconstruct if needed
-      let sessionMetaToUse: PatientSessionMeta | undefined = undefined
+      // Show messages IMMEDIATELY — never block rendering on sessionMeta reconstruction
+      const existingSessionMeta = chatState.sessionMeta || undefined
 
-      // Priority 1: Use sessionMeta from ChatState if available
-      if (chatState.sessionMeta) {
-        logger.info(`✅ Using existing sessionMeta from ChatState for patient: ${chatState.sessionMeta.patient.reference}`)
-        sessionMetaToUse = chatState.sessionMeta
-      }
-      // Priority 2: Reconstruct sessionMeta if session has patient context but no sessionMeta
-      else if (chatState.clinicalContext?.patientId) {
-        try {
-          const { loadPatient } = await import('@/lib/firestore-client-storage')
-          const { PatientContextComposer } = await import('@/lib/patient-summary-builder')
-          const { PatientSummaryBuilder } = await import('@/lib/patient-summary-builder')
-
-          const patient = psychologistId ? await loadPatient(psychologistId, chatState.clinicalContext.patientId!) : null
-
-          if (patient) {
-            logger.info(`🔄 Reconstructing sessionMeta for patient: ${patient.displayName}`)
-            const composer = new PatientContextComposer()
-
-            // Get full patient summary to enrich sessionMeta
-            const patientSummary = await PatientSummaryBuilder.getSummaryWithFicha(patient)
-
-            sessionMetaToUse = composer.createSessionMetadata(patient, {
-              sessionId: chatState.sessionId,
-              userId: chatState.userId,
-              clinicalMode: chatState.clinicalContext.sessionType || 'clinical_supervision',
-              activeAgent: chatState.activeAgent
-            }, patientSummary)
-
-            logger.info(`✅ SessionMeta reconstructed for patient: ${sessionMetaToUse.patient.reference}`)
-
-            // 🏥 FIX: Save reconstructed sessionMeta back to storage
-            chatState.sessionMeta = sessionMetaToUse
-            if (psychologistId) {
-              const pid = resolvePatientId(chatState)
-              await saveSessionMetadata(psychologistId, pid, chatState)
-            }
-            logger.info(`💾 Reconstructed sessionMeta saved to storage`)
-          } else {
-            logger.warn(`⚠️ Patient not found for ID: ${chatState.clinicalContext.patientId}`)
-          }
-        } catch (error) {
-          logger.error('Failed to reconstruct sessionMeta:', error)
-        }
-      }
-
-      // Actualizar el estado del sistema con los datos de la sesión cargada
       setSystemState(prev => ({
         ...prev,
         sessionId: chatState.sessionId,
@@ -211,12 +165,51 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         activeAgent: chatState.activeAgent,
         history: chatState.history,
         isLoading: false,
-        sessionMeta: sessionMetaToUse
+        sessionMeta: existingSessionMeta
       }))
       lastSessionIdRef.current = chatState.sessionId
 
       logger.info('✅ Sesión HopeAI cargada:', sessionId)
       logger.info('📊 Historial cargado con', chatState.history.length, 'mensajes')
+
+      // Background reconstruction: if session has patient context but no sessionMeta, reconstruct without blocking UI
+      if (!existingSessionMeta && chatState.clinicalContext?.patientId) {
+        const patientIdToReconstruct = chatState.clinicalContext.patientId
+        ;(async () => {
+          try {
+            const { loadPatient } = await import('@/lib/firestore-client-storage')
+            const { PatientContextComposer, PatientSummaryBuilder } = await import('@/lib/patient-summary-builder')
+
+            const patient = psychologistId ? await loadPatient(psychologistId, patientIdToReconstruct) : null
+            if (!patient) {
+              logger.warn(`⚠️ Patient not found for background reconstruction: ${patientIdToReconstruct}`)
+              return
+            }
+
+            logger.info(`🔄 Background: reconstructing sessionMeta for patient: ${patient.displayName}`)
+            const composer = new PatientContextComposer()
+            const patientSummary = PatientSummaryBuilder.getSummaryWithFicha(patient)
+            const reconstructed = composer.createSessionMetadata(patient, {
+              sessionId: chatState.sessionId,
+              userId: chatState.userId,
+              clinicalMode: chatState.clinicalContext?.sessionType || 'clinical_supervision',
+              activeAgent: chatState.activeAgent
+            }, patientSummary)
+
+            // Update state with reconstructed sessionMeta (non-blocking)
+            setSystemState(prev => prev.sessionId === chatState.sessionId ? { ...prev, sessionMeta: reconstructed } : prev)
+
+            // Persist to Firestore in background
+            if (psychologistId) {
+              const pid = resolvePatientId({ ...chatState, sessionMeta: reconstructed })
+              await saveSessionMetadata(psychologistId, pid, { ...chatState, sessionMeta: reconstructed })
+            }
+            logger.info(`💾 Background: sessionMeta reconstructed and saved`)
+          } catch (error) {
+            logger.error('Background sessionMeta reconstruction failed (non-blocking):', error)
+          }
+        })()
+      }
       return true
     } catch (error) {
       logger.error('❌ Error cargando sesión:', error)

@@ -139,7 +139,7 @@ export class PatientSummaryBuilder {
       JSON.stringify(patient.tags || []),
       patient.notes || "",
       patient.attachments?.length || 0,
-      patient.updatedAt.toISOString()
+      patient.updatedAt instanceof Date ? patient.updatedAt.toISOString() : String(patient.updatedAt)
     ].join("|")
     
     // Simple hash function for change detection
