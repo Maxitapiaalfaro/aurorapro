@@ -246,6 +246,8 @@ const KNOWN_DYNAMIC_TOOLS = new Set([
   'get_patient_memories',
   'get_patient_record',
   'save_clinical_memory',
+  'create_patient',
+  'list_patients',
   // Sub-agent tools
   'explore_patient_context',
   'generate_clinical_document',
@@ -368,6 +370,10 @@ function extractQueryFromArgs(toolName: string, args: Record<string, unknown> | 
       return args.context_hint as string | undefined;
     case 'generate_clinical_document':
       return args.document_type as string | undefined;
+    case 'create_patient':
+      return args.displayName as string | undefined;
+    case 'list_patients':
+      return args.search_query as string | undefined;
     default:
       return undefined;
   }
@@ -388,6 +394,10 @@ function extractCompletionDetail(resp: { name: string; response: unknown }): str
       return `${data.sourcesCount ?? 0} fuentes, ${formatMs(data.durationMs)}`;
     case 'analyze_longitudinal_patterns':
       return `${data.sessionCount ?? 0} sesiones, ${formatMs(data.durationMs)}`;
+    case 'create_patient':
+      return `Paciente creado: ${data.displayName || '?'}`;
+    case 'list_patients':
+      return `${data.count ?? 0} pacientes encontrados`;
     default:
       return undefined;
   }

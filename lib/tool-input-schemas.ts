@@ -54,6 +54,30 @@ export const saveClinicalMemorySchema = z.object({
     .describe('Etiquetas clínicas para recuperación futura'),
 });
 
+/** create_patient — Patient Record Creation (write) */
+export const createPatientSchema = z.object({
+  displayName: z.string().min(1).max(200)
+    .describe('Nombre o seudónimo del paciente'),
+  demographics: z.object({
+    ageRange: z.string().optional(),
+    gender: z.string().optional(),
+    occupation: z.string().optional(),
+    location: z.string().optional(),
+  }).optional().describe('Datos demográficos del paciente'),
+  tags: z.array(z.string()).max(20).optional()
+    .describe('Etiquetas clínicas (condiciones, áreas de enfoque)'),
+  notes: z.string().max(5000).optional()
+    .describe('Notas clínicas iniciales'),
+});
+
+/** list_patients — Patient List Retrieval (read-only) */
+export const listPatientsSchema = z.object({
+  search_query: z.string().max(200).optional()
+    .describe('Término de búsqueda (nombre, tags, notas)'),
+  limit: z.number().int().min(1).max(50).optional()
+    .describe('Número máximo de pacientes a retornar. Default: 20.'),
+});
+
 /** google_search — Gemini native grounding (external) */
 export const googleSearchSchema = z.object({
   query: z.string().describe('Términos de búsqueda'),
@@ -120,6 +144,8 @@ export const toolInputSchemas: Record<string, z.ZodType> = {
   'get_patient_memories': getPatientMemoriesSchema,
   'get_patient_record': getPatientRecordSchema,
   'save_clinical_memory': saveClinicalMemorySchema,
+  'create_patient': createPatientSchema,
+  'list_patients': listPatientsSchema,
   'google_search': googleSearchSchema,
 
   // Sub-agent tools

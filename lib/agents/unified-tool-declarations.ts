@@ -168,6 +168,78 @@ export const UNIFIED_TOOL_DECLARATIONS = [
           required: ['patientId', 'category', 'content', 'confidence'],
         },
       },
+      {
+        name: 'create_patient',
+        description: [
+          'Crea un nuevo registro de paciente en la base de datos del terapeuta.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta menciona un paciente nuevo que quiere registrar',
+          '- El terapeuta pide explícitamente crear un registro de paciente',
+          '- Se inicia un caso nuevo y no existe registro previo',
+          '',
+          'NO USES CUANDO:',
+          '- El paciente ya existe — usa get_patient_record',
+          '- El terapeuta solo menciona un nombre casualmente sin pedir registrarlo',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            displayName: {
+              type: 'string',
+              description: 'Nombre o seudónimo del paciente',
+            },
+            demographics: {
+              type: 'object',
+              description: 'Datos demográficos del paciente (todos opcionales)',
+              properties: {
+                ageRange: { type: 'string', description: 'Rango etario (ej: "25-30")' },
+                gender: { type: 'string', description: 'Género' },
+                occupation: { type: 'string', description: 'Ocupación' },
+                location: { type: 'string', description: 'Ubicación' },
+              },
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Etiquetas clínicas: condiciones, áreas de enfoque terapéutico',
+            },
+            notes: {
+              type: 'string',
+              description: 'Notas clínicas iniciales del caso',
+            },
+          },
+          required: ['displayName'],
+        },
+      },
+      {
+        name: 'list_patients',
+        description: [
+          'Lista los pacientes registrados del terapeuta, con opción de búsqueda por nombre, etiquetas o notas.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta pregunta "quiénes son mis pacientes" o "cuántos pacientes tengo"',
+          '- Necesitas encontrar un paciente específico para trabajar con él',
+          '- El terapeuta quiere seleccionar un paciente de su lista',
+          '',
+          'NO USES CUANDO:',
+          '- El paciente ya está activo en la sesión y lo conoces',
+          '- Solo necesitas el registro de un paciente cuyo ID ya tienes — usa get_patient_record',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            search_query: {
+              type: 'string',
+              description: 'Término de búsqueda para filtrar por nombre, etiquetas o notas',
+            },
+            limit: {
+              type: 'number',
+              description: 'Número máximo de pacientes a retornar (1-50). Default: 20.',
+            },
+          },
+        },
+      },
       // ─── SUB-AGENT TOOLS ─────────────────────────────────────────
       {
         name: 'explore_patient_context',

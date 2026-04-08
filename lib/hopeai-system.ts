@@ -3,7 +3,7 @@ import 'server-only'
 import { clinicalAgentRouter } from "./clinical-agent-router"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
 import { getAdminApp } from './firebase-admin-config'
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore'
+import { getFirestore as getAdminFirestore, Timestamp as AdminTimestamp } from 'firebase-admin/firestore'
 import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
@@ -33,6 +33,70 @@ export async function loadPatientFromFirestore(userId: string, patientId: string
     sessionLogger.warn(`⚠️ Failed to load patient ${patientId}`, { error: err instanceof Error ? err.message : String(err) })
     return null
   }
+}
+
+/** Generate a patient ID (server-side). Same format as client-side. */
+export function generatePatientId(): string {
+  const timestamp = Date.now().toString(36)
+  const randomPart = Math.random().toString(36).substring(2, 8)
+  return `patient_${timestamp}_${randomPart}`
+}
+
+/** Save a PatientRecord to Firestore (server-side, using firebase-admin). */
+export async function savePatientToFirestore(
+  psychologistId: string,
+  patient: PatientRecord
+): Promise<void> {
+  const adminDb = getAdminFirestore(getAdminApp())
+  const ref = adminDb
+    .collection('psychologists').doc(psychologistId)
+    .collection('patients').doc(patient.id)
+
+  const data: Record<string, unknown> = { ...patient }
+  // Convert Dates to Firestore Timestamps
+  if (data.createdAt instanceof Date) {
+    data.createdAt = AdminTimestamp.fromDate(data.createdAt as Date)
+  }
+  if (data.updatedAt instanceof Date) {
+    data.updatedAt = AdminTimestamp.fromDate(data.updatedAt as Date)
+  }
+
+  await ref.set(data, { merge: true })
+}
+
+/** List patients for a psychologist from Firestore (server-side). */
+export async function listPatientsFromFirestore(
+  psychologistId: string,
+  options?: { searchTerm?: string; limit?: number }
+): Promise<PatientRecord[]> {
+  const adminDb = getAdminFirestore(getAdminApp())
+  const limit = Math.min(options?.limit ?? 50, 100)
+
+  const snapshot = await adminDb
+    .collection('psychologists').doc(psychologistId)
+    .collection('patients')
+    .orderBy('updatedAt', 'desc')
+    .limit(limit)
+    .get()
+
+  let patients: PatientRecord[] = snapshot.docs.map(doc => {
+    const data = doc.data() as any
+    if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate()
+    if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate()
+    return data as PatientRecord
+  })
+
+  // In-memory search (patient count per psychologist is small)
+  if (options?.searchTerm) {
+    const term = options.searchTerm.toLowerCase()
+    patients = patients.filter(p =>
+      p.displayName.toLowerCase().includes(term) ||
+      (p.tags && p.tags.some(t => t.toLowerCase().includes(term))) ||
+      (p.notes && p.notes.toLowerCase().includes(term))
+    )
+  }
+
+  return patients
 }
 
 export class HopeAISystem {

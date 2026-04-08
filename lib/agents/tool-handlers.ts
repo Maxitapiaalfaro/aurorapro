@@ -242,7 +242,81 @@ registerToolHandler('save_clinical_memory', async (args, ctx) => {
   }
 });
 
-// 5. Google Search (Gemini native grounding — stub acknowledgement)
+// 5. Create Patient (writes to Firestore via hopeai-system helpers)
+registerToolHandler('create_patient', async (args, ctx) => {
+  try {
+    const { savePatientToFirestore, generatePatientId } = await import('../hopeai-system');
+
+    const displayName = args.displayName as string;
+    const demographics = args.demographics as { ageRange?: string; gender?: string; occupation?: string; location?: string } | undefined;
+    const tags = (args.tags as string[]) || [];
+    const notes = args.notes as string | undefined;
+
+    const patientId = generatePatientId();
+    const now = new Date();
+
+    logger.info(`[tool:create_patient] displayName="${displayName}" psychologist=${ctx.psychologistId}`);
+
+    await savePatientToFirestore(ctx.psychologistId, {
+      id: patientId,
+      displayName,
+      demographics,
+      tags,
+      notes: notes || '',
+      confidentiality: { pii: true, accessLevel: 'medium' },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      name: 'create_patient',
+      response: { created: true, patientId, displayName, tags },
+    };
+  } catch (error) {
+    logger.error('[tool:create_patient] Error:', error);
+    return {
+      name: 'create_patient',
+      response: { error: 'Error al crear paciente', details: String(error) },
+    };
+  }
+});
+
+// 6. List Patients (reads from Firestore via hopeai-system helpers)
+registerToolHandler('list_patients', async (args, ctx) => {
+  try {
+    const { listPatientsFromFirestore } = await import('../hopeai-system');
+
+    const searchQuery = args.search_query as string | undefined;
+    const limit = Math.min((args.limit as number) || 20, 50);
+
+    logger.info(`[tool:list_patients] search="${searchQuery || ''}" limit=${limit} psychologist=${ctx.psychologistId}`);
+
+    const patients = await listPatientsFromFirestore(ctx.psychologistId, { searchTerm: searchQuery, limit });
+
+    return {
+      name: 'list_patients',
+      response: {
+        patients: patients.map(p => ({
+          id: p.id,
+          displayName: p.displayName,
+          tags: p.tags || [],
+          demographics: p.demographics || null,
+          updatedAt: p.updatedAt,
+        })),
+        count: patients.length,
+        searchQuery: searchQuery || null,
+      },
+    };
+  } catch (error) {
+    logger.error('[tool:list_patients] Error:', error);
+    return {
+      name: 'list_patients',
+      response: { error: 'Error al listar pacientes', details: String(error) },
+    };
+  }
+});
+
+// 7. Google Search (Gemini native grounding — stub acknowledgement)
 registerToolHandler('google_search', async () => {
   return {
     name: 'google_search',

@@ -58,6 +58,14 @@ const registeredTools: ClinicalTool[] = [
     declaration: { name: 'save_clinical_memory' },
   },
   {
+    metadata: { id: 'create_patient', securityCategory: 'write' },
+    declaration: { name: 'create_patient' },
+  },
+  {
+    metadata: { id: 'list_patients', securityCategory: 'read-only' },
+    declaration: { name: 'list_patients' },
+  },
+  {
     metadata: { id: 'google_search', securityCategory: 'external' },
     declaration: { name: 'google_search' },
   },
