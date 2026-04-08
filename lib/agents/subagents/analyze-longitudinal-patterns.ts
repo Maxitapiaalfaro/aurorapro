@@ -105,35 +105,32 @@ export async function executeAnalyzeLongitudinalPatterns(
 
     ctx.onProgress?.(`Procesando ${sessionHistory.length} mensajes de sesión`);
 
-    // Fetch patient name for display
-    let patientName = 'Paciente';
-    try {
-      ctx.onProgress?.('Conectando con Firestore…');
-      const { loadPatientFromFirestore } = await import('../../hopeai-system');
+    // Run independent operations in parallel:
+    // - Fetch patient name from Firestore (I/O bound)
+    // - Import pattern analyzer module (lazy load)
+    // - Convert session history (CPU bound, synchronous but interleaved)
+    ctx.onProgress?.('Cargando datos y preparando análisis en paralelo…');
 
-      ctx.onProgress?.('Cargando nombre del paciente…');
-      const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
-      if (record?.displayName) {
-        patientName = record.displayName;
-        ctx.onProgress?.(`Paciente: ${patientName}`);
-      } else {
-        ctx.onProgress?.('Nombre no disponible, continuando…');
-      }
-    } catch {
-      logger.warn('[subagent:analyze_longitudinal_patterns] Could not fetch patient name');
-      ctx.onProgress?.('No se pudo cargar nombre, continuando…');
-    }
-
-    // Convert to ChatMessage format
-    ctx.onProgress?.('Convirtiendo historial a formato de análisis…');
     const chatMessages = convertToChatMessages(sessionHistory);
-    ctx.onProgress?.(`${chatMessages.length} mensajes preparados`);
 
-    // Delegate to the existing ClinicalPatternAnalyzer
-    ctx.onProgress?.('Importando analizador de patrones clínicos…');
-    const { createClinicalPatternAnalyzer } = await import('../../clinical-pattern-analyzer');
+    const [patientName, { createClinicalPatternAnalyzer }] = await Promise.all([
+      // 1. Fetch patient display name (non-blocking — fallback to 'Paciente')
+      (async () => {
+        try {
+          const { loadPatientFromFirestore } = await import('../../hopeai-system');
+          const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
+          return record?.displayName || 'Paciente';
+        } catch {
+          logger.warn('[subagent:analyze_longitudinal_patterns] Could not fetch patient name');
+          return 'Paciente';
+        }
+      })(),
+      // 2. Import analyzer module
+      import('../../clinical-pattern-analyzer'),
+    ]);
 
-    ctx.onProgress?.('Inicializando analizador…');
+    ctx.onProgress?.(`Paciente: ${patientName} | ${chatMessages.length} mensajes preparados`);
+
     const analyzer = createClinicalPatternAnalyzer();
 
     ctx.onProgress?.(`Analizando patrones de ${patientName} con Gemini…`);

@@ -3,6 +3,22 @@
 ## Active Tasks
 <!-- Format: - [ ] Task description | Priority: H/M/L | Status: pending/in-progress/done -->
 
+### ARCH-2: Parallel Firestore Lookups in Sub-Agents (HIGH)
+> Follow-up to ARCH-1: sub-agents had sequential Firestore calls that should be parallelized
+
+#### Phase 1: Parallelize explore-patient-context.ts | Priority: H ✅ DONE
+- [x] 1a. Convert 3 sequential Firestore calls (record → memories → semantic) to single `Promise.all`
+- [x] 1b. All 3 reads are independent — no data dependency between them
+- [x] 1c. Latency: 3 sequential round-trips → 1 parallel round-trip (≈3x faster)
+
+#### Phase 2: Parallelize analyze-longitudinal-patterns.ts | Priority: M ✅ DONE
+- [x] 2a. Run patient name fetch + analyzer import + message conversion in parallel
+- [x] 2b. Patient name fetch uses non-blocking fallback to 'Paciente' on error
+
+#### Phase 3: Validation | Priority: H
+- [ ] 3a. Run tests (2/2 passed, pre-existing upload-document failure)
+- [ ] 3b. Run parallel_validation for code review + CodeQL security scan
+
 ### ARCH-1: Agent-Tree MCP Architecture Improvements (HIGH)
 > Based on PR analysis `copilot/revise-agent-architecture-relationship`
 > Source: `docs/architecture/agent-tree-mcp-relationship-analysis.md`
