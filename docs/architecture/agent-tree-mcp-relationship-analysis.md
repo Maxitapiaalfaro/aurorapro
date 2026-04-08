@@ -375,7 +375,7 @@ Usar MCP para comunicación inter-agente sería como enviar una carta certificad
 | **State sync** | Inmediato (referencia compartida) | Eventual (serialización + transporte) |
 | **Error handling** | Try-catch nativo | Errores de protocolo MCP + errores de aplicación |
 
-**Veredicto Efectividad:** La comunicación directa es **más confiable, más fácil de debuggear, y con tipado más fuerte** que MCP.
+**Veredicto Efectividad:** La comunicación directa es **más confiable, más fácil de depurar, y con tipado más fuerte** que MCP.
 
 #### Inteligencia y Contexto
 
