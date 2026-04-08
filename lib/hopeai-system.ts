@@ -190,7 +190,7 @@ export class HopeAISystem {
           systemLogger.info(`✅ MCP: ${mcpResult.serversConnected} server(s), ${mcpResult.toolsDiscovered} tool(s)`)
         }
       } catch (mcpErr) {
-        systemLogger.warn('⚠️ MCP initialization skipped', { error: mcpErr instanceof Error ? mcpErr.message : String(mcpErr) })
+        systemLogger.warn('⚠️ MCP initialization failed', { error: mcpErr instanceof Error ? mcpErr.message : String(mcpErr) })
       }
 
       const initTime = Date.now() - startTime

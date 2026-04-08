@@ -344,9 +344,11 @@ export class MCPRegistry implements IMCPRegistry {
         CallToolResultSchema,
       );
 
-      // Map SDK content to Aurora MCPContent
-      const content: MCPContent[] = (result.content as Array<Record<string, unknown>>).map(
-        (item) => {
+      // Map SDK content to Aurora MCPContent.
+      // The SDK returns validated content array; we map each element defensively.
+      const rawContent = Array.isArray(result.content) ? result.content : [];
+      const content: MCPContent[] = rawContent.map(
+        (item: { type?: string; text?: string; data?: string; mimeType?: string; resource?: { uri?: string; text?: string; mimeType?: string } }) => {
           if (item.type === 'text') {
             return { type: 'text' as const, text: String(item.text ?? '') };
           }
@@ -358,13 +360,12 @@ export class MCPRegistry implements IMCPRegistry {
             };
           }
           if (item.type === 'resource') {
-            const resource = item.resource as Record<string, unknown> | undefined;
             return {
               type: 'resource' as const,
               resource: {
-                uri: String(resource?.uri ?? ''),
-                text: resource?.text != null ? String(resource.text) : undefined,
-                mimeType: resource?.mimeType != null ? String(resource.mimeType) : undefined,
+                uri: String(item.resource?.uri ?? ''),
+                text: item.resource?.text != null ? String(item.resource.text) : undefined,
+                mimeType: item.resource?.mimeType != null ? String(item.resource.mimeType) : undefined,
               },
             };
           }
