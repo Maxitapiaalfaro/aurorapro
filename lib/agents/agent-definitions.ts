@@ -57,7 +57,7 @@ export function createUnifiedAgentConfig(): AgentConfig {
       topP: 0.95,
       topK: 40,
       thinkingConfig: {
-        thinkingLevel: 'medium'
+        thinkingLevel: 'low'
       },
     },
   }

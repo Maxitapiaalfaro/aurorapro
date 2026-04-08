@@ -306,12 +306,13 @@ export const clinicalSafetySettings = [
 
 // Model configuration for clinical use (base config - model set individually per agent)
 export const clinicalModelConfig = {
-  model: "gemini-2.5-flash", // Default model (overridden per agent)
-  temperature: 0.3, // Conservative for clinical recommendations
+  model: "gemini-3.1-flash-lite-preview", // Default model (overridden per agent)
+  temperature: 1.0, // Updated for new model
   topK: 40,
   topP: 0.95,
   thinkingConfig: {
-    thinkingBudget: 0},
+    thinkingLevel: 'low'
+  },
   maxOutputTokens: 35000,
   safetySettings: clinicalSafetySettings,
 }

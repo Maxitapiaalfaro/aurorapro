@@ -119,7 +119,10 @@ export async function executeExplorePatientContext(
       contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
       config: {
         systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.2,
+        temperature: 1.0,
+        thinkingConfig: {
+          thinkingLevel: 'low'
+        },
         maxOutputTokens: 4096,
       },
     });

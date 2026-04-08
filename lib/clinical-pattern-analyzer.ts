@@ -301,7 +301,7 @@ export class ClinicalPatternAnalyzer {
     const prompt = this.buildDomainExtractionPrompt(sessionHistory);
 
     const result = await this.ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         tools: [{
@@ -312,7 +312,10 @@ export class ClinicalPatternAnalyzer {
             mode: FunctionCallingConfigMode.ANY
           }
         },
-        temperature: 0.1, // Low temperature for consistent clinical analysis
+        temperature: 1.0,
+        thinkingConfig: {
+          thinkingLevel: 'low'
+        },
         maxOutputTokens: 8192, // Increased for function calls
         systemInstruction: this.getClinicalAnalysisSystemInstruction()
       }

@@ -494,6 +494,10 @@ export class EntityExtractionEngine {
             functionCallingConfig: {
               mode: FunctionCallingConfigMode.AUTO
             }
+          },
+          temperature: 1.0,
+          thinkingConfig: {
+            thinkingLevel: 'low'
           }
         }
       })

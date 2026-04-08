@@ -93,10 +93,13 @@ export class ClinicalTaskOrchestrator {
       const client = hasFileParts ? aiFiles : ai
       const content: Content = { role: 'user', parts: messageParts as unknown as any }
       const result = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: [content as any],
         config: {
-          temperature: 0.2,
+          temperature: 1.0,
+          thinkingConfig: {
+            thinkingLevel: 'low'
+          },
           maxOutputTokens: 4096,
           systemInstruction: this.getArchivistaSystemInstruction()
         }
