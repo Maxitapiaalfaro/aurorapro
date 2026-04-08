@@ -298,7 +298,7 @@ export async function listUserSessions(
   }
 
   const snapshot = await getDocs(q)
-  const docs = snapshot.docs.map(d => {
+  const allDocs = snapshot.docs.map(d => {
     const raw = reviveDates(d.data()) as ChatState & { _patientId?: string }
     return {
       sessionId: raw.sessionId,
@@ -313,6 +313,19 @@ export async function listUserSessions(
       sessionMeta: raw.sessionMeta,
     } satisfies SessionSummary
   })
+
+  // Deduplicate by sessionId — collectionGroup may return the same session
+  // from multiple paths (e.g., client wrote to patients/{pid}/sessions/{sid}
+  // and server wrote to patients/default_patient/sessions/{sid}).
+  // Keep the entry with the most recent lastUpdated.
+  const seen = new Map<string, SessionSummary>()
+  for (const doc of allDocs) {
+    const existing = seen.get(doc.sessionId)
+    if (!existing || doc.lastUpdated > existing.lastUpdated) {
+      seen.set(doc.sessionId, doc)
+    }
+  }
+  const docs = Array.from(seen.values())
 
   const hasNextPage = docs.length > pageSize
   const items = hasNextPage ? docs.slice(0, pageSize) : docs

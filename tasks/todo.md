@@ -3,19 +3,6 @@
 ## Active Tasks
 <!-- Format: - [ ] Task description | Priority: H/M/L | Status: pending/in-progress/done -->
 
-### Fix: Session Recovery with Patient Context (CRITICAL)
-**Problem**: UI doesn't respond / shows nothing when loading a conversation with patient context.
-
-- [ ] Fix 1: Non-blocking sessionMeta reconstruction — show messages FIRST, reconstruct in background | Priority: H | Status: pending
-- [ ] Fix 2: Eliminate double-read in `use-patient-conversation-history.ts:openConversation` | Priority: H | Status: pending
-- [ ] Fix 3: Defensive date handling in `PatientSummaryBuilder.generateSummaryHash` | Priority: M | Status: pending
-- [ ] Verify build passes | Priority: H | Status: pending
-
-### Fix: `save_clinical_memory` tool failure (IN PROGRESS)
-- [x] Thread `patientId` from `clinical-agent-router.ts` to `streaming-handler.ts` | Priority: H | Status: done
-- [ ] Thread `patientId` through `streaming-handler.ts` → `tool-handlers.ts` | Priority: H | Status: pending
-- [ ] Update `save_clinical_memory` handler to prefer `ctx.patientId` | Priority: H | Status: pending
-
 ### P5: Further Module Decomposition (MEDIUM)
 - [ ] Decompose `clinical-pattern-analyzer.ts` → `lib/patterns/` | Priority: M | Status: pending
 - [ ] Decompose `entity-extraction-engine.ts` → `lib/entities/` | Priority: M | Status: pending
@@ -44,6 +31,9 @@
 - [x] 2026-04-07: R1 — Single-Call Architecture (COMPLETE)
 - [x] 2026-04-07: UA — Unified Agent Architecture (COMPLETE)
 - [x] 2026-04-07: SA — Sub-Agent Architecture (COMPLETE)
-- [x] 2026-04-07: PERF — Firestore I/O Optimization (COMPLETE)
+- [x] 2026-04-07: PERF — Firestore I/O Optimization (~630→~12 ops/msg)
 - [x] 2026-04-07: Promptware 2026 Audit (COMPLETE)
 - [x] 2026-04-07: Gap P2.1 — Clinical Memory System Wiring (COMPLETE)
+- [x] 2026-04-07: PT — Patient Tools (`create_patient` + `list_patients`, 6 files, +256 lines)
+- [x] 2026-04-07: patientId Threading — Fixed `save_clinical_memory` tool failure (3 files)
+- [x] 2026-04-07: SRF — Session Recovery Fix — non-blocking sessionMeta, eliminated double-read, defensive dates (3 files)

@@ -132,6 +132,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
   // Ref to access the latest processingStatus in callbacks without re-renders
   const processingStatusRef = useRef<MessageProcessingStatus>(systemState.processingStatus)
   processingStatusRef.current = systemState.processingStatus
+  // Ref to access the latest systemState in sendMessage without stale closures
+  const systemStateRef = useRef<HopeAISystemState>(systemState)
+  systemStateRef.current = systemState
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
@@ -220,7 +223,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       }))
       return false
     }
-  }, [systemState.isInitialized, systemState.sessionMeta])
+  }, [systemState.isInitialized, psychologistId])
 
   // Función para intentar restaurar la sesión más reciente
   const attemptSessionRestoration = useCallback(async () => {
@@ -289,13 +292,16 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       setIsCreatingSession(true)
       setSystemState(prev => ({ ...prev, isLoading: true, error: null }))
 
+      // Use ref to get latest sessionMeta (avoids stale closure)
+      const patientSessionMeta = systemStateRef.current.sessionMeta
+
       // 🔥 FIX: Llamar al endpoint API en lugar de ejecutar código de IA en el cliente.
       // createClinicalSession() invoca ai.chats.create() que requiere credenciales del servidor
       // (Vertex AI). En el navegador no hay credenciales y lanzaba "Error al crear la sesión".
       const response = await authenticatedFetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, mode, agent }),
+        body: JSON.stringify({ userId, mode, agent, patientSessionMeta }),
       })
 
       let data: any
@@ -364,17 +370,19 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     })
 
     // Lazy-create session on first message send
-    let sessionIdToUse = systemState.sessionId
-    let sessionMetaToUse = sessionMeta || systemState.sessionMeta
-    
+    // Use ref to always get the latest state (avoids stale closure)
+    const currentState = systemStateRef.current
+    let sessionIdToUse = currentState.sessionId
+    let sessionMetaToUse = sessionMeta || currentState.sessionMeta
+
     if (!sessionIdToUse) {
-      const userId = systemState.userId || 'anonymous'
-      const mode = systemState.mode || 'clinical_supervision'
-      const agent = systemState.activeAgent || 'socratico'
-      
+      const userId = currentState.userId || 'anonymous'
+      const mode = currentState.mode || 'clinical_supervision'
+      const agent = currentState.activeAgent || 'socratico'
+
       logger.info('🔄 Creando sesión lazy con contexto:', {
-        hasSessionMeta: !!systemState.sessionMeta,
-        patientRef: systemState.sessionMeta?.patient?.reference
+        hasSessionMeta: !!currentState.sessionMeta,
+        patientRef: currentState.sessionMeta?.patient?.reference
       })
       
       const newSessionId = await createSession(userId, mode, agent)
@@ -386,9 +394,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       
       // CRÍTICO: Si hay sessionMeta (contexto del paciente) preestablecido,
       // actualizarlo con el sessionId recién creado ANTES de enviarlo
-      if (systemState.sessionMeta) {
+      if (currentState.sessionMeta) {
         const updatedSessionMeta = {
-          ...systemState.sessionMeta,
+          ...currentState.sessionMeta,
           sessionId: newSessionId
         }
         sessionMetaToUse = updatedSessionMeta
@@ -405,17 +413,17 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         try {
           if (psychologistId) {
             const patientId = resolvePatientId({
-              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: systemState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
               sessionMeta: updatedSessionMeta,
             })
             await saveSessionMetadata(psychologistId, patientId, {
               sessionId: newSessionId,
-              userId: systemState.userId || psychologistId,
-              mode: systemState.mode || 'clinical_supervision',
-              activeAgent: systemState.activeAgent,
+              userId: currentState.userId || psychologistId,
+              mode: currentState.mode || 'clinical_supervision',
+              activeAgent: currentState.activeAgent,
               history: [],
               metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
-              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: systemState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
               sessionMeta: updatedSessionMeta,
             } as ChatState)
             logger.info('💾 SessionMeta persisted to Firestore after lazy session creation')
@@ -433,7 +441,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         role: 'user',
         content: message,
         timestamp: new Date(),
-        agent: systemState.activeAgent,
+        agent: currentState.activeAgent,
         // ARQUITECTURA OPTIMIZADA: Solo usar fileReferences con IDs
         fileReferences: attachedFiles?.map(file => file.id) || []
       }
@@ -475,26 +483,26 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         if (psychologistId) {
           const patientId = resolvePatientId({
             clinicalContext: {
-              patientId: systemState.sessionMeta?.patient?.reference,
-              sessionType: systemState.mode || 'clinical_supervision',
-              confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
+              patientId: currentState.sessionMeta?.patient?.reference,
+              sessionType: currentState.mode || 'clinical_supervision',
+              confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
             },
-            sessionMeta: systemState.sessionMeta,
+            sessionMeta: currentState.sessionMeta,
           })
 
           const sessionDoc: ChatState = {
             sessionId: sessionIdToUse!,
-            userId: systemState.userId || psychologistId,
-            mode: systemState.mode || 'clinical_supervision',
-            activeAgent: systemState.activeAgent,
+            userId: currentState.userId || psychologistId,
+            mode: currentState.mode || 'clinical_supervision',
+            activeAgent: currentState.activeAgent,
             history: [],
             metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
             clinicalContext: {
-              sessionType: systemState.mode || 'clinical_supervision',
-              confidentialityLevel: systemState.sessionMeta?.patient?.confidentialityLevel || 'high',
-              patientId: systemState.sessionMeta?.patient?.reference
+              sessionType: currentState.mode || 'clinical_supervision',
+              confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
+              patientId: currentState.sessionMeta?.patient?.reference
             },
-            sessionMeta: systemState.sessionMeta
+            sessionMeta: currentState.sessionMeta
           }
           await saveSessionMetadata(psychologistId, patientId, sessionDoc)
         }
@@ -525,7 +533,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
       } else {
         // PERF: Short-circuit if no files attached and no historical file references exist
-        const hasHistoricalFiles = systemState.history.some(m => m.role === 'user' && m.fileReferences && m.fileReferences.length > 0)
+        const hasHistoricalFiles = historyRef.current.some(m => m.role === 'user' && m.fileReferences && m.fileReferences.length > 0)
         if (!hasHistoricalFiles) {
           logger.info('📁 [Client] No files attached and no historical file references — skipping fallback chain')
         } else {
@@ -536,8 +544,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         const fileIdsToLoad: string[] = []
 
         // Get file IDs from the most recent user message's fileReferences if available
-        if (systemState.history.length > 0) {
-          const lastUserMessage = [...systemState.history].reverse().find(m => m.role === 'user')
+        if (historyRef.current.length > 0) {
+          const lastUserMessage = [...historyRef.current].reverse().find(m => m.role === 'user')
           if (lastUserMessage?.fileReferences && lastUserMessage.fileReferences.length > 0) {
             fileIdsToLoad.push(...lastUserMessage.fileReferences)
             logger.info('📁 [Client] Found file IDs from last user message:', fileIdsToLoad)
@@ -674,8 +682,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           try {
             if (!psychologistId) return
             const patientId = resolvePatientId({
-              clinicalContext: { patientId: systemState.sessionMeta?.patient?.reference, sessionType: 'clinical_supervision', confidentialityLevel: 'high' },
-              sessionMeta: systemState.sessionMeta,
+              clinicalContext: { patientId: currentState.sessionMeta?.patient?.reference, sessionType: 'clinical_supervision', confidentialityLevel: 'high' },
+              sessionMeta: currentState.sessionMeta,
             })
             await saveSessionMetadata(psychologistId, patientId, {
               sessionId: sessionIdToUse!,
@@ -727,7 +735,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               sessionId: sessionIdToUse!,
               message,
               useStreaming,
-              userId: systemState.userId || 'anonymous',
+              userId: currentState.userId || 'anonymous',
               suggestedAgent: undefined,
               sessionMeta: sessionMetaToUse,
               fileReferences: attachedFiles?.map(file => file.id) || [],

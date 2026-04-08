@@ -163,7 +163,8 @@ export async function POST(request: NextRequest) {
             onBulletUpdate,    // ← Callback para bullets
             onAgentSelected,   // ← Callback para agente
             fileReferences,    // ← File IDs from client
-            fileMetadata       // ← File metadata from client (bypass storage)
+            fileMetadata,      // ← File metadata from client (bypass storage)
+            verifiedUserId     // ← Verified psychologistId from auth token
           )
 
           // 📁 If files were attached, emit completion event

@@ -5,7 +5,6 @@ import { useAuth } from "@/providers/auth-provider"
 import {
   listUserSessions,
   findSessionById,
-  loadSessionWithMessages,
   deleteSession,
 } from "@/lib/firestore-client-storage"
 import type { ChatState, AgentType, ClinicalMode, PaginationOptions, PaginatedResponse } from "@/types/clinical-types"
@@ -200,21 +199,15 @@ export function useConversationHistory(): UseConversationHistoryReturn {
     try {
       setError(null)
 
+      // findSessionById already loads full session + messages from subcollection
       const result = await findSessionById(psychologistId, sessionId)
 
       if (!result) {
         throw new Error(`Conversacion no encontrada: ${sessionId}`)
       }
 
-      // Load full session with messages
-      const chatState = await loadSessionWithMessages(psychologistId, result.patientId, sessionId)
-
-      if (!chatState) {
-        throw new Error(`Conversacion no encontrada: ${sessionId}`)
-      }
-
       logger.info(`Conversacion cargada: ${sessionId}`)
-      return chatState
+      return result.session
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
       setError(`Error abriendo conversacion: ${errorMessage}`)

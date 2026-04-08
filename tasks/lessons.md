@@ -69,6 +69,36 @@
 - **Pattern:** Per SCORE framework, "NO eres un transcriptor" keeps residual attention on "transcriptor". Better: "Sintetizas información clínica en documentación profesional" — directs attention to the desired behavior.
 - **Rule:** Replace "NO hagas X" / "NUNCA hagas X" with "Haz Y" where Y is the positive behavior. Include the verb + specific output format when possible.
 
+### 2026-04-07: Never block UI rendering on background data reconstruction
+
+### 2026-04-07: Use refs for state accessed inside useCallback with minimal deps
+- **Error:** `sendMessage` useCallback had `[systemState.sessionId, systemState.activeAgent]` deps, but accessed `systemState.sessionMeta`, `.mode`, `.userId` inside the body. When patient was selected (updating sessionMeta), sendMessage kept its stale closure — patient context was invisible.
+- **Root Cause:** React `useCallback` captures a closure snapshot at creation time. Only values in the dependency array trigger re-creation. Any other state accessed inside the callback is stale.
+- **Rule:** For complex callbacks with many state dependencies, use a ref pattern (`systemStateRef.current = systemState` on every render) and read from the ref inside the callback. This avoids both stale closures AND excessive re-creation.
+
+### 2026-04-07: Keep fallback/default values consistent across client and server
+- **Error:** Server `addMessageToSession()` used `'_general'` as patientId fallback. Client and server-storage-adapter both used `'default_patient'`. Messages went to `patients/_general/`, session metadata to `patients/default_patient/` — creating ghost session docs.
+- **Rule:** Define default values as constants in one place and import them, OR use the same literal everywhere. Grep for the default value before using it to check for inconsistencies.
+
+### 2026-04-07: Never block UI rendering on background data reconstruction
+- **Error:** `loadSession()` set `isLoading: true`, then ran a heavy async waterfall (3 dynamic imports + 2 Firestore reads + 1 Firestore write) to reconstruct `sessionMeta`, and only THEN set `history` in state. Users saw a blank screen for seconds while I/O completed.
+- **Root Cause:** The sessionMeta reconstruction was treated as a prerequisite for showing messages, when in reality messages can be displayed without sessionMeta.
+- **Rule:** When loading a view, immediately render what you already have (e.g., chat history). Reconstruct missing metadata in the background (fire-and-forget async IIFE) and update state when done. Never gate visible content on non-visible metadata.
+
+### 2026-04-07: Avoid double-reads — check if the first query already returned the needed data
+- **Error:** `openConversation()` called `findSessionById()` (collectionGroup query + messages subcollection load), then called `loadSessionWithMessages()` which read the exact same session doc + messages again. 2× the Firestore reads for identical data.
+- **Root Cause:** `openConversation` was written before `findSessionById` was enhanced to also load messages. The code wasn't updated when the underlying function gained the needed capability.
+- **Rule:** After modifying a data-loading function to return more data, audit all callers to remove any now-redundant secondary loads. This is especially important for Firestore where each read has latency and cost.
+
+### 2026-04-07: Guard `.toISOString()` calls — values may not always be Date objects
+- **Error:** `generateSummaryHash()` called `patient.updatedAt.toISOString()` unconditionally. If `updatedAt` arrived as a string (Firestore offline cache edge case, JSON serialization), this crashed, breaking the sessionMeta reconstruction path.
+- **Rule:** When calling Date methods (`.toISOString()`, `.getTime()`, etc.) on data from external sources (Firestore, API, deserialization), always guard with `instanceof Date` or convert first. Use `x instanceof Date ? x.toISOString() : String(x)` pattern.
+
+### 2026-04-07: Thread context identifiers through the full tool execution pipeline
+- **Error:** `save_clinical_memory` tool handler used `ctx.patientId` which was always `undefined` because no caller passed it through the `streaming-handler.ts` → `executeToolCall` → handler chain.
+- **Root Cause:** When the tool execution pipeline was built, `patientId` was expected to come from Gemini's `args.patientId`. But Gemini doesn't always include it, and the authoritative source (session context) was never threaded through.
+- **Rule:** For any context identifier (userId, patientId, sessionId), thread it from the entry point (API route or session context) through every middleware layer to the final handler. Don't rely on the LLM to provide identifiers that the system already knows.
+
 ## Session Log
 
 - **2026-04-06:** User corrected priority ordering. Static decomposition analysis missed the Firebase offline-first migration spec. Updated P1 from file decomposition to migration completion. Lesson captured above.
@@ -76,3 +106,8 @@
 - **2026-04-06:** P0 (Firebase Auth) and P1 (Firestore offline-first migration) completed. 3 client files deleted (~1,195 lines), replaced by `firestore-client-storage.ts` (545 lines). Net reduction: 650 lines. 5 hooks + 5 components + server-side patient reads migrated.
 - **2026-04-07:** R1 (Single-Call Architecture) completed. LLM pre-classification eliminated. 2→1 LLM calls per message. 300-700ms→<5ms orchestration latency. Key discovery: contextualTools were never consumed by chat sessions.
 - **2026-04-07:** Promptware 2026 audit completed. All 3 agent prompts refactored: 1,414→456 lines (68% reduction), ~13,134→~5,520 tokens. Key synthesis: "Calidez como Protocolo Conductual" — encoding warmth as behavioral rules instead of abstract adjectives. 3 lessons captured above.
+- **2026-04-07:** PERF — Firestore I/O Optimization completed. ~630→~12 ops/msg. 5 phases: eliminated read-before-write, O(1) message appends, parallel prefetch, eliminated client-side findSessionById calls, file fallback short-circuit.
+- **2026-04-07:** Patient Tools — Added `create_patient` + `list_patients` tools (6 files, +256 lines). Server-side firebase-admin CRUD. Agent can now autonomously create and discover patients.
+- **2026-04-07:** patientId Threading — Fixed `save_clinical_memory` tool failure. Threaded `patientId` from `clinical-agent-router.ts` through `streaming-handler.ts` to `tool-handlers.ts`.
+- **2026-04-07:** Session Recovery Fix — Fixed blank screen on loading conversations with patient context. Non-blocking sessionMeta reconstruction, eliminated double-read, defensive date handling.
+- **2026-04-07:** Patient Session Path Fix — Sessions with patient context saved under `_general` instead of patient-specific path. 4-part bug chain: (1) stale closure in sendMessage (sessionMeta not in deps → used ref pattern), (2) createSession didn't send patientSessionMeta to server, (3) server fallback `_general` inconsistent with `default_patient` everywhere else, (4) ghost session docs via server's `addMessage` set({merge:true}).

@@ -142,7 +142,7 @@ export class HopeAISystem {
    */
   private async addMessageToSession(chatState: ChatState, message: ChatMessage): Promise<void> {
     const userId = chatState.userId || 'anonymous'
-    const patientId = chatState.clinicalContext?.patientId || chatState.sessionMeta?.patient?.reference || '_general'
+    const patientId = chatState.clinicalContext?.patientId || chatState.sessionMeta?.patient?.reference || 'default_patient'
     await this.storage.addMessage(userId, patientId, chatState.sessionId, message)
   }
 
@@ -521,7 +521,8 @@ export class HopeAISystem {
     onBulletUpdate?: (bullet: import('@/types/clinical-types').ReasoningBullet) => void,
     _onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
     clientFileReferences?: string[],
-    clientFileMetadata?: any[] // Metadata completa de archivos desde el cliente
+    clientFileMetadata?: any[], // Metadata completa de archivos desde el cliente
+    psychologistId?: string // Verified userId from API route
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -535,7 +536,7 @@ export class HopeAISystem {
       sessionLogger.info(`🆕 Creating new session: ${sessionId}`)
       currentState = {
         sessionId,
-        userId: '',
+        userId: psychologistId || '',
         activeAgent: 'socratic-philosopher', // Default agent
         history: [],
         metadata: {
