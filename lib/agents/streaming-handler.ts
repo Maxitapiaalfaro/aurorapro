@@ -720,14 +720,52 @@ export async function handleStreamingWithTools(
             // If no more function calls, we're done
             if (followUpFunctionCalls.length === 0) break
 
-            // Otherwise, send empty responses for the recursive function calls
-            // so the model can proceed to generate text
-            logger.info(`Follow-up round ${round + 1}: handling ${followUpFunctionCalls.length} recursive function calls`)
-            const recursiveResponseParts = followUpFunctionCalls.map((call: any) => ({
+            // Execute recursive function calls (multi-step agentic chains)
+            // The model may call list_patients → get result → then call explore_patient_context
+            // We must execute each step and return real results, not just acknowledge
+            logger.info(`Follow-up round ${round + 1}: executing ${followUpFunctionCalls.length} recursive function calls`)
+
+            // Emit tool_call_start for recursive calls
+            for (const call of followUpFunctionCalls) {
+              yield {
+                text: "",
+                metadata: {
+                  type: "tool_call_start",
+                  toolName: call.name,
+                  query: extractQueryFromArgs(call.name, call.args),
+                }
+              }
+            }
+
+            // Build PreparedToolCalls with security checks
+            const recursivePreparedCalls: PreparedToolCall[] = followUpFunctionCalls.map((call: any) =>
+              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId)
+            );
+
+            // Execute with orchestrator (parallel read, sequential write)
+            const recursiveResponses = await executeToolsSafely(recursivePreparedCalls, { maxConcurrent: 3 });
+            const validRecursiveResponses = recursiveResponses.filter(r => r !== null);
+
+            // Emit tool_call_complete for recursive calls
+            for (const resp of validRecursiveResponses) {
+              const responseData = resp.response as any;
+              yield {
+                text: "",
+                metadata: {
+                  type: "tool_call_complete",
+                  toolName: resp.name,
+                  sourcesFound: responseData?.total_found || responseData?.sourcesCount || responseData?.count || 0,
+                  completionDetail: extractCompletionDetail(resp),
+                }
+              }
+            }
+
+            // Send real results back to the model
+            const recursiveResponseParts = validRecursiveResponses.map((resp: any) => ({
               functionResponse: {
-                name: call.name,
+                name: resp.name,
                 response: {
-                  output: { acknowledged: true }
+                  output: resp.response
                 },
               },
             }))
@@ -823,18 +861,26 @@ export async function handleNonStreamingWithTools(
     // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
     const functionResponses = await executeToolsSafely(preparedCalls, { maxConcurrent: 3 });
 
+    // Filter out null responses
+    const validResponses = functionResponses.filter(response => response !== null);
+
     // Send function results back to the model
     const sessionData = ctx.activeChatSessions.get(sessionId)
     if (sessionData) {
-      const followUpResult = await sessionData.chat.sendMessage({
-        message: {
-          functionResponse: {
-            name: functionResponses[0]?.name,
-            response: {
-              output: functionResponses[0]?.response
-            },
+      // Send ALL function responses back (not just the first one)
+      // This matches the streaming path behavior and is required for
+      // parallel function calls to work correctly with Gemini's thoughtSignature
+      const functionResponseParts = validResponses.map((resp: any) => ({
+        functionResponse: {
+          name: resp.name,
+          response: {
+            output: resp.response
           },
         },
+      }));
+
+      const followUpResult = await sessionData.chat.sendMessage({
+        message: functionResponseParts,
       })
 
       // NUEVO: Convertir vertex links en la respuesta
