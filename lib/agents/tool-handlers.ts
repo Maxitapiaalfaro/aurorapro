@@ -14,6 +14,7 @@
  */
 
 import { createLogger } from '../logger';
+import type { DocumentPreviewEvent, DocumentReadyEvent } from '@/types/clinical-types';
 
 const logger = createLogger('agent');
 
@@ -39,6 +40,10 @@ export interface ToolExecutionContext {
   }>;
   /** Callback for sub-agents to report internal progress steps in real-time */
   onProgress?: (message: string) => void;
+  /** Callback for document generation sub-agent to emit live preview sections */
+  onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
+  /** Callback for document generation sub-agent to signal document completion */
+  onDocumentReady?: (document: DocumentReadyEvent) => void;
 }
 
 export type ToolHandler = (

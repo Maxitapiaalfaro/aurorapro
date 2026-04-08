@@ -14,6 +14,7 @@ import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
 import { ProgressQueue } from "../utils/progress-queue"
 import { createLogger } from "@/lib/logger"
+import type { DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 
 const logger = createLogger('agent')
 
@@ -268,7 +269,9 @@ export function prepareFunctionCallWithSecurity(
   sessionId: string,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
   onProgress?: (message: string) => void,
-  patientId?: string
+  patientId?: string,
+  onDocumentPreview?: (preview: DocumentPreviewEvent) => void,
+  onDocumentReady?: (document: DocumentReadyEvent) => void,
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -320,7 +323,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress }),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady }),
   } as PreparedToolCall;
 }
 
@@ -331,7 +334,14 @@ export function prepareFunctionCallWithSecurity(
 async function executeToolCall(
   call: any,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
-  context?: { psychologistId?: string; sessionId?: string; patientId?: string; onProgress?: (message: string) => void }
+  context?: {
+    psychologistId?: string;
+    sessionId?: string;
+    patientId?: string;
+    onProgress?: (message: string) => void;
+    onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
+    onDocumentReady?: (document: DocumentReadyEvent) => void;
+  }
 ): Promise<ToolCallResult> {
   // Registry-based dispatch — delegates to tool-handlers.ts
   const { getToolHandler } = await import('./tool-handlers');
@@ -344,6 +354,8 @@ async function executeToolCall(
       patientId: context?.patientId,
       academicReferences,
       onProgress: context?.onProgress,
+      onDocumentPreview: context?.onDocumentPreview,
+      onDocumentReady: context?.onDocumentReady,
     });
   }
 
@@ -581,14 +593,26 @@ export async function handleStreamingWithTools(
         }
 
         // 🎨 ProgressQueue: sub-agents push messages, generator drains them in real-time
-        const progressQueue = new ProgressQueue<{toolName: string, message: string}>();
+        // Discriminated union supports both text progress and structured document events
+        type ProgressEvent =
+          | { kind: 'progress'; toolName: string; message: string }
+          | { kind: 'document_preview'; toolName: string; preview: DocumentPreviewEvent }
+          | { kind: 'document_ready'; toolName: string; document: DocumentReadyEvent };
+
+        const progressQueue = new ProgressQueue<ProgressEvent>();
         const createProgressCallback = (toolName: string) => (message: string) => {
-          progressQueue.push({ toolName, message });
+          progressQueue.push({ kind: 'progress', toolName, message });
+        };
+        const createDocumentPreviewCallback = (toolName: string) => (preview: DocumentPreviewEvent) => {
+          progressQueue.push({ kind: 'document_preview', toolName, preview });
+        };
+        const createDocumentReadyCallback = (toolName: string) => (document: DocumentReadyEvent) => {
+          progressQueue.push({ kind: 'document_ready', toolName, document });
         };
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId)
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name))
         );
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
@@ -598,14 +622,38 @@ export async function handleStreamingWithTools(
 
         // Drain progress events in real-time while tools execute
         for await (const p of progressQueue) {
-          yield {
-            text: "",
-            metadata: {
-              type: "tool_call_progress",
-              toolName: p.toolName,
-              message: p.message,
-            }
-          };
+          switch (p.kind) {
+            case 'progress':
+              yield {
+                text: "",
+                metadata: {
+                  type: "tool_call_progress",
+                  toolName: p.toolName,
+                  message: p.message,
+                }
+              };
+              break;
+            case 'document_preview':
+              yield {
+                text: "",
+                metadata: {
+                  type: "document_preview",
+                  toolName: p.toolName,
+                  preview: p.preview,
+                }
+              };
+              break;
+            case 'document_ready':
+              yield {
+                text: "",
+                metadata: {
+                  type: "document_ready",
+                  toolName: p.toolName,
+                  document: p.document,
+                }
+              };
+              break;
+          }
         }
 
         // Tools are done — get results

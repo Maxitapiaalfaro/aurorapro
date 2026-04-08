@@ -69,6 +69,19 @@ function getConfiguredServers(): MCPServerConfig[] {
     });
   }
 
+  // Document Rendering MCP server — provides create_document, append_section,
+  // render_preview, and export_final tools for real-time PDF/DOCX generation.
+  // Auto-discovered tools appear as mcp__docrender__<toolName> in Gemini.
+  if (process.env.MCP_DOCRENDER_URL) {
+    servers.push({
+      id: 'docrender',
+      name: 'Document Renderer',
+      transport: { type: 'http', url: process.env.MCP_DOCRENDER_URL },
+      autoConnect: true,
+      timeoutMs: 30_000, // Document rendering may take longer
+    });
+  }
+
   return servers;
 }
 
