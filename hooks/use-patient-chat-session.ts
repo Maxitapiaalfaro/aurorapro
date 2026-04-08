@@ -5,7 +5,7 @@ import { useAuth } from "@/providers/auth-provider"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
 import { PatientSummaryBuilder, PatientContextComposer } from "@/lib/patient-summary-builder"
 import { getFichasByPatient } from "@/lib/firestore-client-storage"
-import type { PatientRecord, AgentType, ClinicalMode, PatientSessionMeta, FichaClinicaState } from "@/types/clinical-types"
+import type { PatientRecord, AgentType, ClinicalMode, PatientSessionMeta, FichaClinicaState, ClientContext } from "@/types/clinical-types"
 import * as Sentry from "@sentry/nextjs"
 
 
@@ -90,13 +90,14 @@ export function usePatientChatSession(): UsePatientChatSessionReturn {
           // Step 2: Load latest ficha clinica (if exists) and generate patient context summary
           let patientSummary: string
           let usedFicha = false
+          let loadedFichas: FichaClinicaState[] = []
 
           try {
             // Cargar fichas clinicas del paciente from Firestore
-            const fichas = await getFichasByPatient(psychologistId, patient.id)
+            loadedFichas = await getFichasByPatient(psychologistId, patient.id)
 
             // Obtener la ficha mas reciente completada
-            const latestFicha = fichas
+            const latestFicha = loadedFichas
             .filter((f: FichaClinicaState) => f.estado === 'completado')
             .sort((a: FichaClinicaState, b: FichaClinicaState) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
 
@@ -129,6 +130,43 @@ export function usePatientChatSession(): UsePatientChatSessionReturn {
           }, patientSummary)
 
           logger.info('Session metadata created for patient:', sessionMeta.patient.reference)
+
+          // LOCAL-FIRST: Compute operationalHints from patient+fichas so server skips Firestore reads
+          const completedFichas = loadedFichas.filter((f: FichaClinicaState) => f.estado === 'completado')
+          const sessionCount = completedFichas.length
+          let therapeuticPhase: ClientContext['operationalHints']['therapeuticPhase'] = 'assessment'
+          if (sessionCount > 24) therapeuticPhase = 'closure'
+          else if (sessionCount > 12) therapeuticPhase = 'maintenance'
+          else if (sessionCount > 3) therapeuticPhase = 'intervention'
+
+          const tags = patient.tags ?? []
+          const riskTags = tags.filter((tag: string) => {
+            const lower = tag.toLowerCase()
+            return lower.includes('riesgo') || lower.includes('suicid') || lower.includes('autolesión') || lower.includes('crisis') || lower.includes('urgente')
+          })
+
+          let riskLevel: ClientContext['operationalHints']['riskLevel'] = 'low'
+          let requiresImmediateAttention = false
+          if (riskTags.some((t: string) => t.toLowerCase().includes('crítico') || t.toLowerCase().includes('suicid'))) {
+            riskLevel = 'critical'; requiresImmediateAttention = true
+          } else if (riskTags.some((t: string) => t.toLowerCase().includes('alto') || t.toLowerCase().includes('crisis'))) {
+            riskLevel = 'high'
+          } else if (riskTags.length > 0) {
+            riskLevel = 'medium'
+          }
+
+          const modalityTag = tags.find((t: string) => {
+            const lower = t.toLowerCase()
+            return lower.includes('tcc') || lower.includes('cbt') || lower.includes('psicodinámico') || lower.includes('humanista') || lower.includes('sistémica')
+          })
+
+          sessionMeta.operationalHints = {
+            riskLevel,
+            requiresImmediateAttention,
+            sessionCount,
+            therapeuticPhase,
+            treatmentModality: modalityTag,
+          }
 
           // Step 4: If there's an initial message, compose and send it
           if (initialMessage && initialMessage.trim()) {

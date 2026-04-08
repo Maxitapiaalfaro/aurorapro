@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline, ClientContext } from "@/types/clinical-types"
 import {
   findSessionById,
   saveSessionMetadata,
@@ -10,11 +10,14 @@ import {
   getClinicalFilesBySession,
   resolvePatientId,
   listUserSessions,
+  getActivePatientMemories,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import { snapshotExecutionTimeline } from '@/lib/dynamic-status'
 import { useAuth } from '@/providers/auth-provider'
+import { rankMemories } from '@/lib/client-memory-ranker'
+import type { ClinicalMemory } from '@/types/memory-types'
 
 
 import { createLogger } from '@/lib/logger'
@@ -138,6 +141,29 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
+
+  // LOCAL-FIRST: Cache clinical memories for the active patient
+  const patientMemoriesRef = useRef<{ patientId: string; memories: ClinicalMemory[] } | null>(null)
+
+  useEffect(() => {
+    const patientId = systemState.sessionMeta?.patient?.reference
+    if (!psychologistId || !patientId) {
+      patientMemoriesRef.current = null
+      return
+    }
+    // Skip if already cached for this patient
+    if (patientMemoriesRef.current?.patientId === patientId) return
+
+    getActivePatientMemories(psychologistId, patientId)
+      .then(memories => {
+        patientMemoriesRef.current = { patientId, memories }
+        logger.info(`🧠 [LOCAL-FIRST] Cached ${memories.length} memories for patient ${patientId}`)
+      })
+      .catch(err => {
+        logger.warn('⚠️ [LOCAL-FIRST] Failed to cache patient memories:', err)
+        patientMemoriesRef.current = null
+      })
+  }, [psychologistId, systemState.sessionMeta?.patient?.reference])
 
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
@@ -695,6 +721,32 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
       const sseClient = getSSEClient()
 
+      // LOCAL-FIRST: Build clientContext so the server skips all Firestore reads
+      let clientContext: ClientContext | undefined
+      const sessionMetaCurrent = sessionMetaToUse || currentState.sessionMeta
+      if (sessionMetaCurrent?.patient?.summaryText) {
+        const cached = patientMemoriesRef.current
+        const cachedMemories = (cached && cached.patientId === sessionMetaCurrent.patient.reference)
+          ? cached.memories
+          : []
+
+        clientContext = {
+          patientSummary: sessionMetaCurrent.patient.summaryText,
+          operationalHints: sessionMetaCurrent.operationalHints ?? {
+            riskLevel: 'low',
+            requiresImmediateAttention: false,
+            sessionCount: 0,
+            therapeuticPhase: 'assessment',
+          },
+          rankedMemories: rankMemories(cachedMemories, message, 5),
+        }
+        logger.info('🚀 [LOCAL-FIRST] clientContext built:', {
+          summaryLength: clientContext.patientSummary.length,
+          riskLevel: clientContext.operationalHints.riskLevel,
+          memoriesRanked: clientContext.rankedMemories.length,
+        })
+      }
+
       // 🔍 FINAL DIAGNOSTIC: Log what we're about to send to the API
       logger.info('🔍 [HOOK.sendMessage] ABOUT TO SEND TO API:', {
         sessionId: sessionIdToUse,
@@ -726,7 +778,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               suggestedAgent: undefined,
               sessionMeta: sessionMetaToUse,
               fileReferences: attachedFiles?.map(file => file.id) || [],
-              fileMetadata // Pasar metadata completa de archivos
+              fileMetadata, // Pasar metadata completa de archivos
+              clientContext, // LOCAL-FIRST: pre-computed patient context
             },
             {
               onBullet: handleBulletUpdate,

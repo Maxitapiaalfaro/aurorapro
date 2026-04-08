@@ -309,6 +309,29 @@ export interface PatientSessionMeta {
   clinicalMode: string
   activeAgent: string
   createdAt: string
+  // LOCAL-FIRST: Pre-computed at session start, reused on every message
+  operationalHints?: ClientContext['operationalHints']
+}
+
+// LOCAL-FIRST: Pre-computed context sent from client to avoid server Firestore reads
+export interface ClientContext {
+  // Replaces loadPatientFromFirestore + getFichasClinicasByPaciente
+  patientSummary: string
+
+  // Replaces collectOperationalMetadata's patient/fichas Firestore reads
+  operationalHints: {
+    riskLevel: 'low' | 'medium' | 'high' | 'critical'
+    requiresImmediateAttention: boolean
+    sessionCount: number
+    therapeuticPhase: 'assessment' | 'intervention' | 'maintenance' | 'closure'
+    treatmentModality?: string
+  }
+
+  // Replaces getRelevantMemories() — pre-ranked client-side
+  rankedMemories: Array<{
+    category: 'observation' | 'pattern' | 'therapeutic-preference'
+    content: string
+  }>
 }
 
 // Enhanced ChatState to support patient context

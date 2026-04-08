@@ -556,3 +556,32 @@ export async function deleteClinicalFile(
 ): Promise<void> {
   await deleteDoc(clinicalFileRef(psychologistId, fileId))
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Clinical Memories (client-side read for local-first ranking)
+// ────────────────────────────────────────────────────────────────────────────
+
+import type { ClinicalMemory } from '@/types/memory-types'
+
+/**
+ * Read all active clinical memories for a patient.
+ * Used client-side for local-first memory ranking before sending messages.
+ * Path: psychologists/{uid}/patients/{pid}/memories
+ */
+export async function getActivePatientMemories(
+  psychologistId: string,
+  patientId: string,
+): Promise<ClinicalMemory[]> {
+  const memoriesCol = collection(db, 'psychologists', psychologistId, 'patients', patientId, 'memories')
+  const q = query(memoriesCol, where('isActive', '==', true))
+  const snapshot = await getDocs(q)
+  return snapshot.docs.map(d => {
+    const data = d.data()
+    return {
+      ...data,
+      memoryId: data.memoryId || d.id,
+      createdAt: data.createdAt?.toDate?.() ?? new Date(data.createdAt),
+      updatedAt: data.updatedAt?.toDate?.() ?? new Date(data.updatedAt),
+    } as ClinicalMemory
+  })
+}

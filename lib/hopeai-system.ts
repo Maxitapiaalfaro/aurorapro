@@ -333,7 +333,8 @@ export class HopeAISystem {
     currentState: ChatState,
     patientReference?: string,
     prefetchedPatientRecord?: any,
-    prefetchedFichas?: any[]
+    prefetchedFichas?: any[],
+    clientOperationalHints?: import('@/types/clinical-types').ClientContext['operationalHints']
   ): OperationalMetadata {
     // 1. TEMPORAL METADATA
     const now = new Date();
@@ -356,13 +357,16 @@ export class HopeAISystem {
     else if (timezone.includes('US/') || timezone.includes('America/New_York') || timezone.includes('America/Los_Angeles')) region = 'US';
     else if (timezone.includes('Asia/')) region = 'ASIA';
 
-    // 2. RISK METADATA (from pre-fetched patient record)
+    // 2. RISK METADATA (from client hints or pre-fetched patient record)
     let riskFlags: string[] = [];
-    let riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low';
-    let requiresImmediateAttention = false;
+    let riskLevel: 'low' | 'medium' | 'high' | 'critical' = clientOperationalHints?.riskLevel ?? 'low';
+    let requiresImmediateAttention = clientOperationalHints?.requiresImmediateAttention ?? false;
     let lastRiskAssessment: Date | null = null;
 
-    if (prefetchedPatientRecord) {
+    if (clientOperationalHints) {
+      // LOCAL-FIRST: Use client-computed hints, skip Firestore-derived risk flags
+      sessionLogger.debug('🚀 [LOCAL-FIRST] Using client operationalHints for risk metadata');
+    } else if (prefetchedPatientRecord) {
       const riskTags = prefetchedPatientRecord.tags?.filter((tag: string) =>
         tag.toLowerCase().includes('riesgo') ||
         tag.toLowerCase().includes('suicid') ||
@@ -422,14 +426,16 @@ export class HopeAISystem {
       }
     }
 
-    // 4. PATIENT CONTEXT METADATA (from pre-fetched data)
-    let therapeuticPhase: 'assessment' | 'intervention' | 'maintenance' | 'closure' | null = null;
-    let sessionCount = 0;
+    // 4. PATIENT CONTEXT METADATA (from client hints or pre-fetched data)
+    let therapeuticPhase: 'assessment' | 'intervention' | 'maintenance' | 'closure' | null = clientOperationalHints?.therapeuticPhase ?? null;
+    let sessionCount = clientOperationalHints?.sessionCount ?? 0;
     let lastSessionDate: Date | null = null;
-    let treatmentModality: string | null = null;
+    let treatmentModality: string | null = clientOperationalHints?.treatmentModality ?? null;
     let patientSummaryAvailable = false;
 
-    if (prefetchedPatientRecord) {
+    if (clientOperationalHints) {
+      patientSummaryAvailable = true; // Client always provides summary when hints exist
+    } else if (prefetchedPatientRecord) {
       patientSummaryAvailable = !!prefetchedPatientRecord.summaryCache;
 
       const modalityTags = prefetchedPatientRecord.tags?.filter((tag: string) =>
@@ -524,7 +530,8 @@ export class HopeAISystem {
     clientFileReferences?: string[],
     clientFileMetadata?: any[], // Metadata completa de archivos desde el cliente
     psychologistId?: string, // Verified userId from API route
-    queryProfile?: QueryProfile // Pipeline profiler
+    queryProfile?: QueryProfile, // Pipeline profiler
+    clientContext?: import('@/types/clinical-types').ClientContext // LOCAL-FIRST: pre-computed patient context
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -594,7 +601,13 @@ export class HopeAISystem {
     const providedSummary = sessionMeta?.patient?.summaryText;
 
     // ─── PERF: Parallel I/O — fire ALL independent operations at once ───
-    // Collapses 5 sequential operations (~200ms each) into 1 parallel group (~300ms max).
+    // LOCAL-FIRST: When clientContext is provided, skip all 3 Firestore reads
+    // (patient record, fichas, clinical memories). Client already has this data.
+    const hasClientContext = !!clientContext
+    if (hasClientContext) {
+      sessionLogger.info('🚀 [LOCAL-FIRST] clientContext provided — skipping Firestore reads for patient/fichas/memories')
+    }
+
     const [
       sessionFiles,
       { ContextWindowManager },
@@ -608,24 +621,24 @@ export class HopeAISystem {
       // 2. Context window manager (dynamic import)
       import('./context-window-manager'),
 
-      // 3. Patient record from Firestore
-      (patientReference && !providedSummary && currentState.userId)
+      // 3. Patient record from Firestore — SKIPPED when clientContext provided
+      (!hasClientContext && patientReference && !providedSummary && currentState.userId)
         ? loadPatientFromFirestore(currentState.userId, patientReference).catch((err: unknown) => {
             sessionLogger.warn(`⚠️ Error loading patient record: ${err instanceof Error ? err.message : String(err)}`)
             return null
           })
         : Promise.resolve(null),
 
-      // 4. Fichas clínicas
-      patientReference
+      // 4. Fichas clínicas — SKIPPED when clientContext provided
+      (!hasClientContext && patientReference)
         ? this.storage.getFichasClinicasByPaciente(patientReference).catch((err: unknown) => {
             sessionLogger.warn(`⚠️ Error loading fichas: ${err instanceof Error ? err.message : String(err)}`)
             return [] as any[]
           })
         : Promise.resolve([] as any[]),
 
-      // 5. Clinical memories (chain import + call as single promise)
-      (patientReference && currentState.userId)
+      // 5. Clinical memories — SKIPPED when clientContext provided
+      (!hasClientContext && patientReference && currentState.userId)
         ? import('./clinical-memory-system').then(m =>
             m.getRelevantMemories(currentState.userId, patientReference, message, 5)
           ).catch((err: unknown) => {
@@ -750,7 +763,11 @@ export class HopeAISystem {
       // ─── Build patient summary from pre-fetched data (CPU-only) ───
       let patientSummary: string | undefined = undefined;
 
-      if (providedSummary) {
+      if (clientContext?.patientSummary) {
+        // LOCAL-FIRST: Client already built the summary
+        patientSummary = clientContext.patientSummary;
+        sessionLogger.info(`🚀 [LOCAL-FIRST] Using clientContext.patientSummary (length=${patientSummary.length})`);
+      } else if (providedSummary) {
         patientSummary = providedSummary;
         sessionLogger.info(`🏥 Using provided patient summaryText from sessionMeta (length=${providedSummary.length})`);
       } else if (patientRecord) {
@@ -786,19 +803,25 @@ export class HopeAISystem {
         patient_summary: patientSummary,
       }
 
-      if (clinicalMemories.length > 0) {
-        enrichedSessionContext.clinicalMemories = clinicalMemories
-        sessionLogger.info(`🧠 Clinical memories injected: ${clinicalMemories.length} memories for patient ${patientReference}`)
+      // LOCAL-FIRST: Use client-ranked memories when available, fall back to server-fetched
+      const effectiveMemories = clientContext?.rankedMemories?.length
+        ? clientContext.rankedMemories
+        : clinicalMemories
+
+      if (effectiveMemories.length > 0) {
+        enrichedSessionContext.clinicalMemories = effectiveMemories
+        sessionLogger.info(`🧠 Clinical memories injected: ${effectiveMemories.length} memories for patient ${patientReference}${clientContext ? ' (client-ranked)' : ''}`)
       }
 
-      // ─── Operational metadata (now synchronous — uses pre-fetched data) ───
+      // ─── Operational metadata (now synchronous — uses pre-fetched or client-provided data) ───
       const operationalMetadata = this.collectOperationalMetadata(
         sessionId,
         currentState.userId,
         currentState,
         patientReference,
         patientRecord,
-        fichas
+        fichas,
+        clientContext?.operationalHints
       );
 
       // Agregar el mensaje del usuario al historial

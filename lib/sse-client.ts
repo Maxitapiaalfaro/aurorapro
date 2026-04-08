@@ -68,6 +68,8 @@ export interface SendMessageParams {
   fileReferences?: string[]
   /** Metadata completa de archivos para bypass de storage serverless */
   fileMetadata?: FileMetadata[]
+  /** LOCAL-FIRST: Pre-computed patient context to skip server Firestore reads */
+  clientContext?: import('@/types/clinical-types').ClientContext
 }
 
 /**
@@ -103,6 +105,7 @@ export class SSEClient {
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,
           fileMetadata: params.fileMetadata, // Pasar metadata completa
+          clientContext: params.clientContext, // LOCAL-FIRST
         }),
         signal: this.abortController.signal,
       })
@@ -173,6 +176,7 @@ export class SSEClient {
           sessionMeta: params.sessionMeta,
           fileReferences: params.fileReferences,
           fileMetadata: params.fileMetadata, // Pass full file metadata to bypass serverless storage
+          clientContext: params.clientContext, // LOCAL-FIRST
         }),
         signal: this.abortController.signal,
       })

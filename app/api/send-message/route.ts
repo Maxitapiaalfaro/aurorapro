@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     requestBody = await request.json()
     queryCheckpoint(profile, 'body_parsed')
-    const { sessionId, message, useStreaming = true, userId, suggestedAgent, sessionMeta, fileReferences, fileMetadata } = requestBody
+    const { sessionId, message, useStreaming = true, userId, suggestedAgent, sessionMeta, fileReferences, fileMetadata, clientContext } = requestBody
 
     // Use verified uid from token; fall back to body userId only in dev
     const verifiedUserId = authResult.authenticated ? authResult.uid : userId
@@ -170,7 +170,8 @@ export async function POST(request: NextRequest) {
             fileReferences,    // ← File IDs from client
             fileMetadata,      // ← File metadata from client (bypass storage)
             verifiedUserId,    // ← Verified psychologistId from auth token
-            profile            // ← Pipeline profiler
+            profile,           // ← Pipeline profiler
+            clientContext       // ← LOCAL-FIRST: pre-computed patient context
           )
 
           // Finish profiling before streaming begins
