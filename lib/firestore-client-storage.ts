@@ -177,11 +177,11 @@ export async function addMessage(
   message: ChatMessage
 ): Promise<void> {
   const msgRef = doc(messagesCol(psychologistId, patientId, sessionId), message.id)
-  await setDoc(msgRef, serializeDates(message))
-
-  // Touch the session's lastUpdated timestamp
   const sessRef = sessionRef(psychologistId, patientId, sessionId)
-  await setDoc(sessRef, { metadata: { lastUpdated: Timestamp.now() } }, { merge: true })
+  await Promise.all([
+    setDoc(msgRef, serializeDates(message)),
+    setDoc(sessRef, { metadata: { lastUpdated: Timestamp.now() } }, { merge: true })
+  ])
 }
 
 /**

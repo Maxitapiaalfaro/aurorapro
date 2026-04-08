@@ -190,6 +190,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
+  const isStreamingRef = useRef(false)
+  const pendingMessageRef = useRef<string | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isRecordingVoice, setIsRecordingVoice] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
@@ -466,11 +468,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       return
     }
 
+    // Queue message if streaming is active
+    if (isStreamingRef.current) {
+      pendingMessageRef.current = messageToSend
+      setInputValue("")
+      return
+    }
+
     const message = messageToSend
 
     // Limpiar input y preparar UI para streaming
     setInputValue("")
     setIsStreaming(true)
+    isStreamingRef.current = true
     setStreamingResponse("")
 
     // 🔄 Resetear indicador académico para el nuevo mensaje
@@ -687,6 +697,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               setStreamingGroundingUrls([])
               setStreamingAcademicReferences([])
               setIsStreaming(false)
+              isStreamingRef.current = false
+              // Dispatch queued message if any
+              if (pendingMessageRef.current) {
+                const queued = pendingMessageRef.current
+                pendingMessageRef.current = null
+                setTimeout(() => handleSendMessage(queued), 0)
+              }
               // Resetear estado de búsqueda académica si quedó activo
               if (academicSearchState !== 'idle') {
                 setAcademicSearchState('idle')
@@ -699,6 +716,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               span.setStatus({ code: 2, message: "Streaming failed" })
               Sentry.captureException(streamError)
               setIsStreaming(false)
+              isStreamingRef.current = false
               setStreamingResponse("")
             }
           } else if (response && response.text) {
@@ -740,18 +758,21 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             }
             
             setIsStreaming(false)
+            isStreamingRef.current = false
             span.setStatus({ code: 1, message: "Non-streaming response processed successfully" })
           } else {
             logger.info('⚠️ Frontend: Respuesta inesperada o nula:', response)
             span.setAttribute("response.type", "unexpected")
             span.setStatus({ code: 2, message: "Unexpected or null response" })
             setIsStreaming(false)
+            isStreamingRef.current = false
           }
         } catch (error) {
           logger.error("❌ Frontend: Error sending message:", error)
           span.setStatus({ code: 2, message: "Message send failed" })
           Sentry.captureException(error)
           setIsStreaming(false)
+          isStreamingRef.current = false
           setStreamingResponse("")
         }
       }
@@ -1570,7 +1591,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   placeholder="Escribe tu mensaje o pregunta..."
                   className="w-full min-h-[52px] resize-none border-0 bg-transparent px-4 md:px-5 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans overflow-hidden"
                   rows={1}
-                  disabled={isProcessing || isStreaming || isUploading || isTranscribing}
+                  disabled={isProcessing || isTranscribing}
                   style={{
                     boxShadow: 'none',
                   }}
@@ -1587,7 +1608,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       // No-op here; parent hook updates pendingFiles after uploadDocument
                     }}
                     uploadDocument={uploadDocument}
-                    disabled={isProcessing || isStreaming || isUploading || isTranscribing}
+                    disabled={isProcessing || isUploading || isTranscribing}
                     pendingFiles={pendingFiles}
                     onRemoveFile={onRemoveFile}
                     buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}

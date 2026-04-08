@@ -409,27 +409,24 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         logger.info('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
 
         // 🏥 FIX: Also persist the updated sessionMeta to Firestore immediately
-        // PERF: Write directly instead of read-then-write (session was just created)
-        try {
-          if (psychologistId) {
-            const patientId = resolvePatientId({
-              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
-              sessionMeta: updatedSessionMeta,
-            })
-            await saveSessionMetadata(psychologistId, patientId, {
-              sessionId: newSessionId,
-              userId: currentState.userId || psychologistId,
-              mode: currentState.mode || 'clinical_supervision',
-              activeAgent: currentState.activeAgent,
-              history: [],
-              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
-              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
-              sessionMeta: updatedSessionMeta,
-            } as ChatState)
-            logger.info('💾 SessionMeta persisted to Firestore after lazy session creation')
-          }
-        } catch (error) {
-          logger.error('⚠️ Failed to persist sessionMeta after lazy creation:', error)
+        // PERF: Fire-and-forget — persistence is not needed before the AI call
+        if (psychologistId) {
+          const patientId = resolvePatientId({
+            clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+            sessionMeta: updatedSessionMeta,
+          })
+          saveSessionMetadata(psychologistId, patientId, {
+            sessionId: newSessionId,
+            userId: currentState.userId || psychologistId,
+            mode: currentState.mode || 'clinical_supervision',
+            activeAgent: currentState.activeAgent,
+            history: [],
+            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+            clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+            sessionMeta: updatedSessionMeta,
+          } as ChatState).catch(err =>
+            logger.error('⚠️ Background: Failed to persist sessionMeta after lazy creation:', err)
+          )
         }
       }
     }
@@ -475,39 +472,37 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }
       })
 
-      // 💾 Ensure session doc exists in Firestore (best-effort, non-blocking for UI)
+      // 💾 Ensure session doc exists in Firestore (fire-and-forget, not on critical path)
       // NOTE: User message is NOT persisted here to avoid duplication.
       // The server persists the user message as part of addMessageToSession() after processing.
-      // PERF: Write directly with set({merge:true}) — idempotent, no need to check existence first.
-      try {
-        if (psychologistId) {
-          const patientId = resolvePatientId({
-            clinicalContext: {
-              patientId: currentState.sessionMeta?.patient?.reference,
-              sessionType: currentState.mode || 'clinical_supervision',
-              confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
-            },
-            sessionMeta: currentState.sessionMeta,
-          })
+      // PERF: Fire-and-forget with set({merge:true}) — idempotent, no need to block SSE on this.
+      if (psychologistId) {
+        const patientId = resolvePatientId({
+          clinicalContext: {
+            patientId: currentState.sessionMeta?.patient?.reference,
+            sessionType: currentState.mode || 'clinical_supervision',
+            confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
+          },
+          sessionMeta: currentState.sessionMeta,
+        })
 
-          const sessionDoc: ChatState = {
-            sessionId: sessionIdToUse!,
-            userId: currentState.userId || psychologistId,
-            mode: currentState.mode || 'clinical_supervision',
-            activeAgent: currentState.activeAgent,
-            history: [],
-            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
-            clinicalContext: {
-              sessionType: currentState.mode || 'clinical_supervision',
-              confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
-              patientId: currentState.sessionMeta?.patient?.reference
-            },
-            sessionMeta: currentState.sessionMeta
-          }
-          await saveSessionMetadata(psychologistId, patientId, sessionDoc)
+        const sessionDoc: ChatState = {
+          sessionId: sessionIdToUse!,
+          userId: currentState.userId || psychologistId,
+          mode: currentState.mode || 'clinical_supervision',
+          activeAgent: currentState.activeAgent,
+          history: [],
+          metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: userMessage.fileReferences || [] },
+          clinicalContext: {
+            sessionType: currentState.mode || 'clinical_supervision',
+            confidentialityLevel: currentState.sessionMeta?.patient?.confidentialityLevel || 'high',
+            patientId: currentState.sessionMeta?.patient?.reference
+          },
+          sessionMeta: currentState.sessionMeta
         }
-      } catch (persistError) {
-        logger.error('❌ [Firestore] Error al verificar/crear sesión:', persistError)
+        saveSessionMetadata(psychologistId, patientId, sessionDoc).catch(err =>
+          logger.error('❌ [Firestore] Background: Error ensuring session doc:', err)
+        )
       }
 
       logger.info('📤 Enviando mensaje vía SSE con enrutamiento inteligente:', message.substring(0, 50) + '...')
@@ -696,14 +691,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         })()
       }
-
-      // Simular estado de selección de agente
-      setTimeout(() => {
-        setSystemState(prev => ({
-          ...prev,
-          transitionState: 'selecting_agent'
-        }))
-      }, 500)
 
       // 🔥 NUEVA ARQUITECTURA: Usar SSE Client y retornar AsyncGenerator para streaming real
       const sseClient = getSSEClient()

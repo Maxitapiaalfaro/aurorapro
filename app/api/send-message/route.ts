@@ -5,6 +5,7 @@ import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
+import { startQueryProfile, queryCheckpoint, finishQueryProfile } from '@/lib/utils/query-profiler'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
@@ -37,6 +38,7 @@ function formatSSE(event: SSEEvent): string {
 export async function POST(request: NextRequest) {
   let requestBody: any
   const startTime = Date.now();
+  const profile = startQueryProfile()
 
   logger.info('🖥️ [API /send-message] POST request received on SERVER')
   logger.info('🖥️ [API /send-message] Environment:', {
@@ -47,6 +49,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify Firebase Auth token
     const authResult = await verifyFirebaseAuth(request)
+    queryCheckpoint(profile, 'auth_verified')
     if (!authResult.authenticated) {
       if (process.env.NODE_ENV === 'production') {
         return NextResponse.json(
@@ -58,6 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     requestBody = await request.json()
+    queryCheckpoint(profile, 'body_parsed')
     const { sessionId, message, useStreaming = true, userId, suggestedAgent, sessionMeta, fileReferences, fileMetadata } = requestBody
 
     // Use verified uid from token; fall back to body userId only in dev
@@ -126,6 +130,7 @@ export async function POST(request: NextRequest) {
           logger.info('🔧 [API /send-message] Getting global orchestration system...')
           const systemStartTime = Date.now()
           const orchestrationSystem = await getGlobalOrchestrationSystem()
+          queryCheckpoint(profile, 'orchestration_ready')
           const systemInitTime = Date.now() - systemStartTime
           logger.info(`✅ [API /send-message] Orchestration system obtained in ${systemInitTime}ms`)
 
@@ -164,8 +169,12 @@ export async function POST(request: NextRequest) {
             onAgentSelected,   // ← Callback para agente
             fileReferences,    // ← File IDs from client
             fileMetadata,      // ← File metadata from client (bypass storage)
-            verifiedUserId     // ← Verified psychologistId from auth token
+            verifiedUserId,    // ← Verified psychologistId from auth token
+            profile            // ← Pipeline profiler
           )
+
+          // Finish profiling before streaming begins
+          finishQueryProfile(profile)
 
           // 📁 If files were attached, emit completion event
           if (fileReferences && fileReferences.length > 0) {

@@ -9,6 +9,7 @@ import { PatientSummaryBuilder } from "./patient-summary-builder"
 import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet } from "@/types/clinical-types"
 import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
+import { queryCheckpoint, type QueryProfile } from '@/lib/utils/query-profiler'
 
 import { createLogger } from '@/lib/logger'
 
@@ -522,7 +523,8 @@ export class HopeAISystem {
     _onAgentSelected?: (routingInfo: { targetAgent: string; confidence: number; reasoning: string }) => void,
     clientFileReferences?: string[],
     clientFileMetadata?: any[], // Metadata completa de archivos desde el cliente
-    psychologistId?: string // Verified userId from API route
+    psychologistId?: string, // Verified userId from API route
+    queryProfile?: QueryProfile // Pipeline profiler
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -532,6 +534,7 @@ export class HopeAISystem {
 
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
+    queryCheckpoint(queryProfile, 'session_loaded')
     if (!currentState) {
       sessionLogger.info(`🆕 Creating new session: ${sessionId}`)
       currentState = {
@@ -554,8 +557,10 @@ export class HopeAISystem {
         // 🏥 FIX: Persist full sessionMeta to ensure patient context survives reloads
         sessionMeta: sessionMeta
       }
-      // Save the new session
-      await this.saveChatSessionBoth(currentState)
+      // Save the new session (fire-and-forget — data already in memory)
+      void this.saveChatSessionBoth(currentState).catch(e =>
+        sessionLogger.error('Fire-and-forget: saveChatSessionBoth failed:', e)
+      )
     } else if (sessionMeta?.patient?.reference && currentState.clinicalContext?.patientId !== sessionMeta.patient.reference) {
       // Update existing session with patient context if provided and different
       sessionLogger.info(`🏥 Updating existing session with patient context: ${sessionMeta.patient.reference}`)
@@ -566,21 +571,70 @@ export class HopeAISystem {
       }
       // 🏥 FIX: Also update sessionMeta in storage
       currentState.sessionMeta = sessionMeta
-      // PERF: metadata-only update — no messages changed, skip full history rewrite
-      await this.saveSessionMetadataOnly(currentState)
+      // PERF: metadata-only update — no messages changed, skip full history rewrite (fire-and-forget)
+      void this.saveSessionMetadataOnly(currentState).catch(e =>
+        sessionLogger.error('Fire-and-forget: saveSessionMetadataOnly (patient context) failed:', e)
+      )
     } else if (sessionMeta && !currentState.sessionMeta) {
       // 🏥 FIX: If sessionMeta is provided but not yet saved, save it now
       sessionLogger.info(`🏥 Adding sessionMeta to existing session: ${sessionId}`)
       currentState.sessionMeta = sessionMeta
-      // PERF: metadata-only update — no messages changed
-      await this.saveSessionMetadataOnly(currentState)
+      // PERF: metadata-only update — no messages changed (fire-and-forget)
+      void this.saveSessionMetadataOnly(currentState).catch(e =>
+        sessionLogger.error('Fire-and-forget: saveSessionMetadataOnly (sessionMeta) failed:', e)
+      )
     }
 
     // 🎯 START COMPREHENSIVE METRICS TRACKING (after currentState is loaded)
+    queryCheckpoint(queryProfile, 'saves_dispatched')
     const interactionId = sessionMetricsTracker.startInteraction(sessionId, currentState.userId, message);
 
-    // Get session files automatically - no longer passed as parameter
-    const sessionFiles = await this.getPendingFilesForSession(sessionId)
+    // Hoist patient reference derivation (needed by parallel I/O below)
+    const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
+    const providedSummary = sessionMeta?.patient?.summaryText;
+
+    // ─── PERF: Parallel I/O — fire ALL independent operations at once ───
+    // Collapses 5 sequential operations (~200ms each) into 1 parallel group (~300ms max).
+    const [
+      sessionFiles,
+      { ContextWindowManager },
+      patientRecord,
+      fichas,
+      clinicalMemories,
+    ] = await Promise.all([
+      // 1. Session files from server storage
+      this.getPendingFilesForSession(sessionId),
+
+      // 2. Context window manager (dynamic import)
+      import('./context-window-manager'),
+
+      // 3. Patient record from Firestore
+      (patientReference && !providedSummary && currentState.userId)
+        ? loadPatientFromFirestore(currentState.userId, patientReference).catch((err: unknown) => {
+            sessionLogger.warn(`⚠️ Error loading patient record: ${err instanceof Error ? err.message : String(err)}`)
+            return null
+          })
+        : Promise.resolve(null),
+
+      // 4. Fichas clínicas
+      patientReference
+        ? this.storage.getFichasClinicasByPaciente(patientReference).catch((err: unknown) => {
+            sessionLogger.warn(`⚠️ Error loading fichas: ${err instanceof Error ? err.message : String(err)}`)
+            return [] as any[]
+          })
+        : Promise.resolve([] as any[]),
+
+      // 5. Clinical memories (chain import + call as single promise)
+      (patientReference && currentState.userId)
+        ? import('./clinical-memory-system').then(m =>
+            m.getRelevantMemories(currentState.userId, patientReference, message, 5)
+          ).catch((err: unknown) => {
+            sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+            return [] as any[]
+          })
+        : Promise.resolve([] as any[]),
+    ])
+    queryCheckpoint(queryProfile, 'parallel_io_complete')
 
     // 📁 DEBUG: Log fallback chain parameters
     sessionLogger.debug('📁 File resolution fallback chain', {
@@ -593,7 +647,7 @@ export class HopeAISystem {
 
     // Fallback chain for resolving session files:
     // 0. Client-provided fileMetadata (HIGHEST PRIORITY - bypass serverless storage)
-    // 1. getPendingFilesForSession (server storage)
+    // 1. getPendingFilesForSession (server storage) — from parallel I/O above
     // 2. Client-provided fileReferences (survives serverless cold starts)
     // 3. Most recent message with fileReferences from history
     let resolvedSessionFiles = sessionFiles || []
@@ -659,9 +713,7 @@ export class HopeAISystem {
     }
 
     try {
-      // 🔧 FIX: Aplicar Context Window Manager para comprimir historial ANTES de enviar al agente
-      // Esto previene sobrecarga con archivos grandes + conversaciones largas
-      const { ContextWindowManager } = await import('./context-window-manager');
+      // 🔧 Context Window Manager — compress history BEFORE sending to agent
       const contextWindowManager = new ContextWindowManager({
         maxExchanges: 50,       // Preservar últimos 50 intercambios = 100 mensajes max para evitar pérdida de contexto
         triggerTokens: 800000,  // Activar compresión a 800k tokens (80% del context window de 1M)
@@ -694,40 +746,6 @@ export class HopeAISystem {
         patientReference: sessionMeta?.patient?.reference || 'None',
         sessionId: sessionMeta?.sessionId || sessionId
       });
-
-      const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
-      const providedSummary = sessionMeta?.patient?.summaryText;
-
-      // ─── PERF: Parallel prefetch — fire ALL independent I/O at once ───
-      // Instead of 10+ sequential reads, run them concurrently via Promise.all.
-      // Each fetch is independent; results are assembled afterwards.
-      const { getRelevantMemories } = await import('./clinical-memory-system')
-
-      const [patientRecord, fichas, clinicalMemories] = await Promise.all([
-        // Patient record: needed for summary + risk metadata + modality
-        (patientReference && !providedSummary && currentState.userId)
-          ? loadPatientFromFirestore(currentState.userId, patientReference).catch((err: unknown) => {
-              sessionLogger.warn(`⚠️ Error loading patient record: ${err instanceof Error ? err.message : String(err)}`)
-              return null
-            })
-          : Promise.resolve(null),
-
-        // Fichas: needed for therapeutic phase + first-message summary
-        patientReference
-          ? this.storage.getFichasClinicasByPaciente(patientReference).catch((err: unknown) => {
-              sessionLogger.warn(`⚠️ Error loading fichas: ${err instanceof Error ? err.message : String(err)}`)
-              return [] as any[]
-            })
-          : Promise.resolve([] as any[]),
-
-        // Clinical memories: relevant inter-session memories
-        (patientReference && currentState.userId)
-          ? getRelevantMemories(currentState.userId, patientReference, message, 5).catch((err: unknown) => {
-              sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
-              return [] as any[]
-            })
-          : Promise.resolve([] as any[]),
-      ])
 
       // ─── Build patient summary from pre-fetched data (CPU-only) ───
       let patientSummary: string | undefined = undefined;
@@ -833,6 +851,7 @@ export class HopeAISystem {
       })
 
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
+      queryCheckpoint(queryProfile, 'gemini_session_ready')
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
         try {
           // CRITICAL FIX: Exclude the current user message (just pushed above) from the
