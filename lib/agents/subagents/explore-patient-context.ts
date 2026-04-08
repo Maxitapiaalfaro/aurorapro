@@ -38,14 +38,30 @@ export async function executeExplorePatientContext(
     ctx.onProgress?.('Conectando con Firestore…');
 
     // Dynamic imports to avoid circular dependencies
-    const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemories }] =
+    const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemoriesSemantic }] =
       await Promise.all([
         import('../../hopeai-system'),
         import('../../clinical-memory-system'),
       ]);
 
-    ctx.onProgress?.('Cargando registro del paciente…');
-    const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
+    // Run all independent Firestore reads in parallel:
+    // - Patient record and memories are independent reads on the same patient
+    // - Semantic memory search (if contextHint) is also independent
+    ctx.onProgress?.('Cargando registro, memorias y contexto en paralelo…');
+
+    const parallelFetches: [
+      Promise<any>,                    // patient record
+      Promise<any[]>,                  // all active memories
+      Promise<any[]>,                  // semantic memories (or empty)
+    ] = [
+      loadPatientFromFirestore(ctx.psychologistId, patientId),
+      getPatientMemories(ctx.psychologistId, patientId, { isActive: true, limit: 20 }),
+      contextHint
+        ? getRelevantMemoriesSemantic(ctx.psychologistId, patientId, contextHint, 5)
+        : Promise.resolve([]),
+    ];
+
+    const [record, memories, relevantMemories] = await Promise.all(parallelFetches);
 
     if (!record) {
       return {
@@ -54,20 +70,7 @@ export async function executeExplorePatientContext(
       };
     }
 
-    ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
-
-    ctx.onProgress?.('Recuperando memorias clínicas activas…');
-    const memories = await getPatientMemories(ctx.psychologistId, patientId, { isActive: true, limit: 20 });
-    ctx.onProgress?.(`${memories.length} memorias recuperadas`);
-
-    let relevantMemories: any[] = [];
-    if (contextHint) {
-      ctx.onProgress?.('Buscando memorias relevantes al contexto…');
-      relevantMemories = await getRelevantMemories(ctx.psychologistId, patientId, contextHint, 5);
-      if (relevantMemories.length > 0) {
-        ctx.onProgress?.(`${relevantMemories.length} memorias contextuales encontradas`);
-      }
-    }
+    ctx.onProgress?.(`Registro: ${record.displayName || patientId} | ${memories.length} memorias | ${relevantMemories.length} contextuales`);
 
     ctx.onProgress?.('Construyendo prompt de síntesis…');
 
