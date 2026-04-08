@@ -86,7 +86,10 @@ export async function executeGenerateClinicalDocument(
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.2,
+        temperature: 1.0,
+        thinkingConfig: {
+          thinkingLevel: 'low'
+        },
         maxOutputTokens: 8192,
       },
     });

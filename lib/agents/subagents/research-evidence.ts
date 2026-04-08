@@ -171,7 +171,10 @@ export async function executeResearchEvidence(
       contents: [{ role: 'user', parts: [{ text: synthesisPrompt }] }],
       config: {
         systemInstruction: SYNTHESIS_SYSTEM_PROMPT,
-        temperature: 0.3,
+        temperature: 1.0,
+        thinkingConfig: {
+          thinkingLevel: 'low'
+        },
         maxOutputTokens: 8192,
       },
     });

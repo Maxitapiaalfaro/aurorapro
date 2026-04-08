@@ -73,7 +73,7 @@ export class ClinicalAgentRouter {
 
       // Create chat session using the correct SDK API
       const chat = client.chats.create({
-        model: agentConfig.config.model || 'gemini-2.5-flash',
+        model: agentConfig.config.model || 'gemini-3.1-flash-lite-preview',
         config: {
           temperature: agentConfig.config.temperature,
           topK: agentConfig.config.topK,
@@ -234,7 +234,7 @@ export class ClinicalAgentRouter {
       if (interactionId) {
         const currentHistory = sessionData.history || [];
         const contextTokens = estimateTokenCount(currentHistory);
-        const modelUsed = this.unifiedConfig.config?.model || 'gemini-2.5-flash';
+        const modelUsed = this.unifiedConfig.config?.model || 'gemini-3.1-flash-lite-preview';
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
@@ -249,7 +249,7 @@ export class ClinicalAgentRouter {
           const agentConfig = this.unifiedConfig
           const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [])
           const fileChat = aiFiles.chats.create({
-            model: agentConfig?.config?.model || 'gemini-2.5-flash',
+            model: agentConfig?.config?.model || 'gemini-3.1-flash-lite-preview',
             config: {
               temperature: agentConfig?.config?.temperature,
               topK: agentConfig?.config?.topK,
