@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline, DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 import {
   findSessionById,
   saveSessionMetadata,
@@ -82,6 +82,12 @@ interface UseHopeAISystemReturn {
   // Bullets progresivos
   clearReasoningBullets: () => void
   addReasoningBullet: (bullet: ReasoningBullet) => void
+
+  // Document preview — real-time document generation state
+  documentPreview: DocumentPreviewEvent | null
+  documentReady: DocumentReadyEvent | null
+  isDocumentPanelOpen: boolean
+  closeDocumentPanel: () => void
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
@@ -138,6 +144,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
+
+  // Document preview state — real-time document generation
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewEvent | null>(null)
+  const [documentReady, setDocumentReady] = useState<DocumentReadyEvent | null>(null)
+  const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false)
+
+  const closeDocumentPanel = useCallback(() => {
+    setIsDocumentPanelOpen(false)
+  }, [])
 
   // Cargar sesión existente
   const loadSession = useCallback(async (sessionId: string, allowDuringInit = false): Promise<boolean> => {
@@ -474,6 +489,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         }
       })
+
+      // Reset document preview state for the new message
+      setDocumentPreview(null)
+      setDocumentReady(null)
+      // Don't auto-close panel — user may want to keep viewing previous doc
 
       // 💾 Ensure session doc exists in Firestore (best-effort, non-blocking for UI)
       // NOTE: User message is NOT persisted here to avoid duplication.
@@ -831,6 +851,16 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   return prev
                 })
               },
+              onDocumentPreview: (preview: DocumentPreviewEvent) => {
+                logger.info('📄 Document preview:', preview.section.id, `${(preview.overallProgress * 100).toFixed(0)}%`)
+                setDocumentPreview(preview)
+                // Auto-open the panel on first preview event
+                setIsDocumentPanelOpen(true)
+              },
+              onDocumentReady: (document: DocumentReadyEvent) => {
+                logger.info('📄 Document ready:', document.documentType, `${(document.durationMs / 1000).toFixed(1)}s`)
+                setDocumentReady(document)
+              },
               onResponse: (responseData) => {
                 logger.info('✅ Respuesta final recibida vía SSE')
 
@@ -1115,6 +1145,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     addStreamingResponseToHistory,
     setSessionMeta,
     clearReasoningBullets,
-    addReasoningBullet
+    addReasoningBullet,
+    // Document preview
+    documentPreview,
+    documentReady,
+    isDocumentPanelOpen,
+    closeDocumentPanel,
   }
 }

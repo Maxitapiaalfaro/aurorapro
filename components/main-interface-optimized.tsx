@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { ChatInterface } from "@/components/chat-interface"
+import { DocumentPreviewPanel } from "@/components/document-preview-panel"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
@@ -82,7 +83,12 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     addStreamingResponseToHistory,
     loadSession,
     setSessionMeta,
-    resetSystem
+    resetSystem,
+    // Document preview
+    documentPreview,
+    documentReady,
+    isDocumentPanelOpen,
+    closeDocumentPanel,
   } = useHopeAISystem()
 
   // Selected patient for current session (must be before any conditional returns)
@@ -909,6 +915,14 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               />
             )}
           </div>
+
+          {/* Document Preview Panel — slides in from right when document generation starts */}
+          <DocumentPreviewPanel
+            previewEvent={documentPreview}
+            readyEvent={documentReady}
+            isOpen={isDocumentPanelOpen}
+            onClose={closeDocumentPanel}
+          />
         </main>
       </div>
 
