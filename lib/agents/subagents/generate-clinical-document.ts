@@ -187,20 +187,22 @@ export async function executeGenerateClinicalDocument(
 
       for (let i = 0; i < lines.length; i++) {
         const match = lines[i].match(H2_REGEX);
-        if (match && i > 0) {
-          // A new heading was found — emit the previous section as complete
-          const prevContent = lines.slice(0, i).join('\n').trim();
-          if (prevContent) {
-            completedSections++;
-            emitSectionPreview(ctx, documentId, {
-              id: currentSectionId,
-              title: currentSectionTitle,
-              content: prevContent,
-              progress: 1,
-            }, completedSections / totalSections, documentType, accumulatedMarkdown);
+        if (match) {
+          // When i > 0, there's previous content before this heading — emit it
+          if (i > 0) {
+            const prevContent = lines.slice(0, i).join('\n').trim();
+            if (prevContent) {
+              completedSections++;
+              emitSectionPreview(ctx, documentId, {
+                id: currentSectionId,
+                title: currentSectionTitle,
+                content: prevContent,
+                progress: 1,
+              }, completedSections / totalSections, documentType, accumulatedMarkdown);
+            }
           }
 
-          // Start a new section
+          // Start a new section (handles both first heading and subsequent headings)
           const detected = detectSection(match[1], documentType);
           currentSectionId = detected?.id ?? match[1].toLowerCase().replace(/\s+/g, '_');
           currentSectionTitle = detected?.title ?? match[1];
@@ -214,7 +216,9 @@ export async function executeGenerateClinicalDocument(
 
       // If no new section heading, emit partial progress for current section
       if (!newSectionDetected && currentSectionContent.length > 0) {
-        const sectionProgress = Math.min(currentSectionContent.length / 800, 0.95); // heuristic
+        // Heuristic: ~800 chars is the average clinical section length.
+        // Cap at 0.95 so progress never hits 1.0 until the section is truly complete.
+        const sectionProgress = Math.min(currentSectionContent.length / 800, 0.95);
         emitSectionPreview(ctx, documentId, {
           id: currentSectionId,
           title: currentSectionTitle,
