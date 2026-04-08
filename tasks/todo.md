@@ -3,6 +3,35 @@
 ## Active Tasks
 <!-- Format: - [ ] Task description | Priority: H/M/L | Status: pending/in-progress/done -->
 
+### ARCH-1: Agent-Tree MCP Architecture Improvements (HIGH)
+> Based on PR analysis `copilot/revise-agent-architecture-relationship`
+> Source: `docs/architecture/agent-tree-mcp-relationship-analysis.md`
+
+#### Phase 2: Sub-Agent Parallelization | Priority: H
+- [ ] 2a. Convert `research-evidence.ts` sequential search loop → parallel Promise.all with per-query error isolation
+- [ ] 2b. Add progress reporting that works with parallel execution (report when each search completes, not just start)
+- [ ] 2c. Verify no regressions with vitest
+
+#### Phase 3: Semantic Memory Selection | Priority: H
+- [ ] 3a. Add `getRelevantMemoriesSemantic()` to `clinical-memory-system.ts` that uses Gemini Flash to select top-K relevant memories
+- [ ] 3b. Automatic fallback to keyword-based `getRelevantMemories()` on LLM failure
+- [ ] 3c. Wire new function to `explore_patient_context.ts` sub-agent (replace `getRelevantMemories` call)
+- [ ] 3d. Verify no regressions with vitest
+
+#### Phase 4: MCP Foundation Types | Priority: M
+- [ ] 4a. Create `lib/mcp/types.ts` — MCPServerConfig, MCPToolDefinition, MCPToolResult interfaces
+- [ ] 4b. Create `lib/mcp/mcp-tool-wrapper.ts` — wraps MCP tool calls into ToolHandler interface
+- [ ] 4c. Create `lib/mcp/mcp-registry.ts` — singleton registry for MCP server connections
+- [ ] 4d. Create `lib/mcp/index.ts` — barrel export
+- [ ] 4e. Verify type-check passes (`npx tsc --noEmit` on new files only)
+
+#### Phase 5: Documentation Update | Priority: L
+- [ ] 5a. Update `gap-analysis-aurora-vs-claude.md` status section
+- [ ] 5b. Add ARCH-1 results to `tasks/todo.md` completed section
+
+#### Phase 6: Validation
+- [ ] 6a. Run parallel_validation for code review + CodeQL security scan
+
 ### P5: Further Module Decomposition (MEDIUM)
 - [ ] Decompose `clinical-pattern-analyzer.ts` → `lib/patterns/` | Priority: M | Status: pending
 - [ ] Decompose `entity-extraction-engine.ts` → `lib/entities/` | Priority: M | Status: pending
