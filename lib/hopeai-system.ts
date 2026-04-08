@@ -182,6 +182,17 @@ export class HopeAISystem {
       // Asignar resultados
       this.storage = storage
 
+      // Initialize MCP servers (non-blocking: failures are logged, not thrown)
+      try {
+        const { initializeMCP } = await import('@/lib/mcp/mcp-init')
+        const mcpResult = await initializeMCP()
+        if (mcpResult.toolsDiscovered > 0) {
+          systemLogger.info(`✅ MCP: ${mcpResult.serversConnected} server(s), ${mcpResult.toolsDiscovered} tool(s)`)
+        }
+      } catch (mcpErr) {
+        systemLogger.warn('⚠️ MCP initialization skipped', { error: mcpErr instanceof Error ? mcpErr.message : String(mcpErr) })
+      }
+
       const initTime = Date.now() - startTime
       systemLogger.info(`✅ PARALLEL initialization completed in ${initTime}ms`)
 
