@@ -78,29 +78,31 @@ export async function executeResearchEvidence(
     ctx.onProgress?.(`Pregunta descompuesta en ${subQueries.length} sub-consultas`);
     logger.info(`[subagent:research_evidence] ${subQueries.length} sub-queries, ${perQueryMax} results each`);
 
-    // Step 2: Search SEQUENTIALLY so each search reports in real-time
-    const searchResults: any[] = [];
-    for (let i = 0; i < subQueries.length; i++) {
-      const query = subQueries[i];
-      const truncatedQuery = query.length > 50 ? query.substring(0, 50) + '…' : query;
-      ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length}: "${truncatedQuery}"`);
+    // Step 2: Run searches in PARALLEL with per-query error isolation
+    // Each search is independent — one failure doesn't block others.
+    // Progress is reported as each search completes (not just start).
+    ctx.onProgress?.(`Ejecutando ${subQueries.length} búsquedas en paralelo…`);
 
-      try {
-        const result = await academicMultiSourceSearch.search({
-          query,
-          maxResults: perQueryMax,
-          language: 'both' as const,
-          minTrustScore: 60,
-        });
-        searchResults.push(result);
-        const found = result?.results?.length ?? 0;
-        ctx.onProgress?.(`Búsqueda ${i + 1} completada: ${found} resultados`);
-      } catch (err: any) {
-        logger.warn(`[subagent:research_evidence] Search failed for query="${query}": ${err.message}`);
-        searchResults.push({ results: [] });
-        ctx.onProgress?.(`Búsqueda ${i + 1} falló, continuando…`);
-      }
-    }
+    const searchResults = await Promise.all(
+      subQueries.map(async (query, i) => {
+        const truncatedQuery = query.length > 50 ? query.substring(0, 50) + '…' : query;
+        try {
+          const result = await academicMultiSourceSearch.search({
+            query,
+            maxResults: perQueryMax,
+            language: 'both' as const,
+            minTrustScore: 60,
+          });
+          const found = result?.results?.length ?? 0;
+          ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length} completada: ${found} resultados — "${truncatedQuery}"`);
+          return result;
+        } catch (err: any) {
+          logger.warn(`[subagent:research_evidence] Search failed for query="${query}": ${err.message}`);
+          ctx.onProgress?.(`Búsqueda ${i + 1}/${subQueries.length} falló: "${truncatedQuery}", continuando…`);
+          return { results: [] };
+        }
+      }),
+    );
 
     // Step 3: Deduplicate and collect references
     ctx.onProgress?.('Deduplicando resultados…');
