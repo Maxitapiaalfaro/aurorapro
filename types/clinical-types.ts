@@ -119,6 +119,58 @@ export interface ToolExecutionEvent {
   completionDetail?: string
 }
 
+// ---------------------------------------------------------------------------
+// Document Preview Types — Real-time document generation with live preview
+// ---------------------------------------------------------------------------
+
+/** Supported clinical document section identifiers */
+export type DocumentSectionId =
+  | 'header'
+  | 'subjetivo' | 'objetivo' | 'analisis' | 'plan'       // SOAP
+  | 'datos' | 'intervencion' | 'respuesta'                 // DAP / BIRP (some overlap with SOAP)
+  | 'comportamiento'                                        // BIRP
+  | 'objetivos' | 'intervenciones' | 'timeline' | 'indicadores' // plan_tratamiento
+  | 'resumen' | 'evolucion' | 'conclusiones'               // resumen_caso
+  | 'firma'                                                 // signature block
+  | string                                                  // extensible
+
+/** A single section of a document being generated in real-time */
+export interface DocumentSection {
+  id: DocumentSectionId
+  title: string
+  content: string
+  /** 0-1 progress within this section (1 = complete) */
+  progress: number
+}
+
+/** SSE event: a partial or complete preview of a document section */
+export interface DocumentPreviewEvent {
+  /** Unique document generation ID (stable across sections) */
+  documentId: string
+  /** The section being updated */
+  section: DocumentSection
+  /** Overall generation progress 0-1 */
+  overallProgress: number
+  /** Document type being generated */
+  documentType: string
+  /** Cumulative markdown of the full document so far */
+  accumulatedMarkdown: string
+}
+
+/** SSE event: final document ready for download */
+export interface DocumentReadyEvent {
+  /** Same documentId as DocumentPreviewEvent */
+  documentId: string
+  /** Full markdown content of the completed document */
+  markdown: string
+  /** Document type */
+  documentType: string
+  /** Format(s) available for export */
+  availableFormats: Array<'pdf' | 'docx' | 'markdown'>
+  /** Generation duration in ms */
+  durationMs: number
+}
+
 // Granular message processing status for transparency UI
 export interface MessageProcessingStatus {
   phase: ProcessingPhase

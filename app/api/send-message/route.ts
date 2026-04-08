@@ -4,7 +4,7 @@ import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
+import type { AgentType, ReasoningBullet, ToolExecutionEvent, DocumentPreviewEvent, DocumentReadyEvent } from '@/types/clinical-types'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
 
@@ -23,6 +23,8 @@ type SSEEvent =
   | { type: 'agent_selected', info: { targetAgent: string; confidence: number; reasoning: string } }
   | { type: 'tool_execution', tool: ToolExecutionEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
+  | { type: 'document_preview', preview: DocumentPreviewEvent }
+  | { type: 'document_ready', document: DocumentReadyEvent }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
@@ -266,6 +268,18 @@ export async function POST(request: NextRequest) {
                         academicSources: chunk.metadata.academicSources,
                         completionDetail: chunk.metadata.completionDetail,
                       }
+                    })
+                  } else if (chunk.metadata.type === 'document_preview') {
+                    // 📄 Real-time document preview section
+                    sendSSE({
+                      type: 'document_preview',
+                      preview: chunk.metadata.preview,
+                    })
+                  } else if (chunk.metadata.type === 'document_ready') {
+                    // 📄 Document generation complete — ready for export
+                    sendSSE({
+                      type: 'document_ready',
+                      document: chunk.metadata.document,
                     })
                   }
                 }
