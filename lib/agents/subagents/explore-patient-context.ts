@@ -38,7 +38,7 @@ export async function executeExplorePatientContext(
     ctx.onProgress?.('Conectando con Firestore…');
 
     // Dynamic imports to avoid circular dependencies
-    const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemories }] =
+    const [{ loadPatientFromFirestore }, { getPatientMemories, getRelevantMemoriesSemantic }] =
       await Promise.all([
         import('../../hopeai-system'),
         import('../../clinical-memory-system'),
@@ -62,8 +62,8 @@ export async function executeExplorePatientContext(
 
     let relevantMemories: any[] = [];
     if (contextHint) {
-      ctx.onProgress?.('Buscando memorias relevantes al contexto…');
-      relevantMemories = await getRelevantMemories(ctx.psychologistId, patientId, contextHint, 5);
+      ctx.onProgress?.('Buscando memorias relevantes al contexto (selección semántica)…');
+      relevantMemories = await getRelevantMemoriesSemantic(ctx.psychologistId, patientId, contextHint, 5);
       if (relevantMemories.length > 0) {
         ctx.onProgress?.(`${relevantMemories.length} memorias contextuales encontradas`);
       }

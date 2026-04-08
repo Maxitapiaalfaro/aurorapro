@@ -296,6 +296,101 @@ export async function getRelevantMemories(
   }
 }
 
+/**
+ * Obtiene las memorias más relevantes usando selección semántica vía LLM.
+ *
+ * Inspirado en Claude Code's `findRelevantMemories.ts`: usa un modelo LLM
+ * rápido (Gemini Flash) para seleccionar las memorias más pertinentes al
+ * contexto actual, en vez de depender solo de coincidencia por keywords.
+ *
+ * Fallback automático a `getRelevantMemories()` (keyword-based) si la
+ * llamada LLM falla por cualquier razón.
+ *
+ * @param psychologistId - UID del psicólogo
+ * @param patientId      - ID del paciente
+ * @param context        - Texto de contexto actual (ej. mensaje del usuario)
+ * @param limit          - Máximo de memorias a devolver (default: 5)
+ * @returns Memorias seleccionadas por relevancia semántica
+ */
+export async function getRelevantMemoriesSemantic(
+  psychologistId: string,
+  patientId: string,
+  context: string,
+  limit: number = 5,
+): Promise<ClinicalMemory[]> {
+  try {
+    // Fetch all active memories (same as keyword-based approach)
+    const allMemories = await getPatientMemories(psychologistId, patientId, {
+      isActive: true,
+    })
+
+    if (allMemories.length === 0) return []
+
+    // If fewer memories than limit, no need for LLM selection
+    if (allMemories.length <= limit) return allMemories
+
+    // Build a numbered list of memories for the LLM to select from
+    const memoryList = allMemories
+      .map((m, i) => `[${i}] [${m.category}] ${m.content}${m.tags.length > 0 ? ` (tags: ${m.tags.join(', ')})` : ''}`)
+      .join('\n')
+
+    const selectionPrompt = [
+      `Contexto de la conversación actual:\n${context}\n`,
+      `Memorias clínicas disponibles del paciente:\n${memoryList}\n`,
+      `Selecciona las ${limit} memorias MÁS RELEVANTES para este contexto.`,
+      `Responde SOLO con los números de las memorias seleccionadas, separados por comas.`,
+      `Ejemplo: 0,3,7,2,5`,
+      `Si ninguna es relevante, responde: NONE`,
+    ].join('\n')
+
+    // Dynamic import to avoid circular dependency with google-genai-config
+    const { ai } = await import('@/lib/google-genai-config')
+
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: selectionPrompt }] }],
+      config: {
+        systemInstruction: 'Eres un asistente de selección de memorias clínicas. Tu tarea es identificar las memorias más relevantes al contexto dado. Responde SOLO con números separados por comas.',
+        temperature: 0.1,
+        maxOutputTokens: 100,
+      },
+    })
+
+    const responseText = result.text?.trim() || ''
+
+    if (responseText === 'NONE' || !responseText) {
+      logger.debug('Selección semántica: ninguna memoria relevante')
+      return []
+    }
+
+    // Parse selected indices
+    const selectedIndices = responseText
+      .split(/[,\s]+/)
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n >= 0 && n < allMemories.length)
+
+    // Deduplicate indices while preserving LLM's priority order
+    const uniqueIndices = [...new Set(selectedIndices)].slice(0, limit)
+
+    const selected = uniqueIndices.map((i) => allMemories[i])
+
+    logger.debug('Selección semántica completada', {
+      totalEvaluated: allMemories.length,
+      returned: selected.length,
+      indices: uniqueIndices,
+    })
+
+    return selected
+  } catch (err) {
+    // Fallback to keyword-based on ANY error (network, parse, LLM rate limit, etc.)
+    logger.warn('Selección semántica falló, fallback a keywords', {
+      error: err instanceof Error ? err.message : String(err),
+      patientId,
+    })
+    return getRelevantMemories(psychologistId, patientId, context, limit)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Utilidades de tokenización
 // ---------------------------------------------------------------------------
