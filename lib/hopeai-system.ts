@@ -7,7 +7,7 @@ import { getFirestore as getAdminFirestore, Timestamp as AdminTimestamp } from '
 import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet, ExecutionTimeline, ExecutionStep } from "@/types/clinical-types"
 import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
 import { queryCheckpoint, type QueryProfile } from '@/lib/utils/query-profiler'
 
@@ -1033,22 +1033,86 @@ export class HopeAISystem {
         const self = this
         const wrappedStream = (async function* () {
           let accumulatedText = ''
+          // ── METADATA COLLECTION: Accumulate metadata as it flows through chunks ──
+          const collectedGroundingUrls: Array<{title: string, url: string, domain?: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
+          const collectedToolSteps: ExecutionStep[] = []
+          // Track active tool calls so we can compute duration on completion
+          const toolStartTimes = new Map<string, number>()
           try {
             for await (const chunk of streamingResponse as AsyncIterable<any>) {
               if (chunk.text) {
                 accumulatedText += chunk.text
+              }
+              // ── Collect grounding URLs from streaming chunks ──
+              if (chunk.groundingUrls && Array.isArray(chunk.groundingUrls)) {
+                for (const url of chunk.groundingUrls) {
+                  // Deduplicate by URL
+                  if (url?.url && !collectedGroundingUrls.some(u => u.url === url.url)) {
+                    collectedGroundingUrls.push(url)
+                  }
+                }
+              }
+              // ── Collect tool execution metadata for ExecutionTimeline ──
+              if (chunk.metadata) {
+                if (chunk.metadata.type === 'tool_call_start') {
+                  toolStartTimes.set(chunk.metadata.toolName, Date.now())
+                  collectedToolSteps.push({
+                    id: `tool_${collectedToolSteps.length}`,
+                    label: chunk.metadata.toolName,
+                    status: 'active',
+                    toolName: chunk.metadata.toolName,
+                    query: chunk.metadata.query,
+                  })
+                } else if (chunk.metadata.type === 'tool_call_complete') {
+                  const startTime = toolStartTimes.get(chunk.metadata.toolName)
+                  const durationMs = startTime ? Date.now() - startTime : undefined
+                  // Find and update the matching active step
+                  const stepIdx = [...collectedToolSteps].reverse().findIndex(
+                    s => s.toolName === chunk.metadata.toolName && s.status === 'active'
+                  )
+                  if (stepIdx >= 0) {
+                    const realIdx = collectedToolSteps.length - 1 - stepIdx
+                    collectedToolSteps[realIdx] = {
+                      ...collectedToolSteps[realIdx],
+                      status: 'completed',
+                      durationMs,
+                      result: {
+                        sourcesFound: chunk.metadata.sourcesFound,
+                        sourcesValidated: chunk.metadata.sourcesValidated,
+                      },
+                      sources: chunk.metadata.academicSources,
+                      completionDetail: chunk.metadata.completionDetail,
+                    }
+                  }
+                }
               }
               yield chunk
             }
           } finally {
             // Stream fully consumed (or aborted) — persist the assistant response
             if (accumulatedText) {
+              // Build ExecutionTimeline from collected tool steps
+              const executionTimeline: ExecutionTimeline | undefined =
+                collectedToolSteps.length > 0
+                  ? {
+                      agentType: currentState.activeAgent,
+                      agentDisplayName: currentState.activeAgent,
+                      steps: collectedToolSteps.map(s => ({
+                        ...s,
+                        // Mark any still-active steps as completed (stream ended)
+                        status: s.status === 'active' ? 'completed' as const : s.status,
+                      })),
+                    }
+                  : undefined
+
               const aiMessage: ChatMessage = {
                 id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
                 content: accumulatedText,
                 role: "model",
                 agent: currentState.activeAgent,
                 timestamp: new Date(),
+                groundingUrls: collectedGroundingUrls.length > 0 ? collectedGroundingUrls : undefined,
+                executionTimeline,
               }
               currentState.history.push(aiMessage)
               currentState.metadata.lastUpdated = new Date()
@@ -1094,13 +1158,14 @@ export class HopeAISystem {
       } else {
         responseContent = response.text
 
-        // Add AI response to history
+        // Add AI response to history (include metadata if available)
         const aiMessage: ChatMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           content: responseContent,
           role: "model",
           agent: currentState.activeAgent,
           timestamp: new Date(),
+          groundingUrls: response.groundingUrls?.length > 0 ? response.groundingUrls : undefined,
         }
 
         currentState.history.push(aiMessage)

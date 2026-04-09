@@ -414,7 +414,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         userId,
         mode,
         activeAgent: agent,
-        history: chatState.history,
+        // CRITICAL FIX: Preserve existing history (including optimistic user messages)
+        // instead of overwriting with the server's empty history for new sessions.
+        // This prevents the race condition where the first user message disappears.
+        history: prev.history.length > 0 ? prev.history : (chatState.history || []),
         isLoading: false
       }))
       lastSessionIdRef.current = sessionId
@@ -1216,8 +1219,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     logger.info('✅ Respuesta de streaming agregada al historial')
     logger.info('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
-    // NOTE: AI message is NOT persisted from the frontend to avoid duplication.
-    // The server already persists AI messages as part of saveChatSessionBoth() during streaming/response handling.
+    // NOTE: AI message is NOT persisted from the frontend.
+    // The server persists AI messages (with full metadata: groundingUrls, executionTimeline)
+    // as part of the wrappedStream's finally block in hopeai-system.ts.
+    // Firestore client-side offline persistence (persistentLocalCache with IndexedDB) ensures
+    // that previously loaded messages are cached locally for instant access on reload.
   }, [systemState.sessionId, currentMessageBullets])
 
   // Establecer contexto del paciente
