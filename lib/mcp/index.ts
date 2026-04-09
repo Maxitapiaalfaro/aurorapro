@@ -33,3 +33,6 @@ export {
   createMCPToolHandler,
   registerMCPToolHandlers,
 } from './mcp-tool-wrapper';
+
+// Initialization
+export { initializeMCP } from './mcp-init';

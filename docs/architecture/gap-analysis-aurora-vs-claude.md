@@ -24,6 +24,7 @@
 > - **P2.1 (Memoria semántica):** MEJORADO. `lib/clinical-memory-system.ts` tiene nueva función `getRelevantMemoriesSemantic()` que usa Gemini Flash para selección semántica de memorias (análogo a Claude Code `findRelevantMemories.ts`). Fallback automático a keywords si LLM falla. Wired a `explore_patient_context` sub-agente.
 > - **MCP Foundation:** NUEVO. `lib/mcp/` creado con tipos (`types.ts`), wrapper de herramientas (`mcp-tool-wrapper.ts`) y registry singleton (`mcp-registry.ts`). Las herramientas MCP se integran al mismo pipeline de permisos + orquestación que las nativas. Patrón de naming: `mcp__<serverId>__<toolName>`.
 > - Análisis detallado de la relación Agent-Tree ↔ MCP en `docs/architecture/agent-tree-mcp-relationship-analysis.md`.
+> - **MCP Transport:** IMPLEMENTADO. `mcp-registry.ts` reescrito con transporte real vía `@modelcontextprotocol/sdk` v1.28.0. Soporta SSE, HTTP Streamable, y stdio. `mcp-init.ts` configura servidores via env vars. Wired a `hopeai-system.ts` (non-blocking). 14 tests en `tests/mcp-registry.test.ts`.
 > - **Recomendaciones pendientes:** P1.3 (Zod schemas completos), P2.3 (hooks pre/post-tool), Aurora como MCP Server.
 
 ---

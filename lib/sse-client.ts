@@ -7,7 +7,7 @@
  * - Respuesta final
  */
 
-import type { ReasoningBullet, ToolExecutionEvent, ProcessingStepEvent } from '@/types/clinical-types'
+import type { AgentType, ReasoningBullet, ToolExecutionEvent, DocumentPreviewEvent, DocumentReadyEvent, ProcessingStepEvent } from '@/types/clinical-types'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 
@@ -23,6 +23,8 @@ export type SSEEvent =
   | { type: 'tool_execution', tool: ToolExecutionEvent }
   | { type: 'processing_step', step: ProcessingStepEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
+  | { type: 'document_preview', preview: DocumentPreviewEvent }
+  | { type: 'document_ready', document: DocumentReadyEvent }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
@@ -36,6 +38,8 @@ export interface SSECallbacks {
   onToolExecution?: (tool: ToolExecutionEvent) => void
   onProcessingStep?: (step: ProcessingStepEvent) => void
   onChunk?: (chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] }) => void
+  onDocumentPreview?: (preview: DocumentPreviewEvent) => void
+  onDocumentReady?: (document: DocumentReadyEvent) => void
   onResponse?: (result: any) => void
   onError?: (error: string, details?: string) => void
   onComplete?: () => void
@@ -281,6 +285,20 @@ export class SSEClient {
 
                     if (callbacks.onChunk) {
                       callbacks.onChunk(event.chunk)
+                    }
+                    break
+
+                  case 'document_preview':
+                    logger.info(`📄 [SSEClient] Document preview: section=${event.preview.section.id} progress=${(event.preview.overallProgress * 100).toFixed(0)}%`)
+                    if (callbacks.onDocumentPreview) {
+                      callbacks.onDocumentPreview(event.preview)
+                    }
+                    break
+
+                  case 'document_ready':
+                    logger.info(`📄 [SSEClient] Document ready: type=${event.document.documentType} formats=${event.document.availableFormats.join(',')}`)
+                    if (callbacks.onDocumentReady) {
+                      callbacks.onDocumentReady(event.document)
                     }
                     break
 

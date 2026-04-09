@@ -103,6 +103,19 @@ export const generateClinicalDocumentSchema = z.object({
   additional_instructions: z.string().optional().describe('Instrucciones adicionales del terapeuta'),
 });
 
+/** update_clinical_document — Update existing document (write) */
+export const updateClinicalDocumentSchema = z.object({
+  document_id: z.string().min(1).describe('ID del documento a modificar'),
+  modification_instructions: z.string().min(5).describe('Instrucciones de qué modificar'),
+  full_updated_markdown: z.string().min(20).optional().describe('OPCIONAL: Contenido completo actualizado en Markdown. Si se omite, se lee el actual y se aplican las instrucciones con IA.'),
+});
+
+/** get_session_documents — Retrieve persisted documents for the session (read-only) */
+export const getSessionDocumentsSchema = z.object({
+  document_id: z.string().optional().describe('ID de documento específico (omitir para listar todos)'),
+  include_content: z.boolean().optional().describe('Incluir contenido Markdown completo (default: true)'),
+});
+
 /** research_evidence — Evidence Synthesis (sub-agent, external) */
 export const researchEvidenceSchema = z.object({
   research_question: z.string().min(10).describe('Pregunta de investigación clínica'),
@@ -151,6 +164,8 @@ export const toolInputSchemas: Record<string, z.ZodType> = {
   // Sub-agent tools
   'explore_patient_context': explorePatientContextSchema,
   'generate_clinical_document': generateClinicalDocumentSchema,
+  'update_clinical_document': updateClinicalDocumentSchema,
+  'get_session_documents': getSessionDocumentsSchema,
   'research_evidence': researchEvidenceSchema,
   'analyze_longitudinal_patterns': analyzeLongitudinalPatternsSchema,
 

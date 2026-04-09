@@ -86,3 +86,8 @@
   - Phase 2: Sub-agent parallel search execution (research-evidence.ts: sequential→Promise.all)
   - Phase 3: Semantic memory selection via Gemini Flash (clinical-memory-system.ts + explore-patient-context.ts)
   - Phase 4: MCP foundation types (`lib/mcp/`: types, tool wrapper, registry — 4 files, +538 lines)
+- [x] 2026-04-08: MCP-TRANSPORT — Real MCP transport implementation:
+  - `mcp-registry.ts` rewritten: SSE, HTTP Streamable, stdio transports via @modelcontextprotocol/sdk v1.28.0
+  - `mcp-init.ts` added: env-var-driven server config (MCP_SENTRY_URL, MCP_PUBMED_URL, MCP_LOCAL_COMMAND)
+  - Wired into `hopeai-system.ts` initialization (non-blocking)
+  - 14 tests added (tests/mcp-registry.test.ts), all passing
