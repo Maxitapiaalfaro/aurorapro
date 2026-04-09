@@ -59,6 +59,21 @@ export function buildClinicalMemoriesSection(memories: any[]): string {
 }
 
 /**
+ * METADATA SECTION: Prior session summaries for progressive context loading.
+ * Provides brief summaries of recent sessions without loading all messages.
+ */
+function buildPriorSessionSummariesSection(summaries: any[]): string {
+  if (!summaries || summaries.length === 0) return '';
+  const formatted = summaries.map((s, i) => {
+    const topics = s.mainTopics?.join(', ') || 'sin temas registrados'
+    const progress = s.therapeuticProgress || ''
+    const risks = s.riskFlags?.length > 0 ? ` ⚠️ Riesgos: ${s.riskFlags.join(', ')}` : ''
+    return `${i + 1}. Temas: ${topics}${progress ? ` | Progreso: ${progress}` : ''}${risks}`
+  }).join('\n');
+  return `Resúmenes de sesiones previas (más reciente primero):\n${formatted}`;
+}
+
+/**
  * Builds an enhanced message with system context sections and the original user query,
  * separated by XML tags.
  */
@@ -89,6 +104,12 @@ export function buildEnhancedMessage(originalMessage: string, enrichedContext: a
   if (enrichedContext.clinicalMemories?.length > 0) {
     contextSections.push(buildClinicalMemoriesSection(enrichedContext.clinicalMemories))
     logger.info(`Clinical memories included: ${enrichedContext.clinicalMemories.length}`)
+  }
+
+  // 4.5. PRIOR SESSION SUMMARIES (progressive context loading)
+  if (enrichedContext.priorSessionSummaries?.length > 0) {
+    contextSections.push(buildPriorSessionSummariesSection(enrichedContext.priorSessionSummaries))
+    logger.info(`Prior session summaries included: ${enrichedContext.priorSessionSummaries.length}`)
   }
 
   // 5. EXTRACTED ENTITIES (if available)

@@ -438,6 +438,74 @@ export class FirestoreStorageAdapter {
     }
   }
 
+  // ─── Prior Session Summaries (Progressive Context Loading) ──────────────
+
+  /**
+   * Load AI-generated summaries from a patient's prior sessions.
+   * Returns only the sessionSummary field (not messages) for efficient context loading.
+   *
+   * Used in the sendMessage pipeline to provide the agent with prior session context
+   * without reading all messages — the "progressive summary" pattern from Claude Code.
+   *
+   * @param userId - Psychologist UID
+   * @param patientId - Patient ID
+   * @param excludeSessionId - Current session to exclude from results
+   * @param maxSessions - Maximum number of prior sessions to load (default: 5)
+   */
+  async loadPriorSessionSummaries(
+    userId: string,
+    patientId: string,
+    excludeSessionId: string,
+    maxSessions: number = 5,
+  ): Promise<Array<{ sessionId: string; sessionSummary: any; lastUpdated: Date }>> {
+    if (!this.initialized) throw new Error('[Firestore] Storage not initialized')
+
+    try {
+      const sessionsRef = this.getDb()
+        .collection('psychologists')
+        .doc(userId)
+        .collection('patients')
+        .doc(patientId)
+        .collection('sessions')
+
+      // Fetch recent sessions that have summaries, ordered by most recent first
+      const snapshot = await sessionsRef
+        .orderBy('metadata.lastUpdated', 'desc')
+        .limit(maxSessions + 1) // +1 to account for current session
+        .get()
+
+      const results: Array<{ sessionId: string; sessionSummary: any; lastUpdated: Date }> = []
+
+      for (const doc of snapshot.docs) {
+        const data = doc.data()
+        const sessionId = data.sessionId || doc.id
+        if (sessionId === excludeSessionId) continue
+        if (!data.sessionSummary) continue
+
+        results.push({
+          sessionId,
+          sessionSummary: data.sessionSummary,
+          lastUpdated: data.metadata?.lastUpdated?.toDate?.() ?? new Date(),
+        })
+
+        if (results.length >= maxSessions) break
+      }
+
+      logger.debug('Loaded prior session summaries', {
+        userId,
+        patientId,
+        count: results.length,
+      })
+
+      return results
+    } catch (error) {
+      logger.warn('Failed to load prior session summaries', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return []
+    }
+  }
+
   // ─── Clinical Files ─────────────────────────────────────────────────────
 
   async saveClinicalFile(file: ClinicalFile): Promise<void> {

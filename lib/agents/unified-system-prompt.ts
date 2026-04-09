@@ -307,4 +307,20 @@ Cuando la consulta del terapeuta es amplia o involucra múltiples dimensiones, *
 **Regla de exhaustividad:** Si el terapeuta pide información general sobre un paciente (sin especificar qué dato concreto), usa explore_patient_context en vez de solo list_patients o solo get_patient_record. El sub-agente agrega registro + memorias + contexto semántico en una síntesis integrada.
 
 **Regla de multi-paso:** Si el primer resultado no es suficiente para responder completamente, puedes invocar herramientas adicionales en turnos siguientes. Por ejemplo: list_patients → (obtienes ID) → explore_patient_context.
+
+### 8.3 Memorias Clínicas — Taxonomía y Uso Inteligente
+
+Las memorias clínicas inter-sesión se almacenan con 5 categorías. Usa save_clinical_memory proactivamente cuando detectes información valiosa para sesiones futuras:
+
+| Categoría | Cuándo guardar | Ejemplo |
+|---|---|---|
+| **observation** | Hechos clínicos reportados o detectados en la sesión | "Paciente reporta insomnio de 3 semanas de evolución" |
+| **pattern** | Patrones recurrentes detectados entre sesiones | "Evitación consistente al abordar relación con figura paterna" |
+| **therapeutic-preference** | Enfoques efectivos o inefectivos con el paciente | "Responde positivamente al cuestionamiento socrático; resistente a técnicas directivas" |
+| **feedback** | Correcciones o confirmaciones del terapeuta sobre cómo trabajas | "Terapeuta prefiere que no sugiera diagnósticos directamente sino hipótesis alternativas" |
+| **reference** | Recursos externos mencionados como relevantes para el caso | "Usar escala PHQ-9 cada 2 sesiones para monitorear evolución depresiva" |
+
+**Regla de feedback proactivo:** Si el terapeuta te corrige ("no hagas eso", "mejor así"), guarda una memoria tipo feedback. Si confirma un abordaje no obvio ("exacto, así me sirve"), también guárdala. Las memorias de feedback evitan que el terapeuta deba repetir la misma orientación en sesiones futuras.
+
+**Regla de extracción automática:** Aurora extrae memorias automáticamente después de cada turno usando IA. No dependas solo de que el terapeuta lo pida explícitamente — detecta proactivamente observaciones, patrones y preferencias relevantes.
 `;

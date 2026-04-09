@@ -27,7 +27,7 @@ export const searchAcademicLiteratureSchema = z.object({
 /** get_patient_memories — Clinical Memory Retrieval (read-only) */
 export const getPatientMemoriesSchema = z.object({
   patientId: z.string().min(1).describe('ID del paciente en Firestore'),
-  category: z.enum(['observation', 'pattern', 'therapeutic-preference'])
+  category: z.enum(['observation', 'pattern', 'therapeutic-preference', 'feedback', 'reference'])
     .optional()
     .describe('Filtrar por categoría de memoria'),
   limit: z.number().int().min(1).max(50)
@@ -43,7 +43,7 @@ export const getPatientRecordSchema = z.object({
 /** save_clinical_memory — Clinical Memory Persistence (write) */
 export const saveClinicalMemorySchema = z.object({
   patientId: z.string().min(1).describe('ID del paciente en Firestore'),
-  category: z.enum(['observation', 'pattern', 'therapeutic-preference'])
+  category: z.enum(['observation', 'pattern', 'therapeutic-preference', 'feedback', 'reference'])
     .describe('Tipo de memoria clínica'),
   content: z.string().min(10).max(2000)
     .describe('Contenido de la memoria en lenguaje clínico conciso'),

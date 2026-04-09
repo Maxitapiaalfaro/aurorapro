@@ -78,8 +78,8 @@ export const UNIFIED_TOOL_DECLARATIONS = [
             category: {
               type: 'string',
               description:
-                'Filtrar por categoría: "observation" (observaciones clínicas), "pattern" (patrones recurrentes), "therapeutic-preference" (preferencias de intervención). Omitir para obtener todas.',
-              enum: ['observation', 'pattern', 'therapeutic-preference'],
+                'Filtrar por categoría: "observation" (observaciones clínicas), "pattern" (patrones recurrentes), "therapeutic-preference" (preferencias de intervención), "feedback" (correcciones/confirmaciones del terapeuta), "reference" (recursos externos relevantes). Omitir para obtener todas.',
+              enum: ['observation', 'pattern', 'therapeutic-preference', 'feedback', 'reference'],
             },
             limit: {
               type: 'number',
@@ -128,6 +128,8 @@ export const UNIFIED_TOOL_DECLARATIONS = [
           '- El terapeuta explicita una preferencia de intervención o enfoque terapéutico',
           '- Se detecta una observación importante sobre el progreso o retroceso del paciente',
           '- El terapeuta pide explícitamente que recuerdes algo para la próxima sesión',
+          '- El terapeuta corrige tu abordaje o confirma que una sugerencia fue acertada (categoría: feedback)',
+          '- Se menciona un recurso externo útil: escala, protocolo, artículo, instrumento (categoría: reference)',
           '',
           'NO USES CUANDO:',
           '- La información es trivial o efímera',
@@ -145,8 +147,8 @@ export const UNIFIED_TOOL_DECLARATIONS = [
             category: {
               type: 'string',
               description:
-                'Tipo de memoria: "observation" para observaciones clínicas puntuales, "pattern" para patrones recurrentes detectados, "therapeutic-preference" para preferencias de intervención del paciente o terapeuta.',
-              enum: ['observation', 'pattern', 'therapeutic-preference'],
+                'Tipo de memoria: "observation" para observaciones clínicas puntuales, "pattern" para patrones recurrentes detectados, "therapeutic-preference" para preferencias de intervención del paciente o terapeuta, "feedback" para correcciones o confirmaciones del terapeuta sobre el abordaje, "reference" para punteros a recursos externos relevantes para el caso.',
+              enum: ['observation', 'pattern', 'therapeutic-preference', 'feedback', 'reference'],
             },
             content: {
               type: 'string',

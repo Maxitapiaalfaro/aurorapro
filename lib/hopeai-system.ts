@@ -649,6 +649,7 @@ export class HopeAISystem {
       patientRecord,
       fichas,
       clinicalMemories,
+      priorSessionSummaries,
     ] = await Promise.all([
       // 1. Session files from server storage
       this.getPendingFilesForSession(sessionId),
@@ -678,6 +679,20 @@ export class HopeAISystem {
             m.getRelevantMemories(currentState.userId, patientReference, message, 5)
           ).catch((err: unknown) => {
             sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+            return [] as any[]
+          })
+        : Promise.resolve([] as any[]),
+
+      // 6. Prior session summaries — progressive context loading (Level 1)
+      // Loads AI-generated summaries of recent sessions without reading all messages.
+      (patientReference && currentState.userId)
+        ? this.storage.loadPriorSessionSummaries(
+            currentState.userId,
+            patientReference,
+            sessionId,
+            5, // Max 5 prior session summaries
+          ).catch((err: unknown) => {
+            sessionLogger.warn('⚠️ Failed to load prior session summaries (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
             return [] as any[]
           })
         : Promise.resolve([] as any[]),
@@ -850,6 +865,7 @@ export class HopeAISystem {
         patient_reference?: string;
         patient_summary?: string;
         clinicalMemories?: any[];
+        priorSessionSummaries?: any[];
       } = {
         patient_reference: patientReference,
         patient_summary: patientSummary,
@@ -863,6 +879,15 @@ export class HopeAISystem {
       if (effectiveMemories.length > 0) {
         enrichedSessionContext.clinicalMemories = effectiveMemories
         sessionLogger.info(`🧠 Clinical memories injected: ${effectiveMemories.length} memories for patient ${patientReference}${clientContext ? ' (client-ranked)' : ''}`)
+      }
+
+      // PROGRESSIVE CONTEXT: Inject prior session summaries (Level 1 — no message reads)
+      const effectiveSummaries = (priorSessionSummaries as any[])?.filter(
+        (s: any) => s.sessionSummary
+      ).map((s: any) => s.sessionSummary) || []
+      if (effectiveSummaries.length > 0) {
+        enrichedSessionContext.priorSessionSummaries = effectiveSummaries
+        sessionLogger.info(`📋 Prior session summaries injected: ${effectiveSummaries.length} summaries for patient ${patientReference}`)
       }
 
       // ─── Operational metadata (now synchronous — uses pre-fetched or client-provided data) ───
@@ -911,6 +936,7 @@ export class HopeAISystem {
         patient_summary: patientSummary,
         operationalMetadata: operationalMetadata,
         clinicalMemories: enrichedSessionContext.clinicalMemories || [],
+        priorSessionSummaries: enrichedSessionContext.priorSessionSummaries || [],
       }
 
       sessionLogger.debug(`🏥 SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
@@ -932,6 +958,7 @@ export class HopeAISystem {
       if (currentState.history.length > 1) ctxParts.push(pl(currentState.history.length, 'mensaje'))
       if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(pl(resolvedSessionFiles.length, 'archivo'))
       if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(pl(enrichedSessionContext.clinicalMemories.length, 'memoria'))
+      if (enrichedSessionContext.priorSessionSummaries && enrichedSessionContext.priorSessionSummaries.length > 0) ctxParts.push(pl(enrichedSessionContext.priorSessionSummaries.length, 'resumen previo'))
       emitStep('build_context', 'Contexto preparado', 'completed', ctxParts.length > 0 ? ctxParts.join(', ') : undefined)
 
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
@@ -1045,6 +1072,13 @@ export class HopeAISystem {
               self.extractAndSaveMemoriesAsync(currentState, message, accumulatedText, sessionId).catch(err => {
                 sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
               })
+
+              // 📋 SESSION SUMMARY: Generate progressive summary at milestones (fire-and-forget)
+              if (self.shouldGenerateSessionSummary(currentState)) {
+                self.generateSessionSummaryAsync(currentState).catch(err => {
+                  sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+                })
+              }
             }
           }
         })();
@@ -1094,6 +1128,13 @@ export class HopeAISystem {
       this.extractAndSaveMemoriesAsync(currentState, message, responseContent, sessionId).catch(err => {
         sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
       })
+
+      // 📋 SESSION SUMMARY: Generate progressive summary at milestones (fire-and-forget)
+      if (this.shouldGenerateSessionSummary(currentState)) {
+        this.generateSessionSummaryAsync(currentState).catch(err => {
+          sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+        })
+      }
 
       // 📊 METRICS TRACKING for non-streaming
       // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
@@ -1466,8 +1507,14 @@ export class HopeAISystem {
   }
 
   /**
-   * 🧠 CLINICAL MEMORY: Extract observations, patterns and preferences from model responses
-   * and persist them as inter-session memories. Fire-and-forget — never blocks user flow.
+   * 🧠 LLM-POWERED MEMORY EXTRACTION (replaces regex-based extraction)
+   *
+   * Uses a Gemini sub-agent (gemini-3.1-flash-lite-preview) to extract
+   * clinically significant memories from each conversation turn.
+   * Supports all 5 memory categories including feedback and reference.
+   *
+   * Inspired by Claude Code's extractMemories.ts — runs as a "forked agent"
+   * after each model response.
    *
    * Runs every 3rd user message for a patient to avoid overloading Firestore writes.
    */
@@ -1480,47 +1527,21 @@ export class HopeAISystem {
     const patientId = chatState.clinicalContext?.patientId
     if (!patientId || !chatState.userId) return
 
-    // Only run every 3rd interaction to limit writes
+    // Only run every 3rd interaction to limit writes and cost
     const userMessages = chatState.history.filter(msg => msg.role === 'user')
     if (userMessages.length % 3 !== 0) return
 
     if (!modelResponse || modelResponse.length < 50) return
 
     try {
+      const { extractSessionMemories } = await import('./agents/subagents/extract-session-memories')
       const { saveMemory } = await import('./clinical-memory-system')
 
-      type MemoryPattern = {
-        regex: RegExp
-        category: 'observation' | 'pattern' | 'therapeutic-preference'
-      }
+      const extractedMemories = await extractSessionMemories(userMessage, modelResponse)
 
-      const patterns: MemoryPattern[] = [
-        { regex: /(?:el |la )?paciente\s+(?:reporta|menciona|describe|indica)\s+(.{10,80})/gi, category: 'observation' },
-        { regex: /se\s+(?:observa|detecta|identifica|nota)\s+(.{10,80})/gi, category: 'observation' },
-        { regex: /patr[oó]n\s+(?:recurrente|persistente|identificado)\s+(.{10,60})/gi, category: 'pattern' },
-        { regex: /(?:evita|evitaci[oó]n|resistencia)\s+.{0,40}(?:hablar|abordar|mencionar)\s+(.{5,60})/gi, category: 'pattern' },
-        { regex: /responde\s+(?:bien|positivamente|favorablemente)\s+a\s+(.{10,80})/gi, category: 'therapeutic-preference' },
-        { regex: /(?:t[eé]cnica|enfoque|intervenci[oó]n)\s+(?:recomendad|efectiv|sugerid)\w*\s*:?\s*(.{10,80})/gi, category: 'therapeutic-preference' },
-      ]
+      if (extractedMemories.length === 0) return
 
-      const memories: Array<{ content: string; category: 'observation' | 'pattern' | 'therapeutic-preference' }> = []
-
-      for (const { regex, category } of patterns) {
-        let match: RegExpExecArray | null
-        while ((match = regex.exec(modelResponse)) !== null) {
-          // Take the full matched sentence context, not just the capture group
-          const content = match[0].trim()
-          if (content.length >= 15) {
-            memories.push({ content, category })
-          }
-          if (memories.length >= 5) break
-        }
-        if (memories.length >= 5) break
-      }
-
-      if (memories.length === 0) return
-
-      for (const mem of memories) {
+      for (const mem of extractedMemories) {
         const memoryDoc = {
           memoryId: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           patientId,
@@ -1528,17 +1549,17 @@ export class HopeAISystem {
           category: mem.category,
           content: mem.content,
           sourceSessionIds: [sessionId],
-          confidence: 0.7,
+          confidence: mem.confidence,
           createdAt: new Date(),
           updatedAt: new Date(),
           isActive: true,
-          tags: [],
-          relevanceScore: 0.5,
+          tags: mem.tags,
+          relevanceScore: mem.confidence * 0.8, // Initial relevance derived from confidence
         }
         await saveMemory(memoryDoc)
       }
 
-      sessionLogger.info(`🧠 Clinical memories extracted and saved: ${memories.length} memories for patient ${patientId}`)
+      sessionLogger.info(`🧠 LLM-extracted clinical memories saved: ${extractedMemories.length} for patient ${patientId}`)
     } catch (error) {
       sessionLogger.warn('⚠️ Memory extraction error (non-blocking)', { error: error instanceof Error ? error.message : String(error) })
     }
@@ -1618,6 +1639,54 @@ export class HopeAISystem {
           patient_id: patientId,
           trigger_type: 'automatic'
         }
+      })
+    }
+  }
+
+  // ─── SESSION SUMMARY GENERATION ──────────────────────────────────────────
+
+  /**
+   * Determine if the session has enough content to warrant generating a summary.
+   * Triggers at every 6th user message (i.e., 6, 12, 18…) to progressively update
+   * the session summary without waiting for explicit session close.
+   */
+  private shouldGenerateSessionSummary(chatState: ChatState): boolean {
+    const userMessages = chatState.history.filter(msg => msg.role === 'user')
+    // Generate at 6-message milestones (enough context to summarize)
+    return userMessages.length >= 6 && userMessages.length % 6 === 0
+  }
+
+  /**
+   * 📋 SESSION SUMMARY: Generate and persist a session summary (fire-and-forget).
+   * Uses a sub-agent (gemini-3.1-flash-lite-preview) to produce a structured summary
+   * that is stored on the session document for progressive context loading.
+   */
+  private async generateSessionSummaryAsync(chatState: ChatState): Promise<void> {
+    if (!chatState.userId || !chatState.clinicalContext?.patientId) return
+
+    try {
+      const { generateSessionSummary } = await import('./agents/subagents/generate-session-summary')
+
+      // Format the last N messages as conversation text
+      const recentMessages = chatState.history.slice(-20) // Last 20 messages
+      const conversationText = recentMessages
+        .map(msg => `[${msg.role === 'user' ? 'Terapeuta' : 'Aurora'}]: ${msg.content.substring(0, 500)}`)
+        .join('\n\n')
+
+      const summary = await generateSessionSummary(conversationText)
+      if (!summary) return
+
+      // Persist to session metadata
+      chatState.sessionSummary = summary
+      await this.saveSessionMetadataOnly(chatState)
+
+      sessionLogger.info('📋 Session summary generated and persisted', {
+        sessionId: chatState.sessionId,
+        topicCount: summary.mainTopics.length,
+      })
+    } catch (error) {
+      sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', {
+        error: error instanceof Error ? error.message : String(error),
       })
     }
   }
