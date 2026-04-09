@@ -46,14 +46,14 @@ function resolveCredential() {
   //    Also check GOOGLE_APPLICATION_CREDENTIALS — when it contains inline JSON
   //    (starts with '{') rather than a file path, parse it here instead of
   //    letting ADC misinterpret it as a path.
-  const gacValue = env('GOOGLE_APPLICATION_CREDENTIALS')
-  const gacInlineJson = gacValue && gacValue.trimStart().startsWith('{') ? gacValue : undefined
+  const gacRaw = env('GOOGLE_APPLICATION_CREDENTIALS')
+  const gacJsonStr = gacRaw && gacRaw.trimStart().startsWith('{') ? gacRaw : undefined
 
   const jsonEnv =
     env('GOOGLE_APPLICATION_CREDENTIALS_JSON') ||
     env('FIREBASE_SERVICE_ACCOUNT_JSON') ||
     env('GENAI_SERVICE_ACCOUNT_JSON') ||
-    gacInlineJson
+    gacJsonStr
   if (jsonEnv) {
     try {
       const creds = JSON.parse(jsonEnv)
