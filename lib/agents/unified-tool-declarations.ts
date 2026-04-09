@@ -322,6 +322,43 @@ export const UNIFIED_TOOL_DECLARATIONS = [
         },
       },
       {
+        name: 'update_clinical_document',
+        description: [
+          'Modifica un documento clínico existente que fue previamente generado en esta sesión.',
+          'El documento se actualiza en el panel lateral y se persiste automáticamente.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta pide modificar, corregir, ampliar o ajustar un documento ya generado',
+          '- El terapeuta dice "cambia la sección de Plan", "agrega esto al Subjetivo", "corrige el Análisis"',
+          '- Se necesita incorporar nueva información a un documento existente',
+          '',
+          'NO USES CUANDO:',
+          '- No hay un documento generado previamente en la sesión',
+          '- El terapeuta pide un documento completamente nuevo (usa generate_clinical_document)',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            document_id: {
+              type: 'string',
+              description:
+                'ID del documento a modificar (proporcionado al generar el documento)',
+            },
+            modification_instructions: {
+              type: 'string',
+              description:
+                'Instrucciones claras de qué modificar en el documento. Ej: "Agrega al Plan que se recomendó práctica de mindfulness diario"',
+            },
+            full_updated_markdown: {
+              type: 'string',
+              description:
+                'El contenido completo actualizado del documento en formato Markdown. DEBE incluir todo el documento, no solo la parte modificada.',
+            },
+          },
+          required: ['document_id', 'modification_instructions', 'full_updated_markdown'],
+        },
+      },
+      {
         name: 'research_evidence',
         description: [
           'Sub-agente de investigación que realiza búsquedas multi-query y sintetiza evidencia académica de forma comprensiva.',

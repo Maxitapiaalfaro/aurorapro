@@ -18,6 +18,11 @@ export function registerSubAgentHandlers(): void {
     return executeGenerateClinicalDocument(args, ctx);
   });
 
+  registerToolHandler('update_clinical_document', async (args, ctx) => {
+    const { executeUpdateClinicalDocument } = await import('./update-clinical-document');
+    return executeUpdateClinicalDocument(args, ctx);
+  });
+
   registerToolHandler('research_evidence', async (args, ctx) => {
     const { executeResearchEvidence } = await import('./research-evidence');
     return executeResearchEvidence(args, ctx);

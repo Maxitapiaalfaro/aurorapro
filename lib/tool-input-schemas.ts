@@ -103,6 +103,13 @@ export const generateClinicalDocumentSchema = z.object({
   additional_instructions: z.string().optional().describe('Instrucciones adicionales del terapeuta'),
 });
 
+/** update_clinical_document — Update existing document (write) */
+export const updateClinicalDocumentSchema = z.object({
+  document_id: z.string().min(1).describe('ID del documento a modificar'),
+  modification_instructions: z.string().min(5).describe('Instrucciones de qué modificar'),
+  full_updated_markdown: z.string().min(20).describe('Contenido completo actualizado en Markdown'),
+});
+
 /** research_evidence — Evidence Synthesis (sub-agent, external) */
 export const researchEvidenceSchema = z.object({
   research_question: z.string().min(10).describe('Pregunta de investigación clínica'),
@@ -151,6 +158,7 @@ export const toolInputSchemas: Record<string, z.ZodType> = {
   // Sub-agent tools
   'explore_patient_context': explorePatientContextSchema,
   'generate_clinical_document': generateClinicalDocumentSchema,
+  'update_clinical_document': updateClinicalDocumentSchema,
   'research_evidence': researchEvidenceSchema,
   'analyze_longitudinal_patterns': analyzeLongitudinalPatternsSchema,
 

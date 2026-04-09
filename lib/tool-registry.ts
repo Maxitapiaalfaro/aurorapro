@@ -79,6 +79,10 @@ const registeredTools: ClinicalTool[] = [
     declaration: { name: 'generate_clinical_document' },
   },
   {
+    metadata: { id: 'update_clinical_document', securityCategory: 'write' },
+    declaration: { name: 'update_clinical_document' },
+  },
+  {
     metadata: { id: 'research_evidence', securityCategory: 'external' },
     declaration: { name: 'research_evidence' },
   },
