@@ -166,7 +166,9 @@ export async function executeGenerateClinicalDocument(
 
     // Defensive: handle both direct async-iterable and object with .stream property
     // (matches pattern used in streaming-handler.ts for chat.sendMessageStream)
-    const stream = (streamResult as any).stream || streamResult;
+    const stream: AsyncIterable<any> = 'stream' in streamResult && streamResult.stream
+      ? streamResult.stream
+      : streamResult;
 
     // Accumulate full document + detect sections in real-time
     let accumulatedMarkdown = '';
