@@ -2,7 +2,7 @@
  * Firebase Auth Providers — Aurora
  *
  * Helper functions for social/phone authentication using Firebase Auth.
- * Supports Google, Apple, and Phone Number sign-in.
+ * Supports Google and Phone Number sign-in.
  *
  * Each function calls the corresponding Firebase Auth method and returns
  * the UserCredential. Errors bubble up to the caller (AuthGate component)
@@ -13,8 +13,6 @@
 
 import {
   GoogleAuthProvider,
-  OAuthProvider,
-  PhoneAuthProvider,
   RecaptchaVerifier,
   signInWithPopup,
   signInWithPhoneNumber,
@@ -37,22 +35,6 @@ googleProvider.setCustomParameters({ prompt: 'select_account' })
  */
 export async function signInWithGoogle() {
   return signInWithPopup(auth, googleProvider)
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Apple Sign-In
-// ────────────────────────────────────────────────────────────────────────────
-
-const appleProvider = new OAuthProvider('apple.com')
-appleProvider.addScope('email')
-appleProvider.addScope('name')
-appleProvider.setCustomParameters({ locale: 'es_CL' })
-
-/**
- * Sign in with Apple via popup.
- */
-export async function signInWithApple() {
-  return signInWithPopup(auth, appleProvider)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
