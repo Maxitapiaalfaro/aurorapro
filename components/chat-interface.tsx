@@ -225,6 +225,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       academicSearchTimeoutRef.current = null
     }
 
+    // Clear known message IDs when switching sessions to prevent memory leak
+    knownMessageIdsRef.current.clear()
+
     setAcademicSearchState('idle')
     setAcademicSearchQuery("")
     setAcademicSearchResults(null)
