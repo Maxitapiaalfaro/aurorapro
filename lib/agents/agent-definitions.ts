@@ -52,12 +52,12 @@ export function createUnifiedAgentConfig(): AgentConfig {
     tools: UNIFIED_TOOL_DECLARATIONS,
     config: {
       ...clinicalModelConfig,
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3-flash-preview",
       temperature: 1.0,
       topP: 0.95,
       topK: 40,
       thinkingConfig: {
-        thinkingLevel: 'low'
+        thinkingLevel: 'medium'
       },
     },
   }
