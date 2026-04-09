@@ -21,11 +21,17 @@
  *                             (ej. "evitación al hablar de familia")
  * - `therapeutic-preference`: Enfoque terapéutico efectivo o inefectivo
  *                             (ej. "responde bien al cuestionamiento socrático")
+ * - `feedback`:               Corrección o confirmación del terapeuta sobre el abordaje de Aurora
+ *                             (ej. "terapeuta prefiere que Aurora no sugiera diagnósticos directamente")
+ * - `reference`:              Puntero a recurso externo relevante para el caso
+ *                             (ej. "usar escala PHQ-9 para monitoreo de depresión en este paciente")
  */
 export type ClinicalMemoryCategory =
   | 'observation'
   | 'pattern'
   | 'therapeutic-preference'
+  | 'feedback'
+  | 'reference'
 
 // ---------------------------------------------------------------------------
 // Documento principal de memoria clínica
