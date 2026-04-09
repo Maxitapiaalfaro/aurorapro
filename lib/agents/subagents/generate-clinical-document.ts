@@ -248,6 +248,35 @@ export async function executeGenerateClinicalDocument(
     const document = accumulatedMarkdown || 'No se pudo generar el documento';
     const durationMs = Date.now() - start;
 
+    // 💾 Server-side persistence via firebase-admin (primary write — client also saves as backup)
+    if (ctx.psychologistId && ctx.sessionId) {
+      try {
+        const { getAdminApp } = await import('../../firebase-admin-config');
+        const { getFirestore: getAdminFirestore, Timestamp: AdminTimestamp } = await import('firebase-admin/firestore');
+        const adminDb = getAdminFirestore(getAdminApp());
+        const patientId = ctx.patientId || 'default_patient';
+        const docPath = `psychologists/${ctx.psychologistId}/patients/${patientId}/sessions/${ctx.sessionId}/documents/${documentId}`;
+        const now = AdminTimestamp.now();
+
+        await adminDb.doc(docPath).set({
+          id: documentId,
+          sessionId: ctx.sessionId,
+          patientId: patientId,
+          documentType,
+          markdown: document,
+          version: 1,
+          createdBy: 'ai',
+          createdAt: now,
+          updatedAt: now,
+          generationDurationMs: durationMs,
+        });
+        logger.info(`[subagent:generate_clinical_document] 💾 Persisted to Firestore: ${docPath}`);
+      } catch (persistErr) {
+        // Non-fatal — client-side will also attempt to save
+        logger.error('[subagent:generate_clinical_document] ⚠️ Server-side persist failed (client will retry):', persistErr);
+      }
+    }
+
     // Emit document_ready event
     ctx.onDocumentReady?.({
       documentId,

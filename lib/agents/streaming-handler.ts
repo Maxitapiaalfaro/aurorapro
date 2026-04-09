@@ -253,6 +253,7 @@ const KNOWN_DYNAMIC_TOOLS = new Set([
   'explore_patient_context',
   'generate_clinical_document',
   'update_clinical_document',
+  'get_session_documents',
   'research_evidence',
   'analyze_longitudinal_patterns',
   // Legacy tool names (may appear in existing sessions)
@@ -385,6 +386,8 @@ function extractQueryFromArgs(toolName: string, args: Record<string, unknown> | 
       return args.document_type as string | undefined;
     case 'update_clinical_document':
       return args.modification_instructions as string | undefined;
+    case 'get_session_documents':
+      return args.document_id as string | undefined;
     case 'create_patient':
       return args.displayName as string | undefined;
     case 'list_patients':
@@ -407,6 +410,8 @@ function extractCompletionDetail(resp: { name: string; response: unknown }): str
       return `Documento ${data.documentType || '?'}, ${formatMs(data.durationMs)}`;
     case 'update_clinical_document':
       return `Documento actualizado, ${formatMs(data.durationMs)}`;
+    case 'get_session_documents':
+      return `${data.count ?? 0} documento(s) encontrado(s)`;
     case 'research_evidence':
       return `${data.sourcesCount ?? 0} fuentes, ${formatMs(data.durationMs)}`;
     case 'analyze_longitudinal_patterns':

@@ -110,6 +110,12 @@ export const updateClinicalDocumentSchema = z.object({
   full_updated_markdown: z.string().min(20).describe('Contenido completo actualizado en Markdown'),
 });
 
+/** get_session_documents — Retrieve persisted documents for the session (read-only) */
+export const getSessionDocumentsSchema = z.object({
+  document_id: z.string().optional().describe('ID de documento específico (omitir para listar todos)'),
+  include_content: z.boolean().optional().describe('Incluir contenido Markdown completo (default: true)'),
+});
+
 /** research_evidence — Evidence Synthesis (sub-agent, external) */
 export const researchEvidenceSchema = z.object({
   research_question: z.string().min(10).describe('Pregunta de investigación clínica'),
@@ -159,6 +165,7 @@ export const toolInputSchemas: Record<string, z.ZodType> = {
   'explore_patient_context': explorePatientContextSchema,
   'generate_clinical_document': generateClinicalDocumentSchema,
   'update_clinical_document': updateClinicalDocumentSchema,
+  'get_session_documents': getSessionDocumentsSchema,
   'research_evidence': researchEvidenceSchema,
   'analyze_longitudinal_patterns': analyzeLongitudinalPatternsSchema,
 

@@ -423,6 +423,7 @@ function getToolDisplayName(toolName: string): string {
     'explore_patient_context': 'Sintetizando contexto del paciente',
     'generate_clinical_document': 'Generando documento clínico',
     'update_clinical_document': 'Actualizando documento clínico',
+    'get_session_documents': 'Recuperando documentos de la sesión',
     'research_evidence': 'Investigación de evidencia multi-fuente',
     'analyze_longitudinal_patterns': 'Analizando patrones longitudinales',
   }

@@ -23,6 +23,11 @@ export function registerSubAgentHandlers(): void {
     return executeUpdateClinicalDocument(args, ctx);
   });
 
+  registerToolHandler('get_session_documents', async (args, ctx) => {
+    const { executeGetSessionDocuments } = await import('./get-session-documents');
+    return executeGetSessionDocuments(args, ctx);
+  });
+
   registerToolHandler('research_evidence', async (args, ctx) => {
     const { executeResearchEvidence } = await import('./research-evidence');
     return executeResearchEvidence(args, ctx);

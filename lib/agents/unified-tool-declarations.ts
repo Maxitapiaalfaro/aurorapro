@@ -359,6 +359,39 @@ export const UNIFIED_TOOL_DECLARATIONS = [
         },
       },
       {
+        name: 'get_session_documents',
+        description: [
+          'Recupera documentos clínicos previamente generados y persistidos para la sesión actual.',
+          'Permite listar todos los documentos de la sesión o leer el contenido completo de un documento específico por ID.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta pregunta "¿qué documentos hemos generado?"',
+          '- El terapeuta pide modificar un documento pero no tienes el contenido actual',
+          '- Necesitas leer un documento previo para hacer una modificación con update_clinical_document',
+          '- El terapeuta dice "muéstrame la nota" o "revisa el documento que hicimos"',
+          '',
+          'NO USES CUANDO:',
+          '- Acabas de generar un documento en este mismo turno (ya tienes el contenido)',
+          '- El terapeuta pide un documento completamente nuevo (usa generate_clinical_document)',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            document_id: {
+              type: 'string',
+              description:
+                'ID de un documento específico a recuperar. Si se omite, lista todos los documentos de la sesión.',
+            },
+            include_content: {
+              type: 'boolean',
+              description:
+                'Si incluir el Markdown completo del documento (default: true). Usar false para solo listar metadatos.',
+            },
+          },
+          required: [],
+        },
+      },
+      {
         name: 'research_evidence',
         description: [
           'Sub-agente de investigación que realiza búsquedas multi-query y sintetiza evidencia académica de forma comprensiva.',
