@@ -1,0 +1,11 @@
+steps:
+  - name: Configure Firebase Application Default Credentials
+    run: |
+      echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" | sed 's/\xc2\xa0/ /g' > /tmp/firebase-service-account.json
+      echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-service-account.json" >> $GITHUB_ENV
+    env:
+      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+  - name: Configure Firebase CLI Token
+    run: echo "FIREBASE_TOKEN=$FIREBASE_TOKEN" >> $GITHUB_ENV
+    env:
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
