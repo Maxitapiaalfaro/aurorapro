@@ -46,6 +46,7 @@ import type {
   ChatState,
   ChatMessage,
   ClinicalFile,
+  ClinicalDocument,
   FichaClinicaState,
   PatientRecord,
   PaginationOptions,
@@ -137,6 +138,14 @@ function clinicalFileRef(psychologistId: string, fileId: string) {
 
 function clinicalFilesCol(psychologistId: string) {
   return collection(db, 'psychologists', psychologistId, 'clinical_files')
+}
+
+function documentsCol(psychologistId: string, patientId: string, sessionId: string) {
+  return collection(db, 'psychologists', psychologistId, 'patients', patientId, 'sessions', sessionId, 'documents')
+}
+
+function documentRef(psychologistId: string, patientId: string, sessionId: string, documentId: string) {
+  return doc(db, 'psychologists', psychologistId, 'patients', patientId, 'sessions', sessionId, 'documents', documentId)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -555,4 +564,70 @@ export async function deleteClinicalFile(
   fileId: string
 ): Promise<void> {
   await deleteDoc(clinicalFileRef(psychologistId, fileId))
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Clinical Documents (per-session subcollection)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Save (create or overwrite) a clinical document to the session's documents subcollection.
+ */
+export async function saveClinicalDocument(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string,
+  document: ClinicalDocument
+): Promise<void> {
+  const ref = documentRef(psychologistId, patientId, sessionId, document.id)
+  await setDoc(ref, serializeDates(document), { merge: true })
+}
+
+/**
+ * Update the markdown content of an existing document (bumps version + updatedAt).
+ */
+export async function updateClinicalDocumentContent(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string,
+  documentId: string,
+  markdown: string,
+  version: number
+): Promise<void> {
+  const ref = documentRef(psychologistId, patientId, sessionId, documentId)
+  await setDoc(ref, {
+    markdown,
+    version,
+    updatedAt: Timestamp.now(),
+  }, { merge: true })
+}
+
+/**
+ * Load all clinical documents for a session, ordered by creation date.
+ */
+export async function loadSessionDocuments(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string
+): Promise<ClinicalDocument[]> {
+  const q = query(
+    documentsCol(psychologistId, patientId, sessionId),
+    orderBy('createdAt', 'desc')
+  )
+  const snapshot = await getDocs(q)
+  return snapshot.docs.map(d => reviveDates(d.data()) as ClinicalDocument)
+}
+
+/**
+ * Load a single clinical document by ID.
+ */
+export async function loadClinicalDocument(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string,
+  documentId: string
+): Promise<ClinicalDocument | null> {
+  const snap = await getDoc(documentRef(psychologistId, patientId, sessionId, documentId))
+  if (!snap.exists()) return null
+  return reviveDates(snap.data()) as ClinicalDocument
 }

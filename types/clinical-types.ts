@@ -171,6 +171,34 @@ export interface DocumentReadyEvent {
   durationMs: number
 }
 
+// ---------------------------------------------------------------------------
+// Persisted Clinical Document — Survives page reload and session switches
+// ---------------------------------------------------------------------------
+
+/** A clinical document persisted to Firestore under the session's documents subcollection */
+export interface ClinicalDocument {
+  /** Unique document ID (matches documentId from generation events) */
+  id: string
+  /** The session this document belongs to */
+  sessionId: string
+  /** Patient ID (denormalized for queries) */
+  patientId?: string
+  /** Document type (SOAP, DAP, BIRP, plan_tratamiento, resumen_caso) */
+  documentType: string
+  /** Full markdown content — editable by user or AI */
+  markdown: string
+  /** Current version number (incremented on each edit) */
+  version: number
+  /** Who created the document */
+  createdBy: 'ai' | 'user'
+  /** Timestamp of creation */
+  createdAt: Date
+  /** Timestamp of last modification */
+  updatedAt: Date
+  /** Generation duration in ms (original generation only) */
+  generationDurationMs?: number
+}
+
 // Granular message processing status for transparency UI
 export interface MessageProcessingStatus {
   phase: ProcessingPhase
