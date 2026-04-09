@@ -1034,6 +1034,13 @@ export class HopeAISystem {
               self.extractAndSaveMemoriesAsync(currentState, message, accumulatedText, sessionId).catch(err => {
                 sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
               })
+
+              // 📋 SESSION SUMMARY: Generate progressive summary at milestones (fire-and-forget)
+              if (self.shouldGenerateSessionSummary(currentState)) {
+                self.generateSessionSummaryAsync(currentState).catch(err => {
+                  sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+                })
+              }
             }
           }
         })();
@@ -1083,6 +1090,13 @@ export class HopeAISystem {
       this.extractAndSaveMemoriesAsync(currentState, message, responseContent, sessionId).catch(err => {
         sessionLogger.warn('⚠️ Memory extraction failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
       })
+
+      // 📋 SESSION SUMMARY: Generate progressive summary at milestones (fire-and-forget)
+      if (this.shouldGenerateSessionSummary(currentState)) {
+        this.generateSessionSummaryAsync(currentState).catch(err => {
+          sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+        })
+      }
 
       // 📊 METRICS TRACKING for non-streaming
       // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
@@ -1607,6 +1621,54 @@ export class HopeAISystem {
           patient_id: patientId,
           trigger_type: 'automatic'
         }
+      })
+    }
+  }
+
+  // ─── SESSION SUMMARY GENERATION ──────────────────────────────────────────
+
+  /**
+   * Determine if the session has enough content to warrant generating a summary.
+   * Triggers at every 6th user message (i.e., 6, 12, 18…) to progressively update
+   * the session summary without waiting for explicit session close.
+   */
+  private shouldGenerateSessionSummary(chatState: ChatState): boolean {
+    const userMessages = chatState.history.filter(msg => msg.role === 'user')
+    // Generate at 6-message milestones (enough context to summarize)
+    return userMessages.length >= 6 && userMessages.length % 6 === 0
+  }
+
+  /**
+   * 📋 SESSION SUMMARY: Generate and persist a session summary (fire-and-forget).
+   * Uses a sub-agent (gemini-3.1-flash-lite-preview) to produce a structured summary
+   * that is stored on the session document for progressive context loading.
+   */
+  private async generateSessionSummaryAsync(chatState: ChatState): Promise<void> {
+    if (!chatState.userId || !chatState.clinicalContext?.patientId) return
+
+    try {
+      const { generateSessionSummary } = await import('./agents/subagents/generate-session-summary')
+
+      // Format the last N messages as conversation text
+      const recentMessages = chatState.history.slice(-20) // Last 20 messages
+      const conversationText = recentMessages
+        .map(msg => `[${msg.role === 'user' ? 'Terapeuta' : 'Aurora'}]: ${msg.content.substring(0, 500)}`)
+        .join('\n\n')
+
+      const summary = await generateSessionSummary(conversationText)
+      if (!summary) return
+
+      // Persist to session metadata
+      chatState.sessionSummary = summary
+      await this.saveSessionMetadataOnly(chatState)
+
+      sessionLogger.info('📋 Session summary generated and persisted', {
+        sessionId: chatState.sessionId,
+        topicCount: summary.mainTopics.length,
+      })
+    } catch (error) {
+      sessionLogger.warn('⚠️ Session summary generation failed (non-blocking)', {
+        error: error instanceof Error ? error.message : String(error),
       })
     }
   }
