@@ -133,6 +133,86 @@ export interface ToolExecutionEvent {
   completionDetail?: string
 }
 
+// ---------------------------------------------------------------------------
+// Document Preview Types — Real-time document generation with live preview
+// ---------------------------------------------------------------------------
+
+/** Supported clinical document section identifiers */
+export type DocumentSectionId =
+  | 'header'
+  | 'subjetivo' | 'objetivo' | 'analisis' | 'plan'       // SOAP
+  | 'datos' | 'intervencion' | 'respuesta'                 // DAP / BIRP (some overlap with SOAP)
+  | 'comportamiento'                                        // BIRP
+  | 'objetivos' | 'intervenciones' | 'timeline' | 'indicadores' // plan_tratamiento
+  | 'resumen' | 'evolucion' | 'conclusiones'               // resumen_caso
+  | 'firma'                                                 // signature block
+  | string                                                  // extensible
+
+/** A single section of a document being generated in real-time */
+export interface DocumentSection {
+  id: DocumentSectionId
+  title: string
+  content: string
+  /** 0-1 progress within this section (1 = complete) */
+  progress: number
+}
+
+/** SSE event: a partial or complete preview of a document section */
+export interface DocumentPreviewEvent {
+  /** Unique document generation ID (stable across sections) */
+  documentId: string
+  /** The section being updated */
+  section: DocumentSection
+  /** Overall generation progress 0-1 */
+  overallProgress: number
+  /** Document type being generated */
+  documentType: string
+  /** Cumulative markdown of the full document so far */
+  accumulatedMarkdown: string
+}
+
+/** SSE event: final document ready for download */
+export interface DocumentReadyEvent {
+  /** Same documentId as DocumentPreviewEvent */
+  documentId: string
+  /** Full markdown content of the completed document */
+  markdown: string
+  /** Document type */
+  documentType: string
+  /** Format(s) available for export */
+  availableFormats: Array<'pdf' | 'docx' | 'markdown'>
+  /** Generation duration in ms */
+  durationMs: number
+}
+
+// ---------------------------------------------------------------------------
+// Persisted Clinical Document — Survives page reload and session switches
+// ---------------------------------------------------------------------------
+
+/** A clinical document persisted to Firestore under the session's documents subcollection */
+export interface ClinicalDocument {
+  /** Unique document ID (matches documentId from generation events) */
+  id: string
+  /** The session this document belongs to */
+  sessionId: string
+  /** Patient ID (denormalized for queries) */
+  patientId?: string
+  /** Document type (SOAP, DAP, BIRP, plan_tratamiento, resumen_caso) */
+  documentType: string
+  /** Full markdown content — editable by user or AI */
+  markdown: string
+  /** Current version number (incremented on each edit) */
+  version: number
+  /** Who created the document */
+  createdBy: 'ai' | 'user'
+  /** Timestamp of creation */
+  createdAt: Date
+  /** Timestamp of last modification */
+  updatedAt: Date
+  /** Generation duration in ms (original generation only) */
+  generationDurationMs?: number
+}
+
 // Granular message processing status for transparency UI
 export interface MessageProcessingStatus {
   phase: ProcessingPhase

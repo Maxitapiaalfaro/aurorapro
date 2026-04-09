@@ -277,18 +277,21 @@ export const UNIFIED_TOOL_DECLARATIONS = [
       {
         name: 'generate_clinical_document',
         description: [
-          'Sub-agente que genera documentos clínicos estructurados profesionales: notas SOAP, DAP, BIRP, planes de tratamiento, resúmenes de caso.',
+          'Sub-agente que genera documentos clínicos estructurados profesionales con preview en tiempo real.',
+          'Genera notas SOAP, DAP, BIRP, planes de tratamiento y resúmenes de caso.',
+          'El documento se muestra progresivamente en un panel lateral mientras se genera.',
           'Usa un modelo secundario especializado en documentación clínica.',
           '',
-          'USA CUANDO:',
-          '- El terapeuta solicita explícitamente documentación (notas de sesión, plan de tratamiento)',
+          'USA SIEMPRE CUANDO:',
+          '- El terapeuta solicita crear, generar, redactar o documentar cualquier nota clínica',
+          '- El terapeuta pide notas de sesión, reportes, planes de tratamiento o resúmenes',
           '- Final de sesión y el terapeuta pide resumen estructurado',
           '- Necesitas generar un documento formal con formato clínico específico',
+          '- El terapeuta dice "genera", "crea", "documenta", "haz una nota", "escribe un reporte"',
           '',
           'NO USES CUANDO:',
           '- El terapeuta solo hace una pregunta sobre documentación (responde directamente)',
           '- La consulta es conversacional, no requiere documento formal',
-          '- No hay suficiente material de sesión para documentar',
         ].join('\n'),
         parametersJsonSchema: {
           type: 'object',
@@ -316,6 +319,84 @@ export const UNIFIED_TOOL_DECLARATIONS = [
             },
           },
           required: ['document_type', 'conversation_context'],
+        },
+      },
+      {
+        name: 'update_clinical_document',
+        description: [
+          'Modifica un documento clínico existente que fue previamente generado en esta sesión.',
+          'El documento se actualiza en el panel lateral y se persiste automáticamente.',
+          '',
+          'MODOS DE USO:',
+          '1. **Solo instrucciones** (recomendado): Provee document_id + modification_instructions.',
+          '   La herramienta lee automáticamente el documento actual de Firestore y aplica las modificaciones con IA.',
+          '2. **Markdown completo**: Provee document_id + modification_instructions + full_updated_markdown.',
+          '   Se usa tu Markdown directamente sin LLM adicional.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta pide modificar, corregir, ampliar o ajustar un documento ya generado',
+          '- El terapeuta dice "cambia la sección de Plan", "agrega esto al Subjetivo", "corrige el Análisis"',
+          '- Se necesita incorporar nueva información a un documento existente',
+          '',
+          'NO USES CUANDO:',
+          '- No hay un documento generado previamente en la sesión — usa get_session_documents para verificar',
+          '- El terapeuta pide un documento completamente nuevo (usa generate_clinical_document)',
+          '',
+          'IMPORTANTE: Si no conoces el document_id, usa get_session_documents primero para listar los documentos disponibles.',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            document_id: {
+              type: 'string',
+              description:
+                'ID del documento a modificar. Se obtiene de la respuesta de generate_clinical_document o de get_session_documents.',
+            },
+            modification_instructions: {
+              type: 'string',
+              description:
+                'Instrucciones claras de qué modificar en el documento. Ej: "Agrega al Plan que se recomendó práctica de mindfulness diario"',
+            },
+            full_updated_markdown: {
+              type: 'string',
+              description:
+                'OPCIONAL: El contenido completo actualizado del documento en Markdown. Si se omite, la herramienta lee el documento actual y aplica las instrucciones automáticamente con IA.',
+            },
+          },
+          required: ['document_id', 'modification_instructions'],
+        },
+      },
+      {
+        name: 'get_session_documents',
+        description: [
+          'Recupera documentos clínicos previamente generados y persistidos para la sesión actual.',
+          'Permite listar todos los documentos de la sesión o leer el contenido completo de un documento específico por ID.',
+          '',
+          'USA CUANDO:',
+          '- El terapeuta pregunta "¿qué documentos hemos generado?"',
+          '- El terapeuta pide modificar un documento pero no tienes el contenido actual',
+          '- Necesitas leer un documento previo para hacer una modificación con update_clinical_document',
+          '- El terapeuta dice "muéstrame la nota" o "revisa el documento que hicimos"',
+          '',
+          'NO USES CUANDO:',
+          '- Acabas de generar un documento en este mismo turno (ya tienes el contenido)',
+          '- El terapeuta pide un documento completamente nuevo (usa generate_clinical_document)',
+        ].join('\n'),
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            document_id: {
+              type: 'string',
+              description:
+                'ID de un documento específico a recuperar. Si se omite, lista todos los documentos de la sesión.',
+            },
+            include_content: {
+              type: 'boolean',
+              description:
+                'Si incluir el Markdown completo del documento (default: true). Usar false para solo listar metadatos.',
+            },
+          },
+          required: [],
         },
       },
       {

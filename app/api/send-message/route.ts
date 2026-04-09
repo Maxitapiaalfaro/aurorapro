@@ -4,7 +4,7 @@ import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ReasoningBullet, ToolExecutionEvent, ProcessingStepEvent } from '@/types/clinical-types'
+import type { AgentType, ReasoningBullet, ToolExecutionEvent, DocumentPreviewEvent, DocumentReadyEvent, ProcessingStepEvent } from '@/types/clinical-types'
 import { startQueryProfile, queryCheckpoint, finishQueryProfile } from '@/lib/utils/query-profiler'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
@@ -25,6 +25,8 @@ type SSEEvent =
   | { type: 'tool_execution', tool: ToolExecutionEvent }
   | { type: 'processing_step', step: ProcessingStepEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
+  | { type: 'document_preview', preview: DocumentPreviewEvent }
+  | { type: 'document_ready', document: DocumentReadyEvent }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
@@ -290,6 +292,18 @@ export async function POST(request: NextRequest) {
                         completionDetail: chunk.metadata.completionDetail,
                       }
                     })
+                  } else if (chunk.metadata.type === 'document_preview') {
+                    // 📄 Real-time document preview section
+                    sendSSE({
+                      type: 'document_preview',
+                      preview: chunk.metadata.preview,
+                    })
+                  } else if (chunk.metadata.type === 'document_ready') {
+                    // 📄 Document generation complete — ready for export
+                    sendSSE({
+                      type: 'document_ready',
+                      document: chunk.metadata.document,
+                    })
                   }
                 }
 
@@ -431,6 +445,8 @@ function getToolDisplayName(toolName: string): string {
     'google_search': 'Búsqueda web',
     'explore_patient_context': 'Sintetizando contexto del paciente',
     'generate_clinical_document': 'Generando documento clínico',
+    'update_clinical_document': 'Actualizando documento clínico',
+    'get_session_documents': 'Recuperando documentos de la sesión',
     'research_evidence': 'Investigación de evidencia multi-fuente',
     'analyze_longitudinal_patterns': 'Analizando patrones longitudinales',
   }

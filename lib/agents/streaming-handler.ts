@@ -14,6 +14,7 @@ import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
 import { ProgressQueue } from "../utils/progress-queue"
 import { createLogger } from "@/lib/logger"
+import type { DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 
 const logger = createLogger('agent')
 
@@ -251,6 +252,8 @@ const KNOWN_DYNAMIC_TOOLS = new Set([
   // Sub-agent tools
   'explore_patient_context',
   'generate_clinical_document',
+  'update_clinical_document',
+  'get_session_documents',
   'research_evidence',
   'analyze_longitudinal_patterns',
   // Legacy tool names (may appear in existing sessions)
@@ -268,7 +271,9 @@ export function prepareFunctionCallWithSecurity(
   sessionId: string,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
   onProgress?: (message: string) => void,
-  patientId?: string
+  patientId?: string,
+  onDocumentPreview?: (preview: DocumentPreviewEvent) => void,
+  onDocumentReady?: (document: DocumentReadyEvent) => void,
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -320,7 +325,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress }),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady }),
   } as PreparedToolCall;
 }
 
@@ -331,7 +336,14 @@ export function prepareFunctionCallWithSecurity(
 async function executeToolCall(
   call: any,
   academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}>,
-  context?: { psychologistId?: string; sessionId?: string; patientId?: string; onProgress?: (message: string) => void }
+  context?: {
+    psychologistId?: string;
+    sessionId?: string;
+    patientId?: string;
+    onProgress?: (message: string) => void;
+    onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
+    onDocumentReady?: (document: DocumentReadyEvent) => void;
+  }
 ): Promise<ToolCallResult> {
   // Registry-based dispatch — delegates to tool-handlers.ts
   const { getToolHandler } = await import('./tool-handlers');
@@ -344,6 +356,8 @@ async function executeToolCall(
       patientId: context?.patientId,
       academicReferences,
       onProgress: context?.onProgress,
+      onDocumentPreview: context?.onDocumentPreview,
+      onDocumentReady: context?.onDocumentReady,
     });
   }
 
@@ -370,6 +384,10 @@ function extractQueryFromArgs(toolName: string, args: Record<string, unknown> | 
       return args.context_hint as string | undefined;
     case 'generate_clinical_document':
       return args.document_type as string | undefined;
+    case 'update_clinical_document':
+      return args.modification_instructions as string | undefined;
+    case 'get_session_documents':
+      return args.document_id as string | undefined;
     case 'create_patient':
       return args.displayName as string | undefined;
     case 'list_patients':
@@ -390,6 +408,10 @@ function extractCompletionDetail(resp: { name: string; response: unknown }): str
       return `Sintetizó: ${data.memoriesCount ?? 0} memorias, ${formatMs(data.durationMs)}`;
     case 'generate_clinical_document':
       return `Documento ${data.documentType || '?'}, ${formatMs(data.durationMs)}`;
+    case 'update_clinical_document':
+      return `Documento actualizado, ${formatMs(data.durationMs)}`;
+    case 'get_session_documents':
+      return `${data.count ?? 0} documento(s) encontrado(s)`;
     case 'research_evidence':
       return `${data.sourcesCount ?? 0} fuentes, ${formatMs(data.durationMs)}`;
     case 'analyze_longitudinal_patterns':
@@ -581,14 +603,26 @@ export async function handleStreamingWithTools(
         }
 
         // 🎨 ProgressQueue: sub-agents push messages, generator drains them in real-time
-        const progressQueue = new ProgressQueue<{toolName: string, message: string}>();
+        // Discriminated union supports both text progress and structured document events
+        type ProgressEvent =
+          | { kind: 'progress'; toolName: string; message: string }
+          | { kind: 'document_preview'; toolName: string; preview: DocumentPreviewEvent }
+          | { kind: 'document_ready'; toolName: string; document: DocumentReadyEvent };
+
+        const progressQueue = new ProgressQueue<ProgressEvent>();
         const createProgressCallback = (toolName: string) => (message: string) => {
-          progressQueue.push({ toolName, message });
+          progressQueue.push({ kind: 'progress', toolName, message });
+        };
+        const createDocumentPreviewCallback = (toolName: string) => (preview: DocumentPreviewEvent) => {
+          progressQueue.push({ kind: 'document_preview', toolName, preview });
+        };
+        const createDocumentReadyCallback = (toolName: string) => (document: DocumentReadyEvent) => {
+          progressQueue.push({ kind: 'document_ready', toolName, document });
         };
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId)
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name))
         );
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
@@ -598,14 +632,38 @@ export async function handleStreamingWithTools(
 
         // Drain progress events in real-time while tools execute
         for await (const p of progressQueue) {
-          yield {
-            text: "",
-            metadata: {
-              type: "tool_call_progress",
-              toolName: p.toolName,
-              message: p.message,
-            }
-          };
+          switch (p.kind) {
+            case 'progress':
+              yield {
+                text: "",
+                metadata: {
+                  type: "tool_call_progress",
+                  toolName: p.toolName,
+                  message: p.message,
+                }
+              };
+              break;
+            case 'document_preview':
+              yield {
+                text: "",
+                metadata: {
+                  type: "document_preview",
+                  toolName: p.toolName,
+                  preview: p.preview,
+                }
+              };
+              break;
+            case 'document_ready':
+              yield {
+                text: "",
+                metadata: {
+                  type: "document_ready",
+                  toolName: p.toolName,
+                  document: p.document,
+                }
+              };
+              break;
+          }
         }
 
         // Tools are done — get results
@@ -738,12 +796,45 @@ export async function handleStreamingWithTools(
             }
 
             // Build PreparedToolCalls with security checks
+            // Pass document callbacks for recursive calls too (e.g., generate_clinical_document may be called in a follow-up round)
+            // Create a fresh progress queue for this recursive round so events are drained in real-time
+            const recursiveProgressQueue = new ProgressQueue<ProgressEvent>();
+            const createRecursiveProgressCb = (toolName: string) => (message: string) => {
+              recursiveProgressQueue.push({ kind: 'progress', toolName, message });
+            };
+            const createRecursiveDocPreviewCb = (toolName: string) => (preview: DocumentPreviewEvent) => {
+              recursiveProgressQueue.push({ kind: 'document_preview', toolName, preview });
+            };
+            const createRecursiveDocReadyCb = (toolName: string) => (document: DocumentReadyEvent) => {
+              recursiveProgressQueue.push({ kind: 'document_ready', toolName, document });
+            };
+
             const recursivePreparedCalls: PreparedToolCall[] = followUpFunctionCalls.map((call: any) =>
-              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId)
+              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name))
             );
 
+            // Start execution without awaiting — drain progress concurrently (same pattern as initial round)
+            const recursiveExecutionPromise = executeToolsSafely(recursivePreparedCalls, { maxConcurrent: 3 })
+              .then(results => { recursiveProgressQueue.finish(); return results; })
+              .catch(err => { recursiveProgressQueue.finish(); throw err; });
+
+            // Drain recursive progress events in real-time
+            for await (const p of recursiveProgressQueue) {
+              switch (p.kind) {
+                case 'progress':
+                  yield { text: "", metadata: { type: "tool_call_progress", toolName: p.toolName, message: p.message } };
+                  break;
+                case 'document_preview':
+                  yield { text: "", metadata: { type: "document_preview", toolName: p.toolName, preview: p.preview } };
+                  break;
+                case 'document_ready':
+                  yield { text: "", metadata: { type: "document_ready", toolName: p.toolName, document: p.document } };
+                  break;
+              }
+            }
+
             // Execute with orchestrator (parallel read, sequential write)
-            const recursiveResponses = await executeToolsSafely(recursivePreparedCalls, { maxConcurrent: 3 });
+            const recursiveResponses = await recursiveExecutionPromise;
             const validRecursiveResponses = recursiveResponses.filter(r => r !== null);
 
             // Emit tool_call_complete for recursive calls

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ProcessingStepEvent, ExecutionTimeline, ClientContext } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ClinicalDocument, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ProcessingStepEvent, ExecutionTimeline, ClientContext, DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 import {
   findSessionById,
   saveSessionMetadata,
@@ -10,6 +10,9 @@ import {
   getClinicalFilesBySession,
   resolvePatientId,
   listUserSessions,
+  saveClinicalDocument,
+  updateClinicalDocumentContent,
+  loadSessionDocuments,
   getActivePatientMemories,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
@@ -88,6 +91,17 @@ interface UseHopeAISystemReturn {
   // Bullets progresivos
   clearReasoningBullets: () => void
   addReasoningBullet: (bullet: ReasoningBullet) => void
+
+  // Document preview — real-time document generation state
+  documentPreview: DocumentPreviewEvent | null
+  documentReady: DocumentReadyEvent | null
+  isDocumentPanelOpen: boolean
+  closeDocumentPanel: () => void
+  openDocumentPanel: () => void
+  // Persisted document state
+  activeDocument: ClinicalDocument | null
+  sessionDocuments: ClinicalDocument[]
+  saveDocumentEdit: (documentId: string, newMarkdown: string) => Promise<void>
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
@@ -145,6 +159,23 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   // NUEVA FUNCIONALIDAD: Estado temporal para bullets del mensaje actual
   const [currentMessageBullets, setCurrentMessageBullets] = useState<ReasoningBullet[]>([])
+
+  // Document preview state — real-time document generation
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewEvent | null>(null)
+  const [documentReady, setDocumentReady] = useState<DocumentReadyEvent | null>(null)
+  const [isDocumentPanelOpen, setIsDocumentPanelOpen] = useState(false)
+  // Persisted documents for the current session (survives reload)
+  const [sessionDocuments, setSessionDocuments] = useState<ClinicalDocument[]>([])
+  // The currently active/visible document (from sessionDocuments or just generated)
+  const [activeDocument, setActiveDocument] = useState<ClinicalDocument | null>(null)
+
+  const closeDocumentPanel = useCallback(() => {
+    setIsDocumentPanelOpen(false)
+  }, [])
+
+  const openDocumentPanel = useCallback(() => {
+    setIsDocumentPanelOpen(true)
+  }, [])
 
   // LOCAL-FIRST: Cache clinical memories for the active patient
   const patientMemoriesRef = useRef<{ patientId: string; memories: ClinicalMemory[] } | null>(null)
@@ -204,6 +235,36 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
       logger.info('✅ Sesión HopeAI cargada:', sessionId)
       logger.info('📊 Historial cargado con', chatState.history.length, 'mensajes')
+
+      // 📄 Restore persisted documents for this session (non-blocking)
+      // Clear previous session's document state first
+      setDocumentPreview(null)
+      setDocumentReady(null)
+      setActiveDocument(null)
+      setSessionDocuments([])
+
+      if (psychologistId) {
+        const patientId = resolvePatientId(chatState)
+        loadSessionDocuments(psychologistId, patientId, sessionId)
+          .then(docs => {
+            if (docs.length > 0) {
+              logger.info(`📄 Restored ${docs.length} document(s) for session ${sessionId}`)
+              setSessionDocuments(docs)
+              // Restore the most recent document as active
+              const latestDoc = docs[0] // already sorted by createdAt desc
+              setActiveDocument(latestDoc)
+              // Reconstruct a DocumentReadyEvent so the panel can show it
+              setDocumentReady({
+                documentId: latestDoc.id,
+                markdown: latestDoc.markdown,
+                documentType: latestDoc.documentType,
+                availableFormats: ['markdown', 'pdf', 'docx'],
+                durationMs: latestDoc.generationDurationMs ?? 0,
+              })
+            }
+          })
+          .catch(err => logger.error('Failed to restore session documents:', err))
+      }
 
       // Background reconstruction: if session has patient context but no sessionMeta, reconstruct without blocking UI
       if (!existingSessionMeta && chatState.clinicalContext?.patientId) {
@@ -479,6 +540,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           reasoningBullets: { ...prev.reasoningBullets, sessionId: sessionIdToUse! }
         }))
       }
+
+      // Reset document preview state for the new message
+      setDocumentPreview(null)
+      setDocumentReady(null)
+      // Don't auto-close panel — user may want to keep viewing previous doc
 
       // 💾 Ensure session doc exists in Firestore (fire-and-forget, not on critical path)
       // NOTE: User message is NOT persisted here to avoid duplication.
@@ -870,6 +936,41 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   return prev
                 })
               },
+              onDocumentPreview: (preview: DocumentPreviewEvent) => {
+                logger.info('📄 Document preview:', preview.section.id, `${(preview.overallProgress * 100).toFixed(0)}%`)
+                setDocumentPreview(preview)
+                // Auto-open the panel on first preview event
+                setIsDocumentPanelOpen(true)
+              },
+              onDocumentReady: (document: DocumentReadyEvent) => {
+                logger.info('📄 Document ready:', document.documentType, `${(document.durationMs / 1000).toFixed(1)}s`)
+                setDocumentReady(document)
+
+                // 💾 Auto-persist the generated document to Firestore
+                const currentSessionId = systemStateRef.current.sessionId
+                if (psychologistId && currentSessionId) {
+                  const clinicalDoc: ClinicalDocument = {
+                    id: document.documentId,
+                    sessionId: currentSessionId,
+                    patientId: systemStateRef.current.clinicalContext?.patientId,
+                    documentType: document.documentType,
+                    markdown: document.markdown,
+                    version: 1,
+                    createdBy: 'ai',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    generationDurationMs: document.durationMs,
+                  }
+                  setActiveDocument(clinicalDoc)
+                  setSessionDocuments(prev => [clinicalDoc, ...prev.filter(d => d.id !== clinicalDoc.id)])
+
+                  // Fire-and-forget Firestore write
+                  const patientId = resolvePatientId(systemStateRef.current as Partial<ChatState>)
+                  saveClinicalDocument(psychologistId, patientId, currentSessionId, clinicalDoc)
+                    .then(() => logger.info('💾 Document persisted to Firestore:', clinicalDoc.id))
+                    .catch(err => logger.error('❌ Failed to persist document:', err))
+                }
+              },
               onResponse: (responseData) => {
                 logger.info('✅ Respuesta final recibida vía SSE')
 
@@ -1159,6 +1260,41 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     }))
   }, [])
 
+  // Save user edits to a clinical document (persists to Firestore)
+  const saveDocumentEdit = useCallback(async (documentId: string, newMarkdown: string) => {
+    const currentSessionId = systemState.sessionId
+    if (!psychologistId || !currentSessionId) {
+      logger.error('Cannot save document edit: no session or psychologist')
+      return
+    }
+    const existing = sessionDocuments.find(d => d.id === documentId) || activeDocument
+    if (!existing) {
+      logger.error('Cannot save document edit: document not found', documentId)
+      return
+    }
+
+    const newVersion = (existing.version || 1) + 1
+    const updated: ClinicalDocument = { ...existing, markdown: newMarkdown, version: newVersion, updatedAt: new Date() }
+
+    // Update local state immediately
+    setActiveDocument(updated)
+    setSessionDocuments(prev => prev.map(d => d.id === documentId ? updated : d))
+    // Update the documentReady event so the panel reflects the edit
+    setDocumentReady(prev => prev && prev.documentId === documentId
+      ? { ...prev, markdown: newMarkdown }
+      : prev
+    )
+
+    // Persist to Firestore
+    const patientId = resolvePatientId(systemStateRef.current as Partial<ChatState>)
+    try {
+      await updateClinicalDocumentContent(psychologistId, patientId, currentSessionId, documentId, newMarkdown, newVersion)
+      logger.info(`💾 Document edit saved: ${documentId} v${newVersion}`)
+    } catch (err) {
+      logger.error('❌ Failed to save document edit:', err)
+    }
+  }, [systemState.sessionId, psychologistId, sessionDocuments, activeDocument])
+
   return {
     systemState,
     createSession,
@@ -1172,6 +1308,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     addStreamingResponseToHistory,
     setSessionMeta,
     clearReasoningBullets,
-    addReasoningBullet
+    addReasoningBullet,
+    // Document preview + persistence
+    documentPreview,
+    documentReady,
+    isDocumentPanelOpen,
+    closeDocumentPanel,
+    openDocumentPanel,
+    activeDocument,
+    sessionDocuments,
+    saveDocumentEdit,
   }
 }
