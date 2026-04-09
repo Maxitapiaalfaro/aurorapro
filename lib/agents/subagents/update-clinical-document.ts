@@ -93,7 +93,18 @@ REGLAS:
         },
       });
 
-      fullUpdatedMarkdown = result.text?.trim() || currentMarkdown;
+      const llmResult = result.text?.trim();
+      if (!llmResult) {
+        logger.warn(`[update_clinical_document] LLM returned empty result for ${documentId}, falling back to original`);
+        return {
+          name: 'update_clinical_document',
+          response: {
+            error: 'La IA no pudo aplicar las modificaciones. Intenta con instrucciones más específicas o proporciona el Markdown completo con full_updated_markdown.',
+            documentId,
+          },
+        };
+      }
+      fullUpdatedMarkdown = llmResult;
       logger.info(`[update_clinical_document] LLM applied modifications to ${documentId}`);
     }
 
