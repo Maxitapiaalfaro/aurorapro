@@ -12,6 +12,7 @@
  */
 
 import React, { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, Download, X, Loader2, CheckCircle, FileDown, Pencil, Eye, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -214,10 +215,14 @@ const DocumentPreviewPanelComponent = ({
     }
   }, [onSaveEdit, readyEvent, editContent])
 
-  if (!isOpen) return null
-
   return (
-    <div
+    <AnimatePresence>
+      {isOpen && (
+    <motion.div
+      initial={{ x: '100%', opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: '100%', opacity: 0 }}
+      transition={{ type: 'spring', damping: 28, stiffness: 300 }}
       className={cn(
         'flex flex-col h-full border-l bg-background',
         'w-full md:w-[480px] lg:w-[560px]',
@@ -359,7 +364,9 @@ const DocumentPreviewPanelComponent = ({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

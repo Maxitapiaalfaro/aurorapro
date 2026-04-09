@@ -8,6 +8,7 @@ import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { DisplayPreferencesProvider } from '@/providers/display-preferences-provider'
 import { AuthProvider } from '@/providers/auth-provider'
+import { MotionProvider } from '@/providers/motion-provider'
 import { IBM_Plex_Serif, IBM_Plex_Sans } from 'next/font/google'
 
 // Fuentes académicas profesionales para contexto clínico
@@ -43,16 +44,18 @@ export default function RootLayout({
       </head>
       <body className={`${ibmPlexSans.variable} ${ibmPlexSans.variable}`}>
         <AuthProvider>
-          <DisplayPreferencesProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              {children}
-            </ThemeProvider>
-          </DisplayPreferencesProvider>
+          <MotionProvider>
+            <DisplayPreferencesProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                {children}
+              </ThemeProvider>
+            </DisplayPreferencesProvider>
+          </MotionProvider>
         </AuthProvider>
       </body>
     </html>

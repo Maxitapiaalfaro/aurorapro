@@ -990,7 +990,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const isFirstMessage = index === 0;
             
             return (
-              <div key={message.id} className={cn(
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className={cn(
                 "flex items-start justify-start",
                 isFirstMessage ? "pt-6" : messageSpacingClass
               )}>
@@ -1199,7 +1204,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
 
@@ -1563,38 +1568,54 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         <div className={cn("w-full mx-auto relative z-10", chatContainerWidthClass)}>
           <div className="relative">
             {/* Inline send error banner — retry-friendly, non-destructive */}
-            {sendError && (
-              <div className="absolute -top-14 left-0 right-0 px-1 md:px-0 z-20">
-                <div className="flex items-center justify-between bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 text-sm">
-                  <span className="text-destructive">{sendError.message}</span>
-                  {sendError.retryable && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:text-destructive ml-2 h-7 px-2"
-                      onClick={onClearSendError}
-                    >
-                      Reintentar
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Pending files compact bar (overlay above input, no extra bottom space) */}
-            {pendingFiles.length > 0 && !isStreaming && (
-              <div className="absolute -top-10 left-0 right-0 px-1 md:px-0">
-                <div className="max-w-full overflow-x-auto no-scrollbar">
-                  <div className="inline-flex items-center gap-2 bg-ash border border-ash rounded-lg px-2 py-1">
-                    {pendingFiles.map((file) => (
-                      <div key={file.id} className="flex items-center gap-1 text-[11px] font-sans bg-card/70 border border-border/70 rounded px-1.5 py-0.5 whitespace-nowrap">
-                        <PaperclipIcon className="h-3 w-3 text-muted-foreground" />
-                        <span className="max-w-[140px] truncate">{file.name}</span>
-                      </div>
-                    ))}
+            <AnimatePresence>
+              {sendError && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="absolute -top-14 left-0 right-0 px-1 md:px-0 z-20"
+                >
+                  <div className="flex items-center justify-between bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 text-sm">
+                    <span className="text-destructive">{sendError.message}</span>
+                    {sendError.retryable && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive ml-2 h-7 px-2"
+                        onClick={onClearSendError}
+                      >
+                        Reintentar
+                      </Button>
+                    )}
                   </div>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {/* Pending files compact bar (overlay above input, no extra bottom space) */}
+            <AnimatePresence>
+              {pendingFiles.length > 0 && !isStreaming && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="absolute -top-10 left-0 right-0 px-1 md:px-0"
+                >
+                  <div className="max-w-full overflow-x-auto no-scrollbar">
+                    <div className="inline-flex items-center gap-2 bg-ash border border-ash rounded-lg px-2 py-1">
+                      {pendingFiles.map((file) => (
+                        <div key={file.id} className="flex items-center gap-1 text-[11px] font-sans bg-card/70 border border-border/70 rounded px-1.5 py-0.5 whitespace-nowrap">
+                          <PaperclipIcon className="h-3 w-3 text-muted-foreground" />
+                          <span className="max-w-[140px] truncate">{file.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div className={cn(
                 "rounded-[28px] border bg-card dark:bg-card transition-all shadow-lg p-1",
                 "border-border/50",
