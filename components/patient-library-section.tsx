@@ -630,7 +630,7 @@ export function PatientLibrarySection({
       {/* Patient List */}
       <div className="flex-1 overflow-hidden relative">
         <div className="h-full overflow-y-auto scrollbar-hide">
-          <div className="px-3 py-3 space-y-1.5">
+          <div className="px-3 py-3 space-y-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
@@ -639,14 +639,14 @@ export function PatientLibrarySection({
               </div>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-12 px-4 text-mineral-gray-600">
-              <div className="bg-ash rounded-xl p-6 border border-ash">
-                <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <div className="text-center py-12 px-4 text-muted-foreground">
+              <div className="bg-secondary/50 rounded-2xl p-8 border border-border/30">
+                <User className="h-10 w-10 mx-auto mb-4 opacity-30" />
                 <p className="font-sans text-sm font-medium">
                   {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
                 </p>
                 {!searchQuery && (
-                  <p className="font-sans text-xs mt-1 opacity-70">
+                  <p className="font-sans text-xs mt-2 opacity-60">
                     Crea tu primer paciente
                   </p>
                 )}
@@ -678,16 +678,16 @@ export function PatientLibrarySection({
                     }
                   }}
                   className={cn(
-                    "w-full p-4 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
+                    "w-full p-4 h-auto rounded-2xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                     selectedPatient?.id === patient.id
-                      ? "bg-clarity-blue-50 dark:bg-clarity-blue-900/20 border-clarity-blue-200 dark:border-clarity-blue-700 shadow-sm hover:shadow-md"
-                      : "bg-card border-border hover:bg-secondary hover:border-muted-foreground hover:shadow-sm",
+                      ? "bg-clarity-blue-50/70 dark:bg-clarity-blue-900/20 border-clarity-blue-200/60 dark:border-clarity-blue-700"
+                      : "bg-card border-border/40 hover:bg-secondary/50 hover:border-border/60",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 dark:focus-visible:ring-clarity-blue-700 focus-visible:ring-offset-2"
                   )}
                 >
                   {/* Accent border on active */}
                   {selectedPatient?.id === patient.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-10 bg-clarity-blue-600 rounded-r-full" />
                   )}
                   
                   

@@ -242,7 +242,7 @@ export function PatientConversationHistory({
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Sticky: Header + búsqueda/filtros dentro del contenedor que desplaza (cuerpo del modal) */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b -mx-4 px-4 pt-3 pb-2 sm:mx-0 sm:px-0">
+      <div className="sticky top-0 z-10 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 border-b border-border/40 -mx-4 px-4 pt-3 pb-3 sm:mx-0 sm:px-0">
         {/* Barra de búsqueda con botón integrado */}
         <div className="space-y-2">
           <div className="flex gap-2 items-center">
@@ -322,7 +322,7 @@ export function PatientConversationHistory({
             return (
               <Card 
                 key={conversation.sessionId} 
-                className="hover:shadow-md transition-all duration-200 cursor-pointer group"
+                className="hover:shadow-sm transition-all duration-200 cursor-pointer group border-border/30 hover:border-border/50"
                 onClick={() => handleConversationSelect(conversation.sessionId)}
               >
                 <CardHeader className="pb-3 p-4 sm:p-5">

@@ -198,8 +198,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
   return (
     <div
       className={cn(
-        "flex flex-col relative backdrop-blur-sm overflow-hidden",
-        "bg-sidebar border-r border-sidebar-border",
+        "flex flex-col relative backdrop-blur-md overflow-hidden",
+        "bg-sidebar/80 border-r border-sidebar-border/50",
         "h-full",
         isOpen ? "w-80" : "w-16",
       )}
@@ -210,7 +210,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       onMouseLeave={() => isOpen && !shouldPreventAutoClose && onToggle()}
     >
       {/* Navigation Icons - Always visible */}
-      <div className="flex flex-col flex-shrink-0 p-3 py-4 gap-2 overflow-visible border-b border-ash/50">
+      <div className="flex flex-col flex-shrink-0 p-3 py-5 gap-2.5 overflow-visible border-b border-border/40">
         {/* Nueva consulta button */}
         <TooltipProvider delayDuration={300}>
           <Tooltip open={isOpen ? false : undefined}>
@@ -369,14 +369,14 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       {/* Section header - always rendered, visible only when expanded */}
       <div
         className={cn(
-          "px-5 py-3 flex-shrink-0 border-b border-ash/30 overflow-hidden",
+          "px-5 py-3.5 flex-shrink-0 border-b border-border/30 overflow-hidden",
           isOpen ? "h-auto opacity-100" : "h-0 opacity-0"
         )}
         style={{
           transition: 'height 400ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 300ms cubic-bezier(0.25, 0.1, 0.25, 1)'
         }}
       >
-        <h2 className="text-xs text-mineral-gray-600 font-sans font-semibold tracking-wider uppercase whitespace-nowrap">
+        <h2 className="text-[11px] text-muted-foreground font-sans font-semibold tracking-widest uppercase whitespace-nowrap">
           {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
         </h2>
       </div>
@@ -392,7 +392,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
           {activeTab === 'conversations' ? (
             <div className="h-full overflow-hidden relative">
               <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
-              <div className="px-3 py-5 space-y-1.5">
+              <div className="px-3 py-4 space-y-1">
                 {isLoading && isOpen ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="flex flex-col items-center gap-3">
@@ -424,17 +424,17 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                           variant="ghost"
                           className={cn(
                             "w-full transition-all duration-200 relative overflow-visible",
-                            isOpen ? "justify-start p-3 pr-12 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
+                            isOpen ? "justify-start p-3.5 pr-12 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
                             selectedConversation === conversation.sessionId
-                              ? "bg-clarity-blue-50 dark:bg-clarity-blue-900/40 hover:bg-clarity-blue-100 dark:hover:bg-clarity-blue-800/50 shadow-sm"
-                              : "hover:bg-secondary hover:shadow-sm",
+                              ? "bg-clarity-blue-50/80 dark:bg-clarity-blue-900/30 hover:bg-clarity-blue-100/80 dark:hover:bg-clarity-blue-800/40"
+                              : "hover:bg-secondary/80",
                           )}
                           onClick={() => handleConversationSelect(conversation.sessionId)}
                           title={!isOpen ? conversation.title : undefined}
                         >
                           {/* Accent border on active */}
                           {selectedConversation === conversation.sessionId && isOpen && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-clarity-blue-600 dark:bg-clarity-blue-400 rounded-r-full" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-7 bg-clarity-blue-600 dark:bg-clarity-blue-400 rounded-r-full" />
                           )}
                           {isOpen ? (
                             <div className="flex items-start gap-3 w-full pl-2 min-w-0">
@@ -505,8 +505,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 )}
                 
                 {isLoadingMore && (
-                  <div className="flex items-center justify-center py-6">
-                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-card px-4 py-2.5 rounded-full border border-border">
+                  <div className="flex items-center justify-center py-5">
+                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/60 px-4 py-2 rounded-full border border-border/40">
                       <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-clarity-blue-600" weight="bold" />
                       <span className="font-medium">Cargando más...</span>
                     </div>

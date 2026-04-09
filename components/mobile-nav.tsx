@@ -182,21 +182,19 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
     <>
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
           
-          <SheetContent side="left" className="w-80 p-0 backdrop-blur-sm border-r paper-noise overflow-hidden bg-gradient-to-b from-secondary/40 via-secondary/30 to-secondary/20 border-border/60 shadow-sm">
+          <SheetContent side="left" className="w-[85vw] max-w-[340px] p-0 backdrop-blur-md border-r border-border/30 overflow-hidden bg-background/95 shadow-2xl">
             <div className="flex flex-col h-full relative">
-              {/* Subtle accent line */}
-              <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
               
               {/* Navigation Icons - Mobile optimized */}
-              <div className="flex flex-col flex-shrink-0 p-4 py-5 gap-3 overflow-visible border-b border-ash/50">
+              <div className="flex flex-col flex-shrink-0 p-4 py-6 gap-3 overflow-visible border-b border-border/40">
                 {/* Nueva consulta button */}
                 <Button
                   onClick={handleNewConversation}
                   disabled={isCreatingSession}
                   className={cn(
-                    "w-full h-12 px-4 gap-3 justify-start rounded-xl font-medium",
+                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium",
                     "bg-clarity-blue-600 text-white hover:bg-clarity-blue-700",
-                    "shadow-sm active:scale-[0.98] transition-transform"
+                    "shadow-sm active:scale-[0.98] transition-all"
                   )}
                 >
                   <PlusIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
@@ -210,16 +208,16 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                   variant="ghost"
                   onClick={() => setActiveTab('conversations')}
                   className={cn(
-                    "w-full h-11 px-4 gap-3 justify-start rounded-xl font-medium relative transition-all duration-200",
+                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium relative transition-all duration-200",
                     "active:scale-[0.98]",
                     activeTab === 'conversations'
-                      ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
-                      : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                      ? "bg-clarity-blue-50/80 text-clarity-blue-600 hover:bg-clarity-blue-100/80"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                   )}
                 >
                   {/* Active indicator */}
                   {activeTab === 'conversations' && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-clarity-blue-600 rounded-r-full" />
                   )}
                   <ChatsCircleIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
                   <span className="text-sm">Consultas</span>
@@ -230,16 +228,16 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                   variant="ghost"
                   onClick={() => setActiveTab('patients')}
                   className={cn(
-                    "w-full h-11 px-4 gap-3 justify-start rounded-xl font-medium relative transition-all duration-200",
+                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium relative transition-all duration-200",
                     "active:scale-[0.98]",
                     activeTab === 'patients'
-                      ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
-                      : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                      ? "bg-clarity-blue-50/80 text-clarity-blue-600 hover:bg-clarity-blue-100/80"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                   )}
                 >
                   {/* Active indicator */}
                   {activeTab === 'patients' && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-clarity-blue-600 rounded-r-full" />
                   )}
                   <FoldersIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
                   <span className="text-sm">Casos clínicos</span>
@@ -247,8 +245,8 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
               </div>
 
               {/* Section header */}
-              <div className="px-5 py-3 flex-shrink-0 border-b border-ash/30">
-                <h2 className="text-xs text-mineral-gray-600 font-sans font-semibold tracking-wider uppercase whitespace-nowrap">
+              <div className="px-5 py-3.5 flex-shrink-0 border-b border-border/30">
+                <h2 className="text-[11px] text-muted-foreground font-sans font-semibold tracking-widest uppercase whitespace-nowrap">
                   {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
                 </h2>
               </div>
@@ -257,7 +255,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                 {activeTab === 'conversations' ? (
                   <div className="h-full overflow-hidden relative">
                     <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
-                      <div className="px-3 py-5 space-y-1.5">
+                      <div className="px-3 py-4 space-y-1">
                         {isLoading ? (
                           <div className="flex items-center justify-center py-12">
                             <div className="flex flex-col items-center gap-3">
@@ -287,8 +285,8 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                   variant="ghost"
                                   className={cn(
                                     "w-full transition-all duration-200 relative overflow-visible",
-                                    "justify-start p-3 pr-12 h-auto text-left rounded-xl",
-                                    "hover:bg-secondary hover:shadow-sm active:scale-[0.98]"
+                                    "justify-start p-3.5 pr-12 h-auto text-left rounded-xl",
+                                    "hover:bg-secondary/60 active:scale-[0.98]"
                                   )}
                                   onClick={() => handleConversationSelect(conversation.sessionId)}
                                 >
@@ -355,8 +353,8 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                         )}
 
                         {isLoadingMore && (
-                          <div className="flex items-center justify-center py-6">
-                            <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/40 px-4 py-2.5 rounded-full border border-border/40">
+                          <div className="flex items-center justify-center py-5">
+                            <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/50 px-4 py-2 rounded-full border border-border/30">
                               <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-primary" weight="bold" />
                               <span className="font-medium">Cargando más...</span>
                             </div>

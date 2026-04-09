@@ -40,25 +40,25 @@
 
 @layer base {
   :root {
-    /* Aurora Palette - Light Mode */
-    --background: 210 17% 98%; /* Cloud White #F8F9FA */
+    /* Aurora Palette - Light Mode (softer, reduced contrast for clinical calm) */
+    --background: 210 20% 99%; /* Slightly warmer Cloud White */
     --foreground: 210 11% 25%; /* Deep Charcoal #343A40 */
-    --card: 210 17% 98%;
+    --card: 0 0% 100%; /* Pure white cards for clean separation */
     --card-foreground: 210 11% 25%;
-    --popover: 210 17% 98%;
+    --popover: 0 0% 100%;
     --popover-foreground: 210 11% 25%;
     --primary: 211 100% 50%; /* Clarity Blue #0D6EFD */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 17% 93%; /* Ash #E9ECEF */
+    --secondary: 210 14% 96%; /* Softer Ash for less visual weight */
     --secondary-foreground: 210 11% 25%;
-    --muted: 210 17% 93%;
+    --muted: 210 14% 96%;
     --muted-foreground: 210 11% 49%; /* Mineral Gray #6C757D */
     --accent: 211 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 210 17% 93%; /* Ash */
-    --input: 210 17% 93%;
+    --border: 210 14% 93%; /* Softer border */
+    --input: 210 14% 95%;
     --ring: 211 100% 50%;
     --chart-1: 211 100% 50%; /* Clarity Blue */
     --chart-2: 162 76% 47%; /* Serene Teal */
@@ -66,13 +66,13 @@
     --chart-4: 210 11% 49%; /* Mineral Gray */
     --chart-5: 210 11% 25%; /* Deep Charcoal */
     --radius: 0.5rem;
-    --sidebar-background: 210 17% 98%;
+    --sidebar-background: 210 20% 99%;
     --sidebar-foreground: 210 11% 25%;
     --sidebar-primary: 211 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 17% 93%;
+    --sidebar-accent: 210 14% 96%;
     --sidebar-accent-foreground: 210 11% 25%;
-    --sidebar-border: 210 17% 93%;
+    --sidebar-border: 210 14% 93%;
     --sidebar-ring: 211 100% 50%;
     /* User message bubble colors */
     --user-bubble-bg: 211 100% 50%; /* Clarity Blue */
@@ -96,7 +96,7 @@
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 50%;
     --destructive-foreground: 210 17% 98%;
-    --border: 210 11% 22%; /* Lighter border for visibility */
+    --border: 210 11% 20%; /* Softer border for visibility */
     --input: 210 11% 18%; /* Input background */
     --ring: 211 100% 65%;
     --chart-1: 211 100% 65%; /* Clarity Blue */
@@ -124,6 +124,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   body:not(.dark) {
     background-image: url('/paper-texture.png');

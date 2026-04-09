@@ -917,7 +917,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           paddingBottom: '0px' // Remove padding to allow content to extend behind input gradient
         }}
       >
-        <div className={cn("w-full mx-auto h-full flex flex-col space-y-4 md:space-y-8 pt-1 md:pt-2 pb-32", chatContainerWidthClass)}>
+        <div className={cn("w-full mx-auto h-full flex flex-col space-y-5 md:space-y-8 pt-2 md:pt-3 pb-36", chatContainerWidthClass)}>
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
@@ -931,14 +931,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
           {/* Welcome greeting with minimal rotating capability hint */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
-            <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-2">
-              <h1 className="font-sans text-4xl md:text-5xl tracking-tight text-foreground mb-4">
+            <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-4">
+              <h1 className="font-sans text-3xl md:text-5xl tracking-tight text-foreground/90 mb-4 font-medium">
                 ¿En qué piensas?
               </h1>
               {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
-                <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-4">
+                <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-2">
                   <div
-                    className="group relative bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-clarity-blue-200 dark:hover:border-clarity-blue-700 hover:shadow-sm transition-all duration-200 flex items-stretch"
+                    className="group relative bg-card/80 border border-border/50 rounded-2xl overflow-hidden cursor-pointer hover:border-clarity-blue-200/60 dark:hover:border-clarity-blue-700/40 hover:shadow-sm transition-all duration-300 flex items-stretch"
                     onClick={handleSelectHint}
                     role="button"
                     tabIndex={0}
@@ -1552,15 +1552,15 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       </ScrollArea>
 
       {/* Input Area - Floating */}
-      <div className="absolute bottom-0 left-0 right-0 py-3 md:py-4 pt-6 z-20">
+      <div className="absolute bottom-0 left-0 right-0 py-3 md:py-5 pt-8 z-20">
         {/* Botón flotante para ir al final - Independiente y elegante */}
         {!autoScroll && currentSession?.history && currentSession.history.length > 0 && (
           <div className="absolute left-0 right-0 bottom-full mb-3 md:mb-4 pointer-events-none flex justify-center">
             <Button
               onClick={scrollToBottom}
               className={cn(
-                "pointer-events-auto rounded-full w-11 h-11 shadow-lg transition-all duration-300 hover:scale-110 active:scale-95",
-                "bg-card/95 backdrop-blur-sm border-2 border-border/50 hover:border-border",
+                "pointer-events-auto rounded-full w-10 h-10 shadow-md transition-all duration-300 hover:scale-110 active:scale-95",
+                "bg-card/90 backdrop-blur-md border border-border/40 hover:border-border/60",
                 "text-foreground hover:bg-card"
               )}
               size="icon"
@@ -1625,8 +1625,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}
             </AnimatePresence>
             <div className={cn(
-                "rounded-[28px] border bg-card dark:bg-card transition-all shadow-lg p-1",
-                "border-border/50",
+                "rounded-[28px] border bg-card/95 dark:bg-card/95 backdrop-blur-md transition-all shadow-lg shadow-black/[0.04] dark:shadow-black/[0.15] p-1",
+                "border-border/40",
                 config.focusWithinBorderColor
               )}>
               {/* Text Input Section */}
@@ -1649,7 +1649,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               </div>
 
               {/* Buttons Section - Both mobile and desktop: Full width row below input */}
-              <div className="flex items-center justify-between gap-2 md:gap-3 px-4 md:px-5 pb-3 pt-3">
+              <div className="flex items-center justify-between gap-2 md:gap-3 px-4 md:px-5 pb-3 pt-2">
                 {/* Left side buttons (mobile) / All buttons (desktop) */}
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <FileUploadButton

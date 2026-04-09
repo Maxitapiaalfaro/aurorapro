@@ -204,45 +204,46 @@ export function ConversationHistoryList({
   }
 
   return (
-    <Card className={`w-full ${className}`}>
-      <CardHeader>
+    <Card className={`w-full border-border/40 shadow-sm ${className}`}>
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            Historial de Conversaciones
-            <Badge variant="secondary">{filteredConversations.length}</Badge>
+          <div className="flex items-center gap-2.5">
+            <MessageSquare className="h-5 w-5 text-muted-foreground" />
+            <span className="font-sans">Historial de Conversaciones</span>
+            <Badge variant="secondary" className="text-xs">{filteredConversations.length}</Badge>
           </div>
           <Button 
             onClick={refreshConversations} 
             variant="ghost" 
             size="sm"
             disabled={isLoading}
+            className="rounded-xl"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </CardTitle>
         
         {/* Controles de búsqueda y filtros */}
-        <div className="space-y-3">
+        <div className="space-y-3 pt-2">
           {/* Búsqueda */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar conversaciones..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-10 rounded-xl border-border/50"
             />
           </div>
           
           {/* Filtros */}
           <div className="flex gap-2 flex-wrap">
             <Select value={selectedAgent} onValueChange={(value) => setSelectedAgent(value as AgentType | 'all')}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="h-4 w-4 mr-2" />
+              <SelectTrigger className="w-[180px] h-9 rounded-xl border-border/50 text-sm">
+                <Filter className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Filtrar por agente" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 <SelectItem value="all">Todos los agentes</SelectItem>
                 <SelectItem value="socratico">Supervisor Clínico</SelectItem>
                 <SelectItem value="clinico">Especialista en Documentación</SelectItem>
@@ -251,10 +252,10 @@ export function ConversationHistoryList({
             </Select>
             
             <Select value={selectedMode} onValueChange={(value) => setSelectedMode(value as ClinicalMode | 'all')}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-[150px] h-9 rounded-xl border-border/50 text-sm">
                 <SelectValue placeholder="Filtrar por modo" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 <SelectItem value="all">Todos los modos</SelectItem>
                 <SelectItem value="therapeutic_assistance">Asistencia Terapéutica</SelectItem>
                 <SelectItem value="clinical_supervision">Supervisión Clínica</SelectItem>
@@ -263,7 +264,7 @@ export function ConversationHistoryList({
             </Select>
             
             {(searchQuery || selectedAgent !== 'all' || selectedMode !== 'all') && (
-              <Button onClick={clearFilters} variant="outline" size="sm">
+              <Button onClick={clearFilters} variant="outline" size="sm" className="rounded-xl border-border/50">
                 Limpiar Filtros
               </Button>
             )}
@@ -271,19 +272,21 @@ export function ConversationHistoryList({
         </div>
       </CardHeader>
       
-      <CardContent className="paper-noise">
+      <CardContent>
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-            <span className="font-sans">Cargando conversaciones...</span>
+          <div className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center gap-3">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="font-sans text-sm text-muted-foreground">Cargando conversaciones...</span>
+            </div>
           </div>
         ) : filteredConversations.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="font-sans text-lg font-medium mb-2">
+          <div className="text-center py-12 text-muted-foreground">
+            <MessageSquare className="h-10 w-10 mx-auto mb-4 opacity-30" />
+            <p className="font-sans text-sm font-medium mb-1.5">
               {conversations.length === 0 ? 'No hay conversaciones' : 'No se encontraron conversaciones'}
             </p>
-            <p className="font-sans text-sm">
+            <p className="font-sans text-xs text-muted-foreground/70">
               {conversations.length === 0 
                 ? 'Inicia una nueva conversación para comenzar'
                 : 'Intenta ajustar los filtros de búsqueda'
@@ -292,17 +295,17 @@ export function ConversationHistoryList({
           </div>
         ) : (
           <ScrollArea className="h-[400px]">
-            <div className="space-y-3">
-              {filteredConversations.map((conversation, index) => {
+            <div className="space-y-2">
+              {filteredConversations.map((conversation) => {
                 const AgentIcon = agentConfig[conversation.activeAgent]?.icon || User
                 const agentStyle = agentConfig[conversation.activeAgent]?.color || 'bg-gray-100 text-gray-800'
                 const modeStyle = modeConfig[conversation.mode]?.color || 'bg-gray-100 text-gray-800'
                 
                 return (
                   <div key={conversation.sessionId}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
+                    <div className="group rounded-xl border border-border/30 hover:border-border/50 transition-all duration-200 cursor-pointer bg-card/50 hover:bg-card">
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
                           <div 
                             className="flex-1 min-w-0"
                             onClick={() => handleConversationSelect(conversation.sessionId)}
@@ -319,12 +322,12 @@ export function ConversationHistoryList({
                             </div>
                             
                             {/* Preview del último mensaje */}
-                            <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                            <p className="text-xs text-muted-foreground mb-3 line-clamp-2 leading-relaxed">
                               {conversation.preview}
                             </p>
                             
                             {/* Metadatos */}
-                            <div className="flex items-center gap-3 text-xs text-gray-500">
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
                                 {formatDistanceToNow(new Date(conversation.lastUpdated), { 
@@ -348,7 +351,7 @@ export function ConversationHistoryList({
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="ml-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                className="ml-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -357,15 +360,15 @@ export function ConversationHistoryList({
                               <AlertDialogHeader>
                                 <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Esta acción no se puede deshacer. La conversación "{conversation.title}" 
+                                  Esta acción no se puede deshacer. La conversación &quot;{conversation.title}&quot; 
                                   será eliminada permanentemente.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
                                 <AlertDialogAction 
                                   onClick={() => handleDeleteConversation(conversation.sessionId)}
-                                  className="bg-red-600 hover:bg-red-700"
+                                  className="bg-destructive hover:bg-destructive/90 rounded-xl"
                                 >
                                   Eliminar
                                 </AlertDialogAction>
@@ -373,9 +376,8 @@ export function ConversationHistoryList({
                             </AlertDialogContent>
                           </AlertDialog>
                         </div>
-                      </CardContent>
-                    </Card>
-                    {index < filteredConversations.length - 1 && <Separator className="my-2" />}
+                      </div>
+                    </div>
                   </div>
                 )
               })}
