@@ -43,10 +43,17 @@ function env(name: string): string | undefined {
  */
 function resolveCredential() {
   // 1. Full JSON credentials (preferred for Vercel deployments)
+  //    Also check GOOGLE_APPLICATION_CREDENTIALS — when it contains inline JSON
+  //    (starts with '{') rather than a file path, parse it here instead of
+  //    letting ADC misinterpret it as a path.
+  const gacRaw = env('GOOGLE_APPLICATION_CREDENTIALS')
+  const gacJsonStr = gacRaw && gacRaw.trimStart().startsWith('{') ? gacRaw : undefined
+
   const jsonEnv =
     env('GOOGLE_APPLICATION_CREDENTIALS_JSON') ||
     env('FIREBASE_SERVICE_ACCOUNT_JSON') ||
-    env('GENAI_SERVICE_ACCOUNT_JSON')
+    env('GENAI_SERVICE_ACCOUNT_JSON') ||
+    gacJsonStr
   if (jsonEnv) {
     try {
       const creds = JSON.parse(jsonEnv)
