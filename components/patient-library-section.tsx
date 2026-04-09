@@ -704,7 +704,7 @@ export function PatientLibrarySection({
                       {(patient.demographics?.ageRange || patient.demographics?.gender || patient.demographics?.occupation) && (
                         <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground/70 mb-2 font-sans">
                           {patient.demographics.ageRange && (
-                            <span className="flex items-center gap-0.5 flex-shrink-0">
+                            <span className="flex items-center gap-0.5 flex-shrink-0" aria-label={`Edad: ${patient.demographics.ageRange} años`}>
                               {patient.demographics.ageRange} años
                             </span>
                           )}
@@ -747,7 +747,7 @@ export function PatientLibrarySection({
                       
                       {/* Timestamp and Insights Badge */}
                       <div className="flex items-center justify-between gap-2 mt-1">
-                        <div className="text-[11px] text-muted-foreground/45 font-sans flex items-center gap-1">
+                        <div className="text-[11px] text-muted-foreground/45 font-sans flex items-center gap-1" aria-label={`Última actualización: ${formatDistanceToNow(patient.updatedAt, { addSuffix: true, locale: es })}`}>
                           {formatDistanceToNow(patient.updatedAt, { 
                             addSuffix: true, 
                             locale: es 
