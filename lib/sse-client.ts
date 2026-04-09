@@ -7,7 +7,7 @@
  * - Respuesta final
  */
 
-import type { ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
+import type { ReasoningBullet, ToolExecutionEvent, ProcessingStepEvent } from '@/types/clinical-types'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 
@@ -21,6 +21,7 @@ export type SSEEvent =
   | { type: 'bullet', bullet: ReasoningBullet }
   | { type: 'agent_selected', info: { targetAgent: string; confidence: number; reasoning: string } }
   | { type: 'tool_execution', tool: ToolExecutionEvent }
+  | { type: 'processing_step', step: ProcessingStepEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
@@ -33,6 +34,7 @@ export interface SSECallbacks {
   onBullet?: (bullet: ReasoningBullet) => void
   onAgentSelected?: (info: { targetAgent: string; confidence: number; reasoning: string }) => void
   onToolExecution?: (tool: ToolExecutionEvent) => void
+  onProcessingStep?: (step: ProcessingStepEvent) => void
   onChunk?: (chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] }) => void
   onResponse?: (result: any) => void
   onError?: (error: string, details?: string) => void
@@ -261,6 +263,12 @@ export class SSEClient {
                     }
                     break
 
+                  case 'processing_step':
+                    if (callbacks.onProcessingStep) {
+                      callbacks.onProcessingStep(event.step)
+                    }
+                    break
+
                   case 'chunk':
                     logger.info(`📝 [SSEClient] Chunk recibido (${event.chunk.text?.length || 0} chars) - YIELDING`)
 
@@ -392,6 +400,12 @@ export class SSEClient {
                   logger.info('🔧 [SSEClient] Tool execution:', event.tool.toolName, event.tool.status)
                   if (callbacks.onToolExecution) {
                     callbacks.onToolExecution(event.tool)
+                  }
+                  break
+
+                case 'processing_step':
+                  if (callbacks.onProcessingStep) {
+                    callbacks.onProcessingStep(event.step)
                   }
                   break
 

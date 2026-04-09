@@ -4,7 +4,7 @@ import { getGlobalOrchestrationSystem } from '@/lib/hopeai-system'
 import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ReasoningBullet, ToolExecutionEvent } from '@/types/clinical-types'
+import type { AgentType, ReasoningBullet, ToolExecutionEvent, ProcessingStepEvent } from '@/types/clinical-types'
 import { startQueryProfile, queryCheckpoint, finishQueryProfile } from '@/lib/utils/query-profiler'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
@@ -23,6 +23,7 @@ type SSEEvent =
   | { type: 'bullet', bullet: ReasoningBullet }
   | { type: 'agent_selected', info: { targetAgent: string; confidence: number; reasoning: string } }
   | { type: 'tool_execution', tool: ToolExecutionEvent }
+  | { type: 'processing_step', step: ProcessingStepEvent }
   | { type: 'chunk', chunk: { text: string; groundingUrls?: any[]; academicReferences?: any[] } }
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
@@ -158,6 +159,17 @@ export async function POST(request: NextRequest) {
             })
           }
 
+          // Callback para pasos de procesamiento del pipeline (transparencia)
+          const onProcessingStep = (step: ProcessingStepEvent) => {
+            if (controllerClosed) return
+            try {
+              sendSSE({ type: 'processing_step', step })
+            } catch (err) {
+              logger.warn('[SSE] Failed to send processing_step (controller likely closed):', err)
+              controllerClosed = true
+            }
+          }
+
           // Enviar mensaje con callbacks
           const result = await orchestrationSystem.sendMessage(
             sessionId,
@@ -171,7 +183,8 @@ export async function POST(request: NextRequest) {
             fileMetadata,      // ← File metadata from client (bypass storage)
             verifiedUserId,    // ← Verified psychologistId from auth token
             profile,           // ← Pipeline profiler
-            clientContext       // ← LOCAL-FIRST: pre-computed patient context
+            clientContext,      // ← LOCAL-FIRST: pre-computed patient context
+            onProcessingStep   // ← Callback para pasos de procesamiento
           )
 
           // Finish profiling before streaming begins

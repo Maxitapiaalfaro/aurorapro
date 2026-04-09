@@ -97,6 +97,14 @@ export type ProcessingPhase =
   | 'complete'
   | 'error'
 
+// Processing step event: emitted during server-side pipeline to provide
+// visibility into what happens between "message sent" and "first response chunk"
+export interface ProcessingStepEvent {
+  id: string
+  label: string
+  status: 'active' | 'completed'
+}
+
 // Tool execution event emitted during processing
 export interface ToolExecutionEvent {
   id: string
@@ -131,6 +139,8 @@ export interface MessageProcessingStatus {
   toolExecutions: ToolExecutionEvent[]
   bullets: ReasoningBullet[]
   isComplete: boolean
+  /** Server-side processing steps visible during the analyzing_intent phase */
+  processingSteps?: ProcessingStepEvent[]
 }
 
 export interface BulletGenerationContext {
