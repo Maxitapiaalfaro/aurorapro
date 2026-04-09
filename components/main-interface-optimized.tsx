@@ -84,12 +84,15 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     loadSession,
     setSessionMeta,
     resetSystem,
-    // Document preview
+    // Document preview + persistence
     documentPreview,
     documentReady,
     isDocumentPanelOpen,
     closeDocumentPanel,
     openDocumentPanel,
+    activeDocument,
+    sessionDocuments,
+    saveDocumentEdit,
   } = useHopeAISystem()
 
   // Selected patient for current session (must be before any conditional returns)
@@ -923,6 +926,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             readyEvent={documentReady}
             isOpen={isDocumentPanelOpen}
             onClose={closeDocumentPanel}
+            onSaveEdit={saveDocumentEdit}
           />
 
           {/* Floating button to reopen document panel when a document exists but panel is closed */}

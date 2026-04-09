@@ -12,7 +12,7 @@
  */
 
 import React, { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react'
-import { FileText, Download, X, Loader2, CheckCircle, FileDown } from 'lucide-react'
+import { FileText, Download, X, Loader2, CheckCircle, FileDown, Pencil, Eye, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,8 @@ interface DocumentPreviewPanelProps {
   isOpen: boolean
   /** Close the panel */
   onClose: () => void
+  /** Callback to save user edits to the document markdown. When provided, enables edit mode. */
+  onSaveEdit?: (documentId: string, newMarkdown: string) => Promise<void>
   /** Optional className for the root container */
   className?: string
 }
@@ -133,10 +135,14 @@ const DocumentPreviewPanelComponent = ({
   readyEvent,
   isOpen,
   onClose,
+  onSaveEdit,
   className,
 }: DocumentPreviewPanelProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
   const [completedSections, setCompletedSections] = useState<DocumentSection[]>([])
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
   // Track completed sections from preview events
   useEffect(() => {
@@ -159,21 +165,23 @@ const DocumentPreviewPanelComponent = ({
     if (previewEvent && previewEvent.documentId !== currentDocId.current) {
       currentDocId.current = previewEvent.documentId
       setCompletedSections([])
+      setIsEditing(false) // Exit edit mode when a new document starts generating
     }
   }, [previewEvent])
 
   // Auto-scroll to bottom as content streams in
   useEffect(() => {
-    if (contentRef.current) {
+    if (contentRef.current && !isEditing) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
     }
-  }, [previewEvent?.accumulatedMarkdown])
+  }, [previewEvent?.accumulatedMarkdown, isEditing])
 
   // Render the accumulated markdown
   const markdownContent = previewEvent?.accumulatedMarkdown ?? readyEvent?.markdown ?? ''
   const isGenerating = !readyEvent
   const progress = previewEvent?.overallProgress ?? (readyEvent ? 1 : 0)
   const documentType = previewEvent?.documentType ?? readyEvent?.documentType ?? ''
+  const canEdit = !isGenerating && readyEvent && !!onSaveEdit
 
   const renderedHtml = useMemo(() => {
     if (!markdownContent) return ''
@@ -181,6 +189,30 @@ const DocumentPreviewPanelComponent = ({
       ? parseMarkdownStreamingSync(markdownContent)
       : parseMarkdownSync(markdownContent)
   }, [markdownContent, isGenerating])
+
+  // Enter edit mode — populate textarea with current markdown
+  const handleStartEdit = useCallback(() => {
+    setEditContent(markdownContent)
+    setIsEditing(true)
+  }, [markdownContent])
+
+  // Cancel edit — revert to preview mode
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false)
+    setEditContent('')
+  }, [])
+
+  // Save edit — persist and exit edit mode
+  const handleSaveEdit = useCallback(async () => {
+    if (!onSaveEdit || !readyEvent) return
+    setIsSaving(true)
+    try {
+      await onSaveEdit(readyEvent.documentId, editContent)
+      setIsEditing(false)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [onSaveEdit, readyEvent, editContent])
 
   if (!isOpen) return null
 
@@ -205,25 +237,51 @@ const DocumentPreviewPanelComponent = ({
               Generando…
             </Badge>
           )}
-          {!isGenerating && readyEvent && (
+          {!isGenerating && readyEvent && !isEditing && (
             <Badge variant="default" className="text-xs">
               <CheckCircle className="mr-1 h-3 w-3" />
-              Listo ({(readyEvent.durationMs / 1000).toFixed(1)}s)
+              Listo
+            </Badge>
+          )}
+          {isEditing && (
+            <Badge variant="secondary" className="text-xs">
+              <Pencil className="mr-1 h-3 w-3" />
+              Editando
             </Badge>
           )}
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Edit/Preview toggle — only when document is ready and onSaveEdit is provided */}
+          {canEdit && !isEditing && (
+            <Button variant="ghost" size="icon" onClick={handleStartEdit} className="h-7 w-7" title="Editar documento">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          {isEditing && (
+            <>
+              <Button variant="ghost" size="icon" onClick={handleCancelEdit} className="h-7 w-7" title="Cancelar edición">
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleSaveEdit} disabled={isSaving} className="h-7 w-7" title="Guardar cambios">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Progress bar */}
-      <div className="px-4 py-2">
-        <ProgressBar progress={progress} />
-      </div>
+      {isGenerating && (
+        <div className="px-4 py-2">
+          <ProgressBar progress={progress} />
+        </div>
+      )}
 
       {/* Section badges */}
-      {completedSections.length > 0 && (
+      {completedSections.length > 0 && isGenerating && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-2">
           {completedSections.map((section) => (
             <SectionBadge
@@ -235,38 +293,70 @@ const DocumentPreviewPanelComponent = ({
         </div>
       )}
 
-      {/* Document content */}
-      <div
-        ref={contentRef}
-        className={cn(
-          'flex-1 overflow-y-auto px-6 py-4',
-          // Professional document styling
-          'prose prose-sm max-w-none',
-          'prose-headings:text-foreground prose-headings:font-semibold',
-          'prose-h2:text-base prose-h2:border-b prose-h2:pb-1 prose-h2:mb-3',
-          'prose-p:text-muted-foreground prose-p:leading-relaxed',
-          'prose-strong:text-foreground',
-          'prose-li:text-muted-foreground',
-          isGenerating && 'document-streaming',
-        )}
-      >
-        {markdownContent ? (
-          <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <FileText className="h-12 w-12 mb-3 opacity-30" />
-            <p className="text-sm">Esperando generación del documento…</p>
-          </div>
-        )}
-      </div>
+      {/* Document content — preview or edit mode */}
+      {isEditing ? (
+        <textarea
+          value={editContent}
+          onChange={e => setEditContent(e.target.value)}
+          className={cn(
+            'flex-1 overflow-y-auto px-6 py-4 resize-none',
+            'font-mono text-sm leading-relaxed',
+            'bg-background text-foreground',
+            'focus:outline-none',
+            'border-0',
+          )}
+          placeholder="Contenido del documento en Markdown..."
+          spellCheck={false}
+        />
+      ) : (
+        <div
+          ref={contentRef}
+          className={cn(
+            'flex-1 overflow-y-auto px-6 py-4',
+            // Professional document styling
+            'prose prose-sm max-w-none',
+            'prose-headings:text-foreground prose-headings:font-semibold',
+            'prose-h2:text-base prose-h2:border-b prose-h2:pb-1 prose-h2:mb-3',
+            'prose-p:text-muted-foreground prose-p:leading-relaxed',
+            'prose-strong:text-foreground',
+            'prose-li:text-muted-foreground',
+            isGenerating && 'document-streaming',
+          )}
+        >
+          {markdownContent ? (
+            <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <FileText className="h-12 w-12 mb-3 opacity-30" />
+              <p className="text-sm">Esperando generación del documento…</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Footer with export buttons */}
-      {readyEvent && (
+      {readyEvent && !isEditing && (
         <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
           <span className="text-xs text-muted-foreground">
             {readyEvent.documentType.toUpperCase()} • {readyEvent.markdown.length} caracteres
           </span>
           <ExportButtons readyEvent={readyEvent} />
+        </div>
+      )}
+      {isEditing && (
+        <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+          <span className="text-xs text-muted-foreground">
+            Editando • {editContent.length} caracteres
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleCancelEdit}>
+              Cancelar
+            </Button>
+            <Button variant="default" size="sm" onClick={handleSaveEdit} disabled={isSaving}>
+              {isSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+              Guardar
+            </Button>
+          </div>
         </div>
       )}
     </div>
