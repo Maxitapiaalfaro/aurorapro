@@ -772,7 +772,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   // Update existing step or append new one
                   const idx = existing.findIndex(s => s.id === step.id)
                   const updated = idx >= 0
-                    ? existing.map((s, i) => i === idx ? step : s)
+                    ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
                     : [...existing, step]
                   return {
                     ...prev,

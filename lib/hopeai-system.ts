@@ -615,6 +615,7 @@ export class HopeAISystem {
     const hasClientContext = !!clientContext
     if (hasClientContext) {
       sessionLogger.info('🚀 [LOCAL-FIRST] clientContext provided — skipping Firestore reads for patient/fichas/memories')
+      emitStep('patient_context', 'Contexto del paciente (local)…', 'active')
       emitStep('patient_context', 'Contexto del paciente (local)', 'completed')
     } else if (patientReference) {
       emitStep('patient_context', 'Consultando historial clínico…', 'active')
