@@ -327,14 +327,22 @@ export const UNIFIED_TOOL_DECLARATIONS = [
           'Modifica un documento clínico existente que fue previamente generado en esta sesión.',
           'El documento se actualiza en el panel lateral y se persiste automáticamente.',
           '',
+          'MODOS DE USO:',
+          '1. **Solo instrucciones** (recomendado): Provee document_id + modification_instructions.',
+          '   La herramienta lee automáticamente el documento actual de Firestore y aplica las modificaciones con IA.',
+          '2. **Markdown completo**: Provee document_id + modification_instructions + full_updated_markdown.',
+          '   Se usa tu Markdown directamente sin LLM adicional.',
+          '',
           'USA CUANDO:',
           '- El terapeuta pide modificar, corregir, ampliar o ajustar un documento ya generado',
           '- El terapeuta dice "cambia la sección de Plan", "agrega esto al Subjetivo", "corrige el Análisis"',
           '- Se necesita incorporar nueva información a un documento existente',
           '',
           'NO USES CUANDO:',
-          '- No hay un documento generado previamente en la sesión',
+          '- No hay un documento generado previamente en la sesión — usa get_session_documents para verificar',
           '- El terapeuta pide un documento completamente nuevo (usa generate_clinical_document)',
+          '',
+          'IMPORTANTE: Si no conoces el document_id, usa get_session_documents primero para listar los documentos disponibles.',
         ].join('\n'),
         parametersJsonSchema: {
           type: 'object',
@@ -342,7 +350,7 @@ export const UNIFIED_TOOL_DECLARATIONS = [
             document_id: {
               type: 'string',
               description:
-                'ID del documento a modificar (proporcionado al generar el documento)',
+                'ID del documento a modificar. Se obtiene de la respuesta de generate_clinical_document o de get_session_documents.',
             },
             modification_instructions: {
               type: 'string',
@@ -352,10 +360,10 @@ export const UNIFIED_TOOL_DECLARATIONS = [
             full_updated_markdown: {
               type: 'string',
               description:
-                'El contenido completo actualizado del documento en formato Markdown. DEBE incluir todo el documento, no solo la parte modificada.',
+                'OPCIONAL: El contenido completo actualizado del documento en Markdown. Si se omite, la herramienta lee el documento actual y aplica las instrucciones automáticamente con IA.',
             },
           },
-          required: ['document_id', 'modification_instructions', 'full_updated_markdown'],
+          required: ['document_id', 'modification_instructions'],
         },
       },
       {

@@ -5,12 +5,15 @@
  * Persists the change to Firestore (server-side via firebase-admin) and emits
  * document_ready so the preview panel refreshes in real-time.
  *
- * This is a lightweight handler (no sub-agent LLM call) — the main agent already
- * produced the updated markdown in its `full_updated_markdown` argument.
+ * Supports two modes:
+ * 1. **Full update** — agent provides full_updated_markdown directly (fast, no LLM call)
+ * 2. **Instruction-based** — agent provides only modification_instructions; this handler
+ *    auto-fetches the current document from Firestore and uses an LLM to apply the edits
  */
 
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
+import { SUBAGENT_MODEL } from './types';
 
 const logger = createLogger('agent');
 
@@ -20,12 +23,12 @@ export async function executeUpdateClinicalDocument(
 ): Promise<ToolCallResult> {
   const documentId = args.document_id as string;
   const modificationInstructions = args.modification_instructions as string;
-  const fullUpdatedMarkdown = args.full_updated_markdown as string;
+  let fullUpdatedMarkdown = args.full_updated_markdown as string | undefined;
 
-  if (!documentId || !fullUpdatedMarkdown) {
+  if (!documentId || !modificationInstructions) {
     return {
       name: 'update_clinical_document',
-      response: { error: 'document_id and full_updated_markdown are required' },
+      response: { error: 'document_id and modification_instructions are required' },
     };
   }
 
@@ -34,15 +37,68 @@ export async function executeUpdateClinicalDocument(
   try {
     ctx.onProgress?.('Actualizando documento clínico…');
 
+    const { getAdminApp } = await import('../../firebase-admin-config');
+    const { getFirestore: getAdminFirestore, Timestamp: AdminTimestamp } = await import('firebase-admin/firestore');
+    const adminDb = getAdminFirestore(getAdminApp());
+    const patientId = ctx.patientId || 'default_patient';
+    const docPath = `psychologists/${ctx.psychologistId}/patients/${patientId}/sessions/${ctx.sessionId}/documents/${documentId}`;
+
+    // If full_updated_markdown not provided, auto-fetch current doc and apply edits via LLM
+    if (!fullUpdatedMarkdown) {
+      ctx.onProgress?.('Leyendo documento actual…');
+      const snap = await adminDb.doc(docPath).get();
+      if (!snap.exists) {
+        return {
+          name: 'update_clinical_document',
+          response: { error: `Documento no encontrado: ${documentId}. Usa get_session_documents para verificar IDs disponibles.` },
+        };
+      }
+      const currentMarkdown = snap.data()?.markdown as string;
+      if (!currentMarkdown) {
+        return {
+          name: 'update_clinical_document',
+          response: { error: 'El documento existe pero no tiene contenido Markdown.' },
+        };
+      }
+
+      // Apply modifications via LLM
+      ctx.onProgress?.('Aplicando modificaciones con IA…');
+      const { ai } = await import('../../google-genai-config');
+      const result = await ai.models.generateContent({
+        model: SUBAGENT_MODEL,
+        contents: [
+          {
+            role: 'user',
+            parts: [{
+              text: `Eres un editor de documentos clínicos. Tu tarea es aplicar las modificaciones solicitadas al documento existente y devolver el documento COMPLETO actualizado en formato Markdown.
+
+DOCUMENTO ACTUAL:
+${currentMarkdown}
+
+MODIFICACIONES SOLICITADAS:
+${modificationInstructions}
+
+REGLAS:
+- Devuelve SOLO el documento Markdown completo actualizado, sin explicaciones
+- Mantén el formato y estructura del documento original
+- Aplica SOLO las modificaciones solicitadas, no cambies nada más
+- Si la modificación pide agregar contenido, intégralo en la sección apropiada
+- Si la modificación pide eliminar contenido, remuévelo limpiamente
+- Preserva los headings (## Sección) y el formato profesional`
+            }],
+          },
+        ],
+        config: {
+          temperature: 0.3, // Low temperature for faithful editing
+        },
+      });
+
+      fullUpdatedMarkdown = result.text?.trim() || currentMarkdown;
+      logger.info(`[update_clinical_document] LLM applied modifications to ${documentId}`);
+    }
+
     // Persist to Firestore (server-side via firebase-admin)
     if (ctx.psychologistId && ctx.sessionId) {
-      const { getAdminApp } = await import('../../firebase-admin-config');
-      const { getFirestore: getAdminFirestore, Timestamp: AdminTimestamp } = await import('firebase-admin/firestore');
-
-      const adminDb = getAdminFirestore(getAdminApp());
-      const patientId = ctx.patientId || 'default_patient';
-      const docPath = `psychologists/${ctx.psychologistId}/patients/${patientId}/sessions/${ctx.sessionId}/documents/${documentId}`;
-
       // Read current doc to bump version
       const snap = await adminDb.doc(docPath).get();
       const currentVersion = snap.exists ? (snap.data()?.version ?? 1) : 1;

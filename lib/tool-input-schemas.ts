@@ -107,7 +107,7 @@ export const generateClinicalDocumentSchema = z.object({
 export const updateClinicalDocumentSchema = z.object({
   document_id: z.string().min(1).describe('ID del documento a modificar'),
   modification_instructions: z.string().min(5).describe('Instrucciones de qué modificar'),
-  full_updated_markdown: z.string().min(20).describe('Contenido completo actualizado en Markdown'),
+  full_updated_markdown: z.string().min(20).optional().describe('OPCIONAL: Contenido completo actualizado en Markdown. Si se omite, se lee el actual y se aplican las instrucciones con IA.'),
 });
 
 /** get_session_documents — Retrieve persisted documents for the session (read-only) */
