@@ -553,6 +553,8 @@ export class HopeAISystem {
       }
       onProcessingStep?.({ id, label, status, durationMs, detail })
     }
+    /** Spanish pluralization helper: returns `${n} ${word}` or `${n} ${word}s` */
+    const pl = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`
 
     emitStep('session_load', 'Cargando sesión…', 'active')
 
@@ -674,8 +676,10 @@ export class HopeAISystem {
       // Build a personalized detail string showing what was loaded
       const detailParts: string[] = []
       if (patientRecord) detailParts.push('registro')
-      if (fichas && (fichas as any[]).length > 0) detailParts.push(`${(fichas as any[]).length} ficha${(fichas as any[]).length !== 1 ? 's' : ''}`)
-      if (clinicalMemories && (clinicalMemories as any[]).length > 0) detailParts.push(`${(clinicalMemories as any[]).length} memoria${(clinicalMemories as any[]).length !== 1 ? 's' : ''}`)
+      const fichaCount = (fichas as any[] | null)?.length ?? 0
+      if (fichaCount > 0) detailParts.push(pl(fichaCount, 'ficha'))
+      const memoryCount = (clinicalMemories as any[] | null)?.length ?? 0
+      if (memoryCount > 0) detailParts.push(pl(memoryCount, 'memoria'))
       // Use the loaded patient record's displayName for a personalized label
       const patientName = (patientRecord as any)?.displayName
       const completedLabel = patientName
@@ -914,9 +918,9 @@ export class HopeAISystem {
       queryCheckpoint(queryProfile, 'gemini_session_ready')
       // Personalized detail: show what went into the context
       const ctxParts: string[] = []
-      if (currentState.history.length > 1) ctxParts.push(`${currentState.history.length} mensajes`)
-      if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(`${resolvedSessionFiles.length} archivo${resolvedSessionFiles.length !== 1 ? 's' : ''}`)
-      if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(`${enrichedSessionContext.clinicalMemories.length} memoria${enrichedSessionContext.clinicalMemories.length !== 1 ? 's' : ''}`)
+      if (currentState.history.length > 1) ctxParts.push(pl(currentState.history.length, 'mensaje'))
+      if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(pl(resolvedSessionFiles.length, 'archivo'))
+      if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(pl(enrichedSessionContext.clinicalMemories.length, 'memoria'))
       emitStep('build_context', 'Contexto preparado', 'completed', ctxParts.length > 0 ? ctxParts.join(', ') : undefined)
 
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
