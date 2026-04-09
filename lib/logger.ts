@@ -46,59 +46,38 @@ const CONSOLE_LOG_LEVELS: Record<string, LogLevel[]> = {
   test: ['error']
 }
 
-// Console configuration
-if (isProduction && !FORCE_ENABLE_LOGS) {
-  const noop = () => {};
+// Console configuration — suppress client-side logs in production
+if (isProduction && !FORCE_ENABLE_LOGS && typeof window !== 'undefined') {
+  const noop = () => {}
+  const originalError = console.error
 
-  // Cliente (navegador) — suppress logs in the browser only
-  if (typeof window !== 'undefined') {
-    const originalError = console.error;
+  // Safely suppress console methods — some runtimes (Vercel) freeze console
+  const methods = [
+    'log', 'info', 'debug', 'warn', 'trace', 'table', 'dir', 'dirxml',
+    'group', 'groupCollapsed', 'groupEnd', 'time', 'timeEnd', 'timeLog',
+    'count', 'countReset', 'assert', 'clear'
+  ] as const
 
-    // Bloquear todos los métodos
-    console.log = noop;
-    console.info = noop;
-    console.debug = noop;
-    console.warn = noop;
-    console.trace = noop;
-    console.table = noop;
-    console.dir = noop;
-    console.dirxml = noop;
-    console.group = noop;
-    console.groupCollapsed = noop;
-    console.groupEnd = noop;
-    console.time = noop;
-    console.timeEnd = noop;
-    console.timeLog = noop;
-    console.count = noop;
-    console.countReset = noop;
-    console.assert = noop;
-    console.clear = noop;
+  for (const method of methods) {
+    try { (console as any)[method] = noop } catch { /* frozen — skip */ }
+  }
 
-    // Sanitizar console.error
+  // Sanitizar console.error
+  try {
     console.error = (...args: any[]) => {
       const sanitized = args.map(arg => {
         if (typeof arg === 'string') {
-          let s = arg;
+          let s = arg
           PROPRIETARY_KEYWORDS.forEach(keyword => {
-            s = s.replace(new RegExp(keyword, 'gi'), '[SYSTEM]');
-          });
-          return s;
+            s = s.replace(new RegExp(keyword, 'gi'), '[SYSTEM]')
+          })
+          return s
         }
-        return arg;
-      });
-      originalError('[ERROR]', ...sanitized);
-    };
-
-    // Prevenir restauración desde DevTools
-    Object.defineProperty(console, 'log', {
-      value: noop,
-      writable: false,
-      configurable: false
-    });
-
-    // Mostrar mensaje de seguridad
-    originalError('🔒 SECURITY: Console logging disabled in production');
-  }
+        return arg
+      })
+      originalError('[ERROR]', ...sanitized)
+    }
+  } catch { /* frozen — skip */ }
 }
 
 // 🔒 Lista de patrones sensibles que NUNCA deben loggearse
@@ -458,30 +437,6 @@ export const loggers = {
 export function legacyLog(message: string, ...args: any[]): void {
   if (!isProduction) {
     console.log(message, ...args)
-  }
-}
-
-/**
- * Sobrescribir console.* en cliente en producción
- */
-if (isProduction && typeof window !== 'undefined') {
-  // 🔒 BLOQUEO TOTAL DE LOGS EN CLIENTE EN PRODUCCIÓN
-
-  const noop = () => {}
-
-  // Bloquear todos los métodos de console excepto error
-  console.log = noop
-  console.info = noop
-  console.debug = noop
-  console.warn = noop
-
-  // Mantener console.error pero sanitizado
-  const originalError = console.error
-  console.error = (...args: any[]) => {
-    const sanitizedArgs = args.map(arg =>
-      typeof arg === 'string' ? sanitizeString(arg) : '[DATA]'
-    )
-    originalError(...sanitizedArgs)
   }
 }
 

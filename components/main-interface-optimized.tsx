@@ -82,7 +82,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     addStreamingResponseToHistory,
     loadSession,
     setSessionMeta,
-    resetSystem
+    resetSystem,
+    clearSendError,
   } = useHopeAISystem()
 
   // Selected patient for current session (must be before any conditional returns)
@@ -288,24 +289,29 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           // CRÍTICO: Pasar el sessionMeta para que el backend pueda cargar la ficha clínica del paciente
           // Pass ALL session files so previous message files are not lost
           const response = await sendMessage(message, useStreaming, allSessionFiles, systemState.sessionMeta)
-          
+
+          if (!response) {
+            // sendMessage returned null — error is in systemState.sendError
+            span.setAttribute("message.success", false)
+            span.setStatus({ code: 2, message: "Message send captured by sendError" })
+            return null
+          }
+
           // Limpiar archivos pendientes después del envío exitoso
           setPendingFiles([])
-          logger.info('🧹 Archivos pendientes limpiados después del envío exitoso')
-          
+
           const responseTime = Date.now() - startTime
           span.setAttribute("message.response_time", responseTime)
           span.setAttribute("message.success", true)
           span.setStatus({ code: 1, message: "Message sent successfully" })
-          
-          logger.info('✅ Mensaje enviado exitosamente')
+
           return response
         } catch (error) {
           span.setAttribute("message.success", false)
           span.setStatus({ code: 2, message: "Message send failed" })
           Sentry.captureException(error)
           logger.error('❌ Error enviando mensaje:', error)
-          throw error
+          // Don't re-throw — error is handled inline via sendError
         }
       }
     )
@@ -892,6 +898,8 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               fichaLoading={isFichaLoading}
               generateLoading={isGenerateFichaLoading}
               canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
+              sendError={systemState.sendError}
+              onClearSendError={clearSendError}
             />
             {patient && (
               <FichaClinicaPanel

@@ -37,6 +37,8 @@ interface HopeAISystemState {
   activeAgent: AgentType
   isLoading: boolean
   error: string | null
+  /** Inline send error — shown as a retry banner, NOT a full-screen crash */
+  sendError: { message: string; retryable: boolean } | null
   isInitialized: boolean
   history: ChatMessage[]
   // Nuevo estado de transición explícito
@@ -58,20 +60,21 @@ interface HopeAISystemState {
 interface UseHopeAISystemReturn {
   // Estado del sistema
   systemState: HopeAISystemState
-  
+
   // Gestión de sesiones
   createSession: (userId: string, mode: ClinicalMode, agent: AgentType) => Promise<string | null>
   loadSession: (sessionId: string) => Promise<boolean>
-  
+
   // Comunicación con enrutamiento inteligente
   sendMessage: (message: string, useStreaming?: boolean, attachedFiles?: ClinicalFile[], sessionMeta?: any) => Promise<any>
   switchAgent: (newAgent: AgentType) => Promise<boolean>
-  
+
   // Acceso al historial
   getHistory: () => ChatMessage[]
-  
+
   // Control de estado
   clearError: () => void
+  clearSendError: () => void
   resetSystem: () => void
   addStreamingResponseToHistory: (
     responseContent: string,
@@ -106,6 +109,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     activeAgent: 'socratico',
     isLoading: false,
     error: null,
+    sendError: null,
     isInitialized: false,
     history: [],
     transitionState: 'idle',
@@ -379,124 +383,102 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     attachedFiles?: ClinicalFile[],
     sessionMeta?: any
   ): Promise<any> => {
-    // 🔍 CRITICAL DIAGNOSTIC: Log what we receive at entry point
-    logger.info('🔍 [HOOK.sendMessage] ENTRY POINT:', {
-      messageLength: message.length,
-      useStreaming,
-      attachedFilesProvided: !!attachedFiles,
-      attachedFilesCount: attachedFiles?.length || 0,
-      attachedFilesDetails: attachedFiles?.map(f => ({
-        id: f.id,
-        name: f.name,
-        status: f.status,
-        geminiFileUri: f.geminiFileUri
-      })) || [],
-      sessionMetaProvided: !!sessionMeta,
-      timestamp: new Date().toISOString()
-    })
-
-    // Lazy-create session on first message send
-    // Use ref to always get the latest state (avoids stale closure)
     const currentState = systemStateRef.current
     let sessionIdToUse = currentState.sessionId
     let sessionMetaToUse = sessionMeta || currentState.sessionMeta
 
-    if (!sessionIdToUse) {
-      const userId = currentState.userId || 'anonymous'
-      const mode = currentState.mode || 'clinical_supervision'
-      const agent = currentState.activeAgent || 'socratico'
-
-      logger.info('🔄 Creando sesión lazy con contexto:', {
-        hasSessionMeta: !!currentState.sessionMeta,
-        patientRef: currentState.sessionMeta?.patient?.reference
-      })
-      
-      const newSessionId = await createSession(userId, mode, agent)
-      if (!newSessionId) {
-        throw new Error('No se pudo crear la sesión')
-      }
-      sessionIdToUse = newSessionId
-      lastSessionIdRef.current = newSessionId
-      
-      // CRÍTICO: Si hay sessionMeta (contexto del paciente) preestablecido,
-      // actualizarlo con el sessionId recién creado ANTES de enviarlo
-      if (currentState.sessionMeta) {
-        const updatedSessionMeta = {
-          ...currentState.sessionMeta,
-          sessionId: newSessionId
-        }
-        sessionMetaToUse = updatedSessionMeta
-        setSystemState(prev => ({
-          ...prev,
-          sessionId: newSessionId,
-          sessionMeta: updatedSessionMeta
-        }))
-        logger.info('✅ SessionMeta actualizado con sessionId:', newSessionId)
-        logger.info('🏥 Contexto del paciente:', updatedSessionMeta.patient?.reference)
-
-        // 🏥 FIX: Also persist the updated sessionMeta to Firestore immediately
-        // PERF: Fire-and-forget — persistence is not needed before the AI call
-        if (psychologistId) {
-          const patientId = resolvePatientId({
-            clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
-            sessionMeta: updatedSessionMeta,
-          })
-          saveSessionMetadata(psychologistId, patientId, {
-            sessionId: newSessionId,
-            userId: currentState.userId || psychologistId,
-            mode: currentState.mode || 'clinical_supervision',
-            activeAgent: currentState.activeAgent,
-            history: [],
-            metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
-            clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
-            sessionMeta: updatedSessionMeta,
-          } as ChatState).catch(err =>
-            logger.error('⚠️ Background: Failed to persist sessionMeta after lazy creation:', err)
-          )
-        }
-      }
+    // ─── OPTIMISTIC UI: Show user message IMMEDIATELY, before any async work ───
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      role: 'user',
+      content: message,
+      timestamp: new Date(),
+      agent: currentState.activeAgent,
+      fileReferences: attachedFiles?.map(file => file.id) || []
     }
+    setCurrentMessageBullets([])
 
-    try {
-      // Crear mensaje del usuario inmediatamente para mostrar en la UI
-      const userMessage: ChatMessage = {
-        id: `user_${Date.now()}`,
-        role: 'user',
-        content: message,
-        timestamp: new Date(),
-        agent: currentState.activeAgent,
-        // ARQUITECTURA OPTIMIZADA: Solo usar fileReferences con IDs
-        fileReferences: attachedFiles?.map(file => file.id) || []
+    setSystemState(prev => ({
+      ...prev,
+      history: [...prev.history, userMessage],
+      sessionMeta: prev.sessionMeta,
+      isLoading: true,
+      error: null,
+      sendError: null,
+      transitionState: 'thinking',
+      reasoningBullets: {
+        ...prev.reasoningBullets,
+        sessionId: sessionIdToUse || 'pending',
+        bullets: [],
+        isGenerating: true,
+        currentStep: 0
+      },
+      processingStatus: {
+        phase: 'analyzing_intent',
+        startedAt: new Date(),
+        toolExecutions: [],
+        bullets: [],
+        isComplete: false
       }
-      // NUEVA FUNCIONALIDAD: Limpiar bullets temporales del mensaje anterior
-      setCurrentMessageBullets([])
-      
-      // Actualizar el historial inmediatamente con el mensaje del usuario
-      setSystemState(prev => {
-        return {
-          ...prev,
-          history: [...prev.history, userMessage],
-          // 🏥 FIX: Explicitly preserve sessionMeta to prevent loss during state updates
-          sessionMeta: prev.sessionMeta,
-          isLoading: true,
-          error: null,
-          transitionState: 'thinking',
-          reasoningBullets: {
-            ...prev.reasoningBullets,
-            sessionId: sessionIdToUse!,
-            bullets: [], // Limpiar bullets globales para el nuevo mensaje
-            isGenerating: true,
-            currentStep: 0
-          },
-          processingStatus: {
-            phase: 'analyzing_intent',
-            startedAt: new Date(),
-            toolExecutions: [],
-            bullets: [],
-            isComplete: false
+    }))
+
+    // ─── All async work wrapped in try/catch — errors surface as retry, never crash ───
+    try {
+      // Lazy-create session on first message send
+      if (!sessionIdToUse) {
+        const userId = currentState.userId || 'anonymous'
+        const mode = currentState.mode || 'clinical_supervision'
+        const agent = currentState.activeAgent || 'socratico'
+
+        const newSessionId = await createSession(userId, mode, agent)
+        if (!newSessionId) {
+          throw new Error('No se pudo crear la sesión')
+        }
+        sessionIdToUse = newSessionId
+        lastSessionIdRef.current = newSessionId
+
+        if (currentState.sessionMeta) {
+          const updatedSessionMeta = {
+            ...currentState.sessionMeta,
+            sessionId: newSessionId
+          }
+          sessionMetaToUse = updatedSessionMeta
+          setSystemState(prev => ({
+            ...prev,
+            sessionId: newSessionId,
+            sessionMeta: updatedSessionMeta
+          }))
+
+          // Fire-and-forget persistence
+          if (psychologistId) {
+            const patientId = resolvePatientId({
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              sessionMeta: updatedSessionMeta,
+            })
+            saveSessionMetadata(psychologistId, patientId, {
+              sessionId: newSessionId,
+              userId: currentState.userId || psychologistId,
+              mode: currentState.mode || 'clinical_supervision',
+              activeAgent: currentState.activeAgent,
+              history: [],
+              metadata: { createdAt: new Date(), lastUpdated: new Date(), totalTokens: 0, fileReferences: [] },
+              clinicalContext: { patientId: updatedSessionMeta.patient.reference, sessionType: currentState.mode || 'clinical_supervision', confidentialityLevel: updatedSessionMeta.patient.confidentialityLevel || 'high' },
+              sessionMeta: updatedSessionMeta,
+            } as ChatState).catch(err =>
+              logger.error('⚠️ Background: Failed to persist sessionMeta after lazy creation:', err)
+            )
           }
         }
-      })
+      }
+
+      // Update reasoningBullets sessionId now that we have it (was 'pending' if lazy-created)
+      if (sessionIdToUse !== currentState.sessionId) {
+        setSystemState(prev => ({
+          ...prev,
+          sessionId: sessionIdToUse,
+          reasoningBullets: { ...prev.reasoningBullets, sessionId: sessionIdToUse! }
+        }))
+      }
 
       // 💾 Ensure session doc exists in Firestore (fire-and-forget, not on critical path)
       // NOTE: User message is NOT persisted here to avoid duplication.
@@ -934,7 +916,18 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           }
         } catch (error) {
           logger.error('❌ Error en stream generator:', error)
-          throw error
+          // Surface stream errors as inline sendError for retry
+          setSystemState(prev => ({
+            ...prev,
+            sendError: { message: 'Se perdió la conexión. Intenta de nuevo.', retryable: true },
+            isLoading: false,
+            transitionState: 'idle',
+            processingStatus: {
+              ...prev.processingStatus,
+              phase: 'error',
+              isComplete: true
+            }
+          }))
         }
       })()
 
@@ -953,7 +946,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       logger.error('❌ Error enviando mensaje:', error)
       setSystemState(prev => ({
         ...prev,
-        error: 'Error al enviar el mensaje',
+        sendError: { message: 'No se pudo enviar el mensaje. Intenta de nuevo.', retryable: true },
         isLoading: false,
         transitionState: 'idle',
         processingStatus: {
@@ -962,7 +955,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
           isComplete: true
         }
       }))
-      throw error
+      // Don't re-throw — the error is captured in sendError for inline retry
+      return null
     }
   }, [systemState.sessionId, systemState.activeAgent])
 
@@ -1003,6 +997,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     setSystemState(prev => ({ ...prev, error: null }))
   }, [])
 
+  const clearSendError = useCallback(() => {
+    setSystemState(prev => ({ ...prev, sendError: null }))
+  }, [])
+
   // Resetear sistema
   const resetSystem = useCallback(() => {
     setSystemState({
@@ -1012,6 +1010,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       activeAgent: 'socratico',
       isLoading: false,
       error: null,
+      sendError: null,
       isInitialized: systemState.isInitialized,
       history: [],
       transitionState: 'idle',
@@ -1151,6 +1150,7 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     switchAgent,
     getHistory,
     clearError,
+    clearSendError,
     resetSystem,
     addStreamingResponseToHistory,
     setSessionMeta,

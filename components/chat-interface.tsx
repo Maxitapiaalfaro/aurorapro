@@ -73,6 +73,9 @@ interface ChatInterfaceProps {
   canRevertFicha?: boolean
   reasoningBullets?: ReasoningBulletsState
   processingStatus?: MessageProcessingStatus
+  /** Inline send error — shown above input for retry */
+  sendError?: { message: string; retryable: boolean } | null
+  onClearSendError?: () => void
 }
 
 // Configuración de agentes ahora centralizada en agent-visual-config.ts
@@ -185,7 +188,7 @@ function FichaClinicaDisabledButton({
   )
 }
 
-export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, processingStatus }: ChatInterfaceProps) {
+export function ChatInterface({ activeAgent, isProcessing, isUploading = false, currentSession, sendMessage, uploadDocument, addStreamingResponseToHistory, pendingFiles = [], onRemoveFile, transitionState = 'idle', routingInfo, onGenerateFichaClinica, onCancelFichaGeneration, onDiscardFicha, onOpenFichaClinica, onOpenPatientLibrary, hasExistingFicha = false, fichaLoading = false, generateLoading = false, canRevertFicha = false, reasoningBullets, processingStatus, sendError, onClearSendError }: ChatInterfaceProps) {
   const { psychologistId } = useAuth()
   const [inputValue, setInputValue] = useState("")
   const [streamingResponse, setStreamingResponse] = useState("")
@@ -1559,6 +1562,24 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         {/* Ficha Clínica controls moved into input toolbar */}
         <div className={cn("w-full mx-auto relative z-10", chatContainerWidthClass)}>
           <div className="relative">
+            {/* Inline send error banner — retry-friendly, non-destructive */}
+            {sendError && (
+              <div className="absolute -top-14 left-0 right-0 px-1 md:px-0 z-20">
+                <div className="flex items-center justify-between bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 text-sm">
+                  <span className="text-destructive">{sendError.message}</span>
+                  {sendError.retryable && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive ml-2 h-7 px-2"
+                      onClick={onClearSendError}
+                    >
+                      Reintentar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Pending files compact bar (overlay above input, no extra bottom space) */}
             {pendingFiles.length > 0 && !isStreaming && (
               <div className="absolute -top-10 left-0 right-0 px-1 md:px-0">
