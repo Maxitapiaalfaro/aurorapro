@@ -1066,22 +1066,21 @@ export class HopeAISystem {
                 } else if (chunk.metadata.type === 'tool_call_complete') {
                   const startTime = toolStartTimes.get(chunk.metadata.toolName)
                   const durationMs = startTime ? Date.now() - startTime : undefined
-                  // Find and update the matching active step
-                  const stepIdx = [...collectedToolSteps].reverse().findIndex(
-                    s => s.toolName === chunk.metadata.toolName && s.status === 'active'
-                  )
-                  if (stepIdx >= 0) {
-                    const realIdx = collectedToolSteps.length - 1 - stepIdx
-                    collectedToolSteps[realIdx] = {
-                      ...collectedToolSteps[realIdx],
-                      status: 'completed',
-                      durationMs,
-                      result: {
-                        sourcesFound: chunk.metadata.sourcesFound,
-                        sourcesValidated: chunk.metadata.sourcesValidated,
-                      },
-                      sources: chunk.metadata.academicSources,
-                      completionDetail: chunk.metadata.completionDetail,
+                  // Find and update the matching active step (iterate backwards for most recent match)
+                  for (let i = collectedToolSteps.length - 1; i >= 0; i--) {
+                    if (collectedToolSteps[i].toolName === chunk.metadata.toolName && collectedToolSteps[i].status === 'active') {
+                      collectedToolSteps[i] = {
+                        ...collectedToolSteps[i],
+                        status: 'completed',
+                        durationMs,
+                        result: {
+                          sourcesFound: chunk.metadata.sourcesFound,
+                          sourcesValidated: chunk.metadata.sourcesValidated,
+                        },
+                        sources: chunk.metadata.academicSources,
+                        completionDetail: chunk.metadata.completionDetail,
+                      }
+                      break
                     }
                   }
                 }
@@ -1160,7 +1159,7 @@ export class HopeAISystem {
 
         // Add AI response to history (include metadata if available)
         const aiMessage: ChatMessage = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           content: responseContent,
           role: "model",
           agent: currentState.activeAgent,
