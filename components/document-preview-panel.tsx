@@ -253,21 +253,21 @@ const DocumentPreviewPanelComponent = ({
         <div className="flex items-center gap-1">
           {/* Edit/Preview toggle — only when document is ready and onSaveEdit is provided */}
           {canEdit && !isEditing && (
-            <Button variant="ghost" size="icon" onClick={handleStartEdit} className="h-7 w-7" title="Editar documento">
+            <Button variant="ghost" size="icon" onClick={handleStartEdit} className="h-7 w-7" title="Editar documento" aria-label="Editar documento">
               <Pencil className="h-4 w-4" />
             </Button>
           )}
           {isEditing && (
             <>
-              <Button variant="ghost" size="icon" onClick={handleCancelEdit} className="h-7 w-7" title="Cancelar edición">
+              <Button variant="ghost" size="icon" onClick={handleCancelEdit} className="h-7 w-7" title="Cancelar edición" aria-label="Cancelar edición">
                 <Eye className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleSaveEdit} disabled={isSaving} className="h-7 w-7" title="Guardar cambios">
+              <Button variant="ghost" size="icon" onClick={handleSaveEdit} disabled={isSaving} className="h-7 w-7" title="Guardar cambios" aria-label="Guardar cambios">
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               </Button>
             </>
           )}
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7" aria-label="Cerrar panel">
             <X className="h-4 w-4" />
           </Button>
         </div>
