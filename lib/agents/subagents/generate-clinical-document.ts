@@ -151,7 +151,7 @@ export async function executeGenerateClinicalDocument(
     const documentId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // ---- Streaming generation with real-time section preview ----
-    const result = await ai.models.generateContentStream({
+    const streamResult = await ai.models.generateContentStream({
       model: SUBAGENT_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
@@ -164,6 +164,10 @@ export async function executeGenerateClinicalDocument(
       },
     });
 
+    // Defensive: handle both direct async-iterable and object with .stream property
+    // (matches pattern used in streaming-handler.ts for chat.sendMessageStream)
+    const stream = (streamResult as any).stream || streamResult;
+
     // Accumulate full document + detect sections in real-time
     let accumulatedMarkdown = '';
     let currentSectionId: DocumentSectionId = 'header';
@@ -173,7 +177,7 @@ export async function executeGenerateClinicalDocument(
     const totalSections = expectedSections.length || 1;
     let completedSections = 0;
 
-    for await (const chunk of result) {
+    for await (const chunk of stream) {
       const text = chunk.text ?? '';
       if (!text) continue;
 
@@ -259,7 +263,21 @@ export async function executeGenerateClinicalDocument(
       response: { document, documentType, durationMs, documentId, sectionsGenerated: completedSections },
     };
   } catch (error) {
+    const durationMs = Date.now() - start;
     logger.error('[subagent:generate_clinical_document] Error:', error);
+
+    // Emit document_ready even on error so the panel opens and shows the error state
+    // This prevents the "tool executed but nothing happened" scenario
+    const errorDocumentId = `doc_err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const errorMarkdown = `## Error al Generar Documento\n\nNo se pudo generar el documento clínico tipo **${documentType}**.\n\n**Detalle:** ${String(error)}\n\nPor favor intenta nuevamente o proporciona más contexto de sesión.`;
+    ctx.onDocumentReady?.({
+      documentId: errorDocumentId,
+      markdown: errorMarkdown,
+      documentType: documentType || 'unknown',
+      availableFormats: ['markdown'],
+      durationMs,
+    });
+
     return {
       name: 'generate_clinical_document',
       response: { error: 'Error al generar documento clínico', details: String(error) },

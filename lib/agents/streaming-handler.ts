@@ -786,12 +786,45 @@ export async function handleStreamingWithTools(
             }
 
             // Build PreparedToolCalls with security checks
+            // Pass document callbacks for recursive calls too (e.g., generate_clinical_document may be called in a follow-up round)
+            // Create a fresh progress queue for this recursive round so events are drained in real-time
+            const recursiveProgressQueue = new ProgressQueue<ProgressEvent>();
+            const createRecursiveProgressCb = (toolName: string) => (message: string) => {
+              recursiveProgressQueue.push({ kind: 'progress', toolName, message });
+            };
+            const createRecursiveDocPreviewCb = (toolName: string) => (preview: DocumentPreviewEvent) => {
+              recursiveProgressQueue.push({ kind: 'document_preview', toolName, preview });
+            };
+            const createRecursiveDocReadyCb = (toolName: string) => (document: DocumentReadyEvent) => {
+              recursiveProgressQueue.push({ kind: 'document_ready', toolName, document });
+            };
+
             const recursivePreparedCalls: PreparedToolCall[] = followUpFunctionCalls.map((call: any) =>
-              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId)
+              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name))
             );
 
+            // Start execution without awaiting — drain progress concurrently (same pattern as initial round)
+            const recursiveExecutionPromise = executeToolsSafely(recursivePreparedCalls, { maxConcurrent: 3 })
+              .then(results => { recursiveProgressQueue.finish(); return results; })
+              .catch(err => { recursiveProgressQueue.finish(); throw err; });
+
+            // Drain recursive progress events in real-time
+            for await (const p of recursiveProgressQueue) {
+              switch (p.kind) {
+                case 'progress':
+                  yield { text: "", metadata: { type: "tool_call_progress", toolName: p.toolName, message: p.message } };
+                  break;
+                case 'document_preview':
+                  yield { text: "", metadata: { type: "document_preview", toolName: p.toolName, preview: p.preview } };
+                  break;
+                case 'document_ready':
+                  yield { text: "", metadata: { type: "document_ready", toolName: p.toolName, document: p.document } };
+                  break;
+              }
+            }
+
             // Execute with orchestrator (parallel read, sequential write)
-            const recursiveResponses = await executeToolsSafely(recursivePreparedCalls, { maxConcurrent: 3 });
+            const recursiveResponses = await recursiveExecutionPromise;
             const validRecursiveResponses = recursiveResponses.filter(r => r !== null);
 
             // Emit tool_call_complete for recursive calls
