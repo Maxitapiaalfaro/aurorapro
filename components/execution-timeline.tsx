@@ -136,8 +136,20 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
         )}
       >
         <div className="flex-shrink-0">{icon}</div>
-        <span className={step.status === 'active' ? 'animate-pulse' : ''}>{step.label}</span>
+        <span className={cn("flex-1 min-w-0", step.status === 'active' && 'animate-pulse')}>
+          {step.label}
+          {/* Inline detail for processing steps (e.g. "registro, 3 fichas, 2 memorias") */}
+          {step.detail && step.status === 'completed' && (
+            <span className="text-[10px] text-muted-foreground/50 ml-1">— {step.detail}</span>
+          )}
+        </span>
         {step.status === 'active' && <ElapsedTimer />}
+        {/* Duration badge on completed steps */}
+        {step.status === 'completed' && step.durationMs != null && step.durationMs > 0 && (
+          <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums flex-shrink-0">
+            {(step.durationMs / 1000).toFixed(1)}s
+          </span>
+        )}
       </motion.li>
     )
   }
@@ -168,6 +180,11 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
             {step.label}
           </span>
           {step.status === 'active' && <ElapsedTimer />}
+          {step.status === 'completed' && step.durationMs != null && step.durationMs > 0 && (
+            <span className="text-[10px] text-muted-foreground/40 tabular-nums flex-shrink-0 mr-1">
+              {(step.durationMs / 1000).toFixed(1)}s
+            </span>
+          )}
           {isOpen
             ? <ChevronDown className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
             : <ChevronRight className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
@@ -183,6 +200,11 @@ function TimelineStepItem({ step, defaultCollapsed }: { step: ExecutionStep; def
             {step.label}
           </span>
           {step.status === 'active' && <ElapsedTimer />}
+          {step.status === 'completed' && step.durationMs != null && step.durationMs > 0 && (
+            <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums flex-shrink-0">
+              {(step.durationMs / 1000).toFixed(1)}s
+            </span>
+          )}
         </div>
       )}
 

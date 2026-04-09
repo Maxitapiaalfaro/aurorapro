@@ -531,7 +531,8 @@ export class HopeAISystem {
     clientFileMetadata?: any[], // Metadata completa de archivos desde el cliente
     psychologistId?: string, // Verified userId from API route
     queryProfile?: QueryProfile, // Pipeline profiler
-    clientContext?: import('@/types/clinical-types').ClientContext // LOCAL-FIRST: pre-computed patient context
+    clientContext?: import('@/types/clinical-types').ClientContext, // LOCAL-FIRST: pre-computed patient context
+    onProcessingStep?: (step: import('@/types/clinical-types').ProcessingStepEvent) => void // Pipeline transparency
   ): Promise<{
     response: any
     updatedState: ChatState
@@ -539,9 +540,28 @@ export class HopeAISystem {
   }> {
     if (!this._initialized) await this.initialize()
 
+    // Helper: emit a processing step event to the client for pipeline transparency
+    // Tracks per-step elapsed time so the UI can show durations like Claude Code does.
+    const stepTimers = new Map<string, number>()
+    const emitStep = (id: string, label: string, status: 'active' | 'completed', detail?: string) => {
+      let durationMs: number | undefined
+      if (status === 'active') {
+        stepTimers.set(id, Date.now())
+      } else if (status === 'completed') {
+        const start = stepTimers.get(id)
+        if (start) durationMs = Date.now() - start
+      }
+      onProcessingStep?.({ id, label, status, durationMs, detail })
+    }
+    /** Spanish pluralization helper: returns `${n} ${word}` or `${n} ${word}s` */
+    const pl = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`
+
+    emitStep('session_load', 'Cargando sesión…', 'active')
+
     // Load current session state or create a new one if it doesn't exist
     let currentState = await this.storage.loadChatSession(sessionId)
     queryCheckpoint(queryProfile, 'session_loaded')
+    emitStep('session_load', 'Sesión cargada', 'completed')
     if (!currentState) {
       sessionLogger.info(`🆕 Creating new session: ${sessionId}`)
       currentState = {
@@ -606,6 +626,10 @@ export class HopeAISystem {
     const hasClientContext = !!clientContext
     if (hasClientContext) {
       sessionLogger.info('🚀 [LOCAL-FIRST] clientContext provided — skipping Firestore reads for patient/fichas/memories')
+      emitStep('patient_context', 'Contexto del paciente (local)…', 'active')
+      emitStep('patient_context', 'Contexto del paciente (local)', 'completed')
+    } else if (patientReference) {
+      emitStep('patient_context', 'Consultando historial clínico…', 'active')
     }
 
     const [
@@ -648,6 +672,21 @@ export class HopeAISystem {
         : Promise.resolve([] as any[]),
     ])
     queryCheckpoint(queryProfile, 'parallel_io_complete')
+    if (!hasClientContext && patientReference) {
+      // Build a personalized detail string showing what was loaded
+      const detailParts: string[] = []
+      if (patientRecord) detailParts.push('registro')
+      const fichaCount = (fichas as any[] | null)?.length ?? 0
+      if (fichaCount > 0) detailParts.push(pl(fichaCount, 'ficha'))
+      const memoryCount = (clinicalMemories as any[] | null)?.length ?? 0
+      if (memoryCount > 0) detailParts.push(pl(memoryCount, 'memoria'))
+      // Use the loaded patient record's displayName for a personalized label
+      const patientName = (patientRecord as any)?.displayName
+      const completedLabel = patientName
+        ? `Historial de ${patientName} cargado`
+        : 'Historial clínico cargado'
+      emitStep('patient_context', completedLabel, 'completed', detailParts.length > 0 ? detailParts.join(', ') : undefined)
+    }
 
     // 📁 DEBUG: Log fallback chain parameters
     sessionLogger.debug('📁 File resolution fallback chain', {
@@ -726,6 +765,8 @@ export class HopeAISystem {
     }
 
     try {
+      emitStep('build_context', 'Preparando contexto de conversación…', 'active')
+
       // 🔧 Context Window Manager — compress history BEFORE sending to agent
       const contextWindowManager = new ContextWindowManager({
         maxExchanges: 50,       // Preservar últimos 50 intercambios = 100 mensajes max para evitar pérdida de contexto
@@ -875,6 +916,13 @@ export class HopeAISystem {
 
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
       queryCheckpoint(queryProfile, 'gemini_session_ready')
+      // Personalized detail: show what went into the context
+      const ctxParts: string[] = []
+      if (currentState.history.length > 1) ctxParts.push(pl(currentState.history.length, 'mensaje'))
+      if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(pl(resolvedSessionFiles.length, 'archivo'))
+      if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(pl(enrichedSessionContext.clinicalMemories.length, 'memoria'))
+      emitStep('build_context', 'Contexto preparado', 'completed', ctxParts.length > 0 ? ctxParts.join(', ') : undefined)
+
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
         try {
           // CRITICAL FIX: Exclude the current user message (just pushed above) from the
@@ -892,6 +940,8 @@ export class HopeAISystem {
         }
       }
 
+      emitStep('model_call', 'Conectando con modelo de análisis…', 'active')
+
       const response = await clinicalAgentRouter.sendMessage(
         sessionId,
         message,
@@ -900,6 +950,8 @@ export class HopeAISystem {
         interactionId,  // 📊 Pass interaction ID for metrics tracking
         currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
+
+      emitStep('model_call', 'Modelo conectado', 'completed')
 
       // Save user message: O(1) append + metadata update (instead of rewriting ALL messages)
       currentState.metadata.lastUpdated = new Date()

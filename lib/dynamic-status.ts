@@ -42,11 +42,15 @@ export function generateDynamicStatus(
   const agentName = agentConfig.name // e.g. "Perspectiva", "Evidencia", "Memoria"
 
   switch (processingStatus.phase) {
-    case 'analyzing_intent':
+    case 'analyzing_intent': {
+      // Show the latest active processing step if available
+      const steps = processingStatus.processingSteps
+      const activeStep = steps ? [...steps].reverse().find(s => s.status === 'active') : undefined
       return {
-        message: 'Evaluando consulta y determinando modalidad de análisis...',
-        key: 'analyzing_intent'
+        message: activeStep?.label || 'Evaluando consulta y determinando modalidad de análisis...',
+        key: activeStep ? `analyzing_${activeStep.id}` : 'analyzing_intent'
       }
+    }
 
     case 'routing_agent':
       return {
@@ -178,13 +182,26 @@ export function snapshotExecutionTimeline(
   // 🔧 FIX: Capture ALL phases for complete audit trail
   // Based on buildLiveTimeline logic but marking all as 'completed'
 
-  // 1. Analyzing intent phase (if it occurred)
+  // 1. Analyzing intent phase — use server-side processing steps if available
   if (processingStatus.phase !== 'idle') {
-    steps.push({
-      id: 'analyzing_intent',
-      label: `Analizando consulta del usuario`,
-      status: 'completed'
-    })
+    const pSteps = processingStatus.processingSteps
+    if (pSteps && pSteps.length > 0) {
+      for (const ps of pSteps) {
+        steps.push({
+          id: `ps_${ps.id}`,
+          label: ps.label,
+          status: 'completed',
+          durationMs: ps.durationMs,
+          detail: ps.detail,
+        })
+      }
+    } else {
+      steps.push({
+        id: 'analyzing_intent',
+        label: `Analizando consulta del usuario`,
+        status: 'completed'
+      })
+    }
   }
 
   // 2. Routing / agent selection
@@ -283,14 +300,29 @@ export function buildLiveTimeline(
   const steps: ExecutionStep[] = []
   const currentPhaseIdx = PHASE_ORDER.indexOf(processingStatus.phase)
 
-  // 1. Analyzing intent
+  // 1. Analyzing intent — broken down into server-side processing sub-steps
   if (currentPhaseIdx >= PHASE_ORDER.indexOf('analyzing_intent')) {
-    const isActive = processingStatus.phase === 'analyzing_intent'
-    steps.push({
-      id: 'analyzing_intent',
-      label: `Analizando consulta…`,
-      status: isActive ? 'active' : 'completed'
-    })
+    const pSteps = processingStatus.processingSteps
+    if (pSteps && pSteps.length > 0) {
+      // Render each server-emitted processing step as its own timeline entry
+      for (const ps of pSteps) {
+        steps.push({
+          id: `ps_${ps.id}`,
+          label: ps.label,
+          status: ps.status === 'active' ? 'active' : 'completed',
+          durationMs: ps.durationMs,
+          detail: ps.detail,
+        })
+      }
+    } else {
+      // Fallback: show a single generic "analyzing" step before sub-steps arrive
+      const isActive = processingStatus.phase === 'analyzing_intent'
+      steps.push({
+        id: 'analyzing_intent',
+        label: `Analizando consulta…`,
+        status: isActive ? 'active' : 'completed'
+      })
+    }
   }
 
   // 2. Routing / agent selection

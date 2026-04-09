@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ExecutionTimeline, ClientContext } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatMessage, ChatState, ClinicalFile, ReasoningBullet, ReasoningBulletsState, MessageProcessingStatus, ToolExecutionEvent, ProcessingPhase, ProcessingStepEvent, ExecutionTimeline, ClientContext } from "@/types/clinical-types"
 import {
   findSessionById,
   saveSessionMetadata,
@@ -766,6 +766,23 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
             {
               onBullet: handleBulletUpdate,
               onAgentSelected: handleAgentSelected,
+              onProcessingStep: (step: ProcessingStepEvent) => {
+                setSystemState(prev => {
+                  const existing = prev.processingStatus.processingSteps || []
+                  // Update existing step or append new one
+                  const idx = existing.findIndex(s => s.id === step.id)
+                  const updated = idx >= 0
+                    ? [...existing.slice(0, idx), step, ...existing.slice(idx + 1)]
+                    : [...existing, step]
+                  return {
+                    ...prev,
+                    processingStatus: {
+                      ...prev.processingStatus,
+                      processingSteps: updated
+                    }
+                  }
+                })
+              },
               onToolExecution: (tool: ToolExecutionEvent) => {
                 logger.info('🔧 Tool execution event:', tool.toolName, tool.status)
                 setSystemState(prev => {

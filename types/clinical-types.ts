@@ -46,6 +46,8 @@ export interface ExecutionStep {
   query?: string
   /** Optional expandable detail text shown when the step accordion is opened */
   detail?: string
+  /** Milliseconds the step took (shown as a badge on completed steps) */
+  durationMs?: number
   result?: {
     sourcesFound?: number
     sourcesValidated?: number
@@ -97,6 +99,18 @@ export type ProcessingPhase =
   | 'complete'
   | 'error'
 
+// Processing step event: emitted during server-side pipeline to provide
+// visibility into what happens between "message sent" and "first response chunk"
+export interface ProcessingStepEvent {
+  id: string
+  label: string
+  status: 'active' | 'completed'
+  /** Milliseconds the step took (set on 'completed' events) */
+  durationMs?: number
+  /** Optional secondary detail (e.g. "3 memorias, 1 ficha") */
+  detail?: string
+}
+
 // Tool execution event emitted during processing
 export interface ToolExecutionEvent {
   id: string
@@ -131,6 +145,8 @@ export interface MessageProcessingStatus {
   toolExecutions: ToolExecutionEvent[]
   bullets: ReasoningBullet[]
   isComplete: boolean
+  /** Server-side processing steps visible during the analyzing_intent phase */
+  processingSteps?: ProcessingStepEvent[]
 }
 
 export interface BulletGenerationContext {
