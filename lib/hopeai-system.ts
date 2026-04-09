@@ -1496,12 +1496,6 @@ export class HopeAISystem {
   }
 
   /**
-   * 🧠 CLINICAL MEMORY: Extract observations, patterns and preferences from model responses
-   * and persist them as inter-session memories. Fire-and-forget — never blocks user flow.
-   *
-   * Runs every 3rd user message for a patient to avoid overloading Firestore writes.
-   */
-  /**
    * 🧠 LLM-POWERED MEMORY EXTRACTION (replaces regex-based extraction)
    *
    * Uses a Gemini sub-agent (gemini-3.1-flash-lite-preview) to extract
