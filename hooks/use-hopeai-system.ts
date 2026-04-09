@@ -14,6 +14,7 @@ import {
   updateClinicalDocumentContent,
   loadSessionDocuments,
   getActivePatientMemories,
+  addMessage,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
@@ -84,7 +85,9 @@ interface UseHopeAISystemReturn {
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
-    executionTimeline?: ExecutionTimeline
+    executionTimeline?: ExecutionTimeline,
+    sessionIdOverride?: string,
+    serverAiMessageId?: string
   ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
   
@@ -1156,7 +1159,8 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
     executionTimelineForThisResponse?: ExecutionTimeline,
-    sessionIdOverride?: string
+    sessionIdOverride?: string,
+    serverAiMessageId?: string
   ): Promise<void> => {
     // Resolver sessionId objetivo de forma robusta
     let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
@@ -1176,9 +1180,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       return
     }
 
-    // Crear el mensaje AI
+    // Crear el mensaje AI (usar el ID del servidor si está disponible para coordinación con Firestore)
     const aiMessage: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: serverAiMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       content: responseContent,
       role: "model",
       agent: agent,
@@ -1219,12 +1223,18 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     logger.info('✅ Respuesta de streaming agregada al historial')
     logger.info('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
-    // NOTE: AI message is NOT persisted from the frontend.
-    // The server persists AI messages (with full metadata: groundingUrls, executionTimeline)
-    // as part of the wrappedStream's finally block in hopeai-system.ts.
-    // Firestore client-side offline persistence (persistentLocalCache with IndexedDB) ensures
-    // that previously loaded messages are cached locally for instant access on reload.
-  }, [systemState.sessionId, currentMessageBullets])
+    // 💾 Persist the client-side AI message to Firestore using the server's message ID.
+    // This overwrites the server's initial write with richer metadata:
+    // - Full executionTimeline (processingSteps + tool steps) from snapshotExecutionTimeline
+    // - reasoningBullets from the streaming session
+    // The server writes first; the client writes ~100ms later with the same doc ID (idempotent).
+    if (serverAiMessageId && psychologistId && targetSessionId) {
+      const patientId = resolvePatientId(systemStateRef.current as Partial<ChatState>)
+      addMessage(psychologistId, patientId, targetSessionId, aiMessage).catch(err =>
+        logger.warn('⚠️ Client-side AI message Firestore write failed (non-blocking):', err)
+      )
+    }
+  }, [systemState.sessionId, currentMessageBullets, psychologistId])
 
   // Establecer contexto del paciente
   const setSessionMeta = useCallback((sessionMeta: any) => {

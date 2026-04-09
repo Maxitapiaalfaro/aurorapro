@@ -244,6 +244,9 @@ export async function POST(request: NextRequest) {
 
             let fullText = ''
             let chunkCount = 0
+            // Capture the server-assigned AI message ID so the client can reuse it
+            // for an idempotent Firestore write with richer client-side metadata.
+            const predictedAiMessageId: string | undefined = (result.response as any)?.predictedAiMessageId
 
             try {
               for await (const chunk of result.response) {
@@ -337,7 +340,8 @@ export async function POST(request: NextRequest) {
                   sessionId: result.updatedState.sessionId,
                   response: {
                     text: fullText,
-                    routingInfo: (result.response as any).routingInfo
+                    routingInfo: (result.response as any).routingInfo,
+                    aiMessageId: predictedAiMessageId,
                   },
                   updatedState: result.updatedState,
                   optimized: true

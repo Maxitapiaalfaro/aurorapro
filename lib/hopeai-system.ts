@@ -1031,6 +1031,10 @@ export class HopeAISystem {
         // Wrap the async generator to save the assistant response to history
         // when the stream is fully consumed by the API route
         const self = this
+        // Pre-generate the AI message ID so it can be exposed on the generator
+        // and reused by the client-side addStreamingResponseToHistory for an
+        // idempotent Firestore merge (client writes richer metadata on top).
+        const aiMessageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
         const wrappedStream = (async function* () {
           let accumulatedText = ''
           // ── METADATA COLLECTION: Accumulate metadata as it flows through chunks ──
@@ -1105,7 +1109,7 @@ export class HopeAISystem {
                   : undefined
 
               const aiMessage: ChatMessage = {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                id: aiMessageId,
                 content: accumulatedText,
                 role: "model",
                 agent: currentState.activeAgent,
@@ -1146,8 +1150,11 @@ export class HopeAISystem {
           }
         })();
         
-        // Preserve routing info on the wrapped stream
-        (wrappedStream as any).routingInfo = routingInfo
+        // Preserve routing info and the predicted AI message ID on the wrapped stream
+        // so the API route can include the ID in the SSE response event.
+        // The client will use this ID when writing the richer message to Firestore.
+        ;(wrappedStream as any).routingInfo = routingInfo
+        ;(wrappedStream as any).predictedAiMessageId = aiMessageId
         
         return { 
           response: wrappedStream, 

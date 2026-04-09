@@ -621,9 +621,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
   }
 
-  // Crear objeto de sesión compatible con ChatInterface
-  const compatibleSession = systemState.sessionId ? {
-    sessionId: systemState.sessionId,
+  // Crear objeto de sesión compatible con ChatInterface.
+  // Importante: crear el objeto incluso cuando sessionId es null pero hay mensajes en el historial,
+  // para que los mensajes optimistas del usuario se muestren ANTES de que se resuelva createSession().
+  const compatibleSession = (systemState.sessionId || systemState.history.length > 0) ? {
+    sessionId: systemState.sessionId || 'pending',
     userId: systemState.userId,
     mode: systemState.mode,
     activeAgent: systemState.activeAgent,
