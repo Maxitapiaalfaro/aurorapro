@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { ChatInterface } from "@/components/chat-interface"
 import { DocumentPreviewPanel } from "@/components/document-preview-panel"
 import { Sidebar } from "@/components/sidebar"
@@ -642,7 +643,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Estados de carga y error
   if (!systemState.isInitialized) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
+      <div className="flex h-screen w-full items-center justify-center bg-background animate-in fade-in duration-300">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-foreground/80">Inicializando HopeAI System...</p>
@@ -815,7 +816,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   return (
-    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans">
+    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans animate-in fade-in duration-500">
       {!isMobile && (
         <Sidebar
           isOpen={sidebarOpen} 
@@ -938,18 +939,28 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           />
 
           {/* Floating button to reopen document panel when a document exists but panel is closed */}
-          {!isDocumentPanelOpen && (documentReady || documentPreview) && (
-            <Button
-              onClick={openDocumentPanel}
-              variant="default"
-              size="sm"
-              className="fixed bottom-6 right-6 z-50 shadow-lg gap-2 rounded-full px-4 py-2"
-              title="Ver documento generado"
-            >
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Ver documento</span>
-            </Button>
-          )}
+          <AnimatePresence>
+            {!isDocumentPanelOpen && (documentReady || documentPreview) && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                className="fixed bottom-6 right-6 z-50"
+              >
+                <Button
+                  onClick={openDocumentPanel}
+                  variant="default"
+                  size="sm"
+                  className="shadow-lg gap-2 rounded-full px-4 py-2"
+                  title="Ver documento generado"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Ver documento</span>
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
 
