@@ -32,7 +32,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
-import { ExecutionTimeline } from "@/components/execution-timeline"
+import { AgenticTransparencyFlow } from "@/components/agentic-transparency-flow"
 import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-status"
 
 
@@ -1050,7 +1050,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   {/* Persistent execution timeline for historical messages */}
                   {message.role === 'model' && message.executionTimeline && (
                     <div className="px-3 md:px-4 pb-1 pt-1">
-                      <ExecutionTimeline
+                      <AgenticTransparencyFlow
                         timeline={message.executionTimeline}
                         defaultCollapsed={true}
                       />
@@ -1279,7 +1279,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {/* Stays visible during the entire streaming lifecycle; historical messages take over after */}
                 {processingStatus && processingStatus.phase !== 'idle' && (
                   <div className="px-4 py-2">
-                    <ExecutionTimeline
+                    <AgenticTransparencyFlow
                       timeline={buildLiveTimeline(
                         processingStatus,
                         activeAgent,
