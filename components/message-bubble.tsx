@@ -42,7 +42,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")} role="article" aria-label={isUser ? "Mensaje del usuario" : `Mensaje de ${config.name}`}>
       {!isUser && (
         <div
           className={cn(
@@ -50,13 +50,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             config.bgColor,
             config.borderColor,
           )}
+          aria-hidden="true"
         >
           <IconComponent className={cn("h-4 w-4", config.textColor)} />
         </div>
       )}
 
       <div className={cn("max-w-[70%] space-y-1", isUser && "items-end")}>
-        {!isUser && <div className={cn("text-xs font-medium px-1", config.textColor)}>{config.name}</div>}
+        {!isUser && <div className={cn("text-xs font-medium px-1", config.textColor)} aria-label={`Agente: ${config.name}`}>{config.name}</div>}
 
         <Card
           className={cn(
@@ -66,11 +67,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               : config.bgColor,
             !isUser && `border ${config.borderColor} hover:bg-secondary/40`,
           )}
+          role="region"
+          aria-label={`Contenido del mensaje`}
         >
           <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
 
           {message.attachments && message.attachments.length > 0 && (
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-2" role="list" aria-label={`${message.attachments.length} archivo${message.attachments.length !== 1 ? 's' : ''} adjunto${message.attachments.length !== 1 ? 's' : ''}`}>
               {message.attachments.map((attachment, index) => {
                 const FileIcon = getFileIcon(attachment.type)
                 return (
@@ -80,6 +83,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                       "flex items-center gap-2 p-2 rounded border",
                       isUser ? "bg-clarity-blue-500 dark:bg-clarity-blue-600 border-clarity-blue-400 dark:border-clarity-blue-500" : "bg-secondary border-border",
                     )}
+                    role="listitem"
+                    aria-label={`Archivo adjunto: ${attachment.name}, tamaño ${formatFileSize(attachment.size)}`}
                   >
                     <FileIcon className="h-4 w-4 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -93,7 +98,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
         </Card>
 
-        <div className={cn("text-xs text-muted-foreground px-1", isUser && "text-right")}>
+        <div className={cn("text-xs text-muted-foreground px-1", isUser && "text-right")} aria-label={`Hora: ${message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}>
           {message.timestamp.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -102,7 +107,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]">
+        <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]" aria-label="Avatar del usuario">
           <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
         </div>
       )}

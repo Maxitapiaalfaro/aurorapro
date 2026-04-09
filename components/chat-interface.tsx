@@ -909,13 +909,17 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const TooltipIconComponent = tooltipConfig.icon
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-background relative">
+    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-background relative" role="main" aria-label="Interfaz de chat con asistente AI">
       <ScrollArea
         ref={scrollAreaRef}
         className={cn("flex-1 pt-0 overscroll-contain")}
         style={{
           paddingBottom: '0px' // Remove padding to allow content to extend behind input gradient
         }}
+        role="log"
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="Historial de conversación"
       >
         <div className={cn("w-full mx-auto h-full flex flex-col space-y-5 md:space-y-8 pt-2 md:pt-3 pb-36", chatContainerWidthClass)}>
           {/* Indicador de mensajes anteriores */}
@@ -1566,6 +1570,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               size="icon"
               variant="ghost"
               title={isStreaming ? "Nuevo contenido - Ir al final" : "Ir al final de la conversación"}
+              aria-label={isStreaming ? "Nuevo contenido disponible, ir al final de la conversación" : "Ir al final de la conversación"}
             >
               <CaretDownIcon className="h-5 w-5" weight="bold" />
             </Button>
@@ -1584,6 +1589,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   exit={{ opacity: 0, y: 8 }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
                   className="absolute -top-14 left-0 right-0 px-1 md:px-0 z-20"
+                  role="alert"
+                  aria-live="assertive"
+                  id="send-error-message"
                 >
                   <div className="flex items-center justify-between bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2 text-sm">
                     <span className="text-destructive">{sendError.message}</span>
@@ -1642,6 +1650,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   className="w-full min-h-[52px] resize-none border-0 bg-transparent px-4 md:px-5 py-3 md:pr-32 text-base placeholder:text-muted-foreground focus:ring-0 focus-visible:ring-0 font-sans overflow-hidden"
                   rows={1}
                   disabled={isProcessing || isTranscribing}
+                  aria-label="Campo de texto para mensaje"
+                  aria-describedby={sendError ? "send-error-message" : undefined}
                   style={{
                     boxShadow: 'none',
                   }}
@@ -1754,18 +1764,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   <Button
                     onClick={() => handleSendMessage()}
                     disabled={
-                      !inputValue.trim() || 
-                      isProcessing || 
+                      !inputValue.trim() ||
+                      isProcessing ||
                       isStreaming ||
                       isUploading ||
                       isTranscribing ||
-                      pendingFiles.some(file => 
-                        (file as any).processingStatus && 
+                      pendingFiles.some(file =>
+                        (file as any).processingStatus &&
                         (file as any).processingStatus === 'processing'
                       )
                     }
                     size="icon"
                     className={cn("h-10 w-10 md:h-12 md:w-12", config.button.bg, config.button.hoverBg, config.button.text)}
+                    aria-label="Enviar mensaje"
                   >
                     <PaperPlaneRightIcon className="h-5 w-5" />
                   </Button>

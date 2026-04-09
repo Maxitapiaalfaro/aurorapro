@@ -12,18 +12,26 @@ import { MotionProvider } from '@/providers/motion-provider'
 import { IBM_Plex_Serif, IBM_Plex_Sans } from 'next/font/google'
 
 // Fuentes académicas profesionales para contexto clínico
+// Optimización: Reducir pesos cargados (400/600), usar CSS para 500
+// IBM Plex no tiene variable fonts en Google Fonts, pero next/font optimiza automáticamente
 const ibmPlexSerif = IBM_Plex_Serif({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-sans',
+  weight: ['400', '600'],
+  variable: '--font-serif',
   display: 'swap',
+  preload: true,
+  fallback: ['Georgia', 'serif'],
+  adjustFontFallback: true,
 })
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '600'],
   variable: '--font-sans',
   display: 'swap',
+  preload: true,
+  fallback: ['system-ui', '-apple-system', 'sans-serif'],
+  adjustFontFallback: true,
 })
 
 export const metadata: Metadata = {
@@ -42,7 +50,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="/api/send-message" />
       </head>
-      <body className={`${ibmPlexSans.variable} ${ibmPlexSans.variable}`}>
+      <body className={`${ibmPlexSans.variable} ${ibmPlexSerif.variable}`}>
         <AuthProvider>
           <MotionProvider>
             <DisplayPreferencesProvider>
