@@ -541,8 +541,17 @@ export class HopeAISystem {
     if (!this._initialized) await this.initialize()
 
     // Helper: emit a processing step event to the client for pipeline transparency
-    const emitStep = (id: string, label: string, status: 'active' | 'completed') => {
-      onProcessingStep?.({ id, label, status })
+    // Tracks per-step elapsed time so the UI can show durations like Claude Code does.
+    const stepTimers = new Map<string, number>()
+    const emitStep = (id: string, label: string, status: 'active' | 'completed', detail?: string) => {
+      let durationMs: number | undefined
+      if (status === 'active') {
+        stepTimers.set(id, Date.now())
+      } else if (status === 'completed') {
+        const start = stepTimers.get(id)
+        if (start) durationMs = Date.now() - start
+      }
+      onProcessingStep?.({ id, label, status, durationMs, detail })
     }
 
     emitStep('session_load', 'Cargando sesión…', 'active')
@@ -662,7 +671,17 @@ export class HopeAISystem {
     ])
     queryCheckpoint(queryProfile, 'parallel_io_complete')
     if (!hasClientContext && patientReference) {
-      emitStep('patient_context', 'Historial clínico cargado', 'completed')
+      // Build a personalized detail string showing what was loaded
+      const detailParts: string[] = []
+      if (patientRecord) detailParts.push('registro')
+      if (fichas && (fichas as any[]).length > 0) detailParts.push(`${(fichas as any[]).length} ficha${(fichas as any[]).length !== 1 ? 's' : ''}`)
+      if (clinicalMemories && (clinicalMemories as any[]).length > 0) detailParts.push(`${(clinicalMemories as any[]).length} memoria${(clinicalMemories as any[]).length !== 1 ? 's' : ''}`)
+      // Use the loaded patient record's displayName for a personalized label
+      const patientName = (patientRecord as any)?.displayName
+      const completedLabel = patientName
+        ? `Historial de ${patientName} cargado`
+        : 'Historial clínico cargado'
+      emitStep('patient_context', completedLabel, 'completed', detailParts.length > 0 ? detailParts.join(', ') : undefined)
     }
 
     // 📁 DEBUG: Log fallback chain parameters
@@ -893,7 +912,12 @@ export class HopeAISystem {
 
       // Ensure the Gemini chat session exists in the router (lazy creation / cross-invocation recovery)
       queryCheckpoint(queryProfile, 'gemini_session_ready')
-      emitStep('build_context', 'Contexto preparado', 'completed')
+      // Personalized detail: show what went into the context
+      const ctxParts: string[] = []
+      if (currentState.history.length > 1) ctxParts.push(`${currentState.history.length} mensajes`)
+      if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(`${resolvedSessionFiles.length} archivo${resolvedSessionFiles.length !== 1 ? 's' : ''}`)
+      if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(`${enrichedSessionContext.clinicalMemories.length} memoria${enrichedSessionContext.clinicalMemories.length !== 1 ? 's' : ''}`)
+      emitStep('build_context', 'Contexto preparado', 'completed', ctxParts.length > 0 ? ctxParts.join(', ') : undefined)
 
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
         try {
@@ -922,6 +946,8 @@ export class HopeAISystem {
         interactionId,  // 📊 Pass interaction ID for metrics tracking
         currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
+
+      emitStep('model_call', 'Modelo conectado', 'completed')
 
       // Save user message: O(1) append + metadata update (instead of rewriting ALL messages)
       currentState.metadata.lastUpdated = new Date()

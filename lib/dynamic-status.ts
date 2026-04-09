@@ -45,7 +45,7 @@ export function generateDynamicStatus(
     case 'analyzing_intent': {
       // Show the latest active processing step if available
       const steps = processingStatus.processingSteps
-      const activeStep = steps?.findLast(s => s.status === 'active')
+      const activeStep = steps ? [...steps].reverse().find(s => s.status === 'active') : undefined
       return {
         message: activeStep?.label || 'Evaluando consulta y determinando modalidad de análisis...',
         key: activeStep ? `analyzing_${activeStep.id}` : 'analyzing_intent'
@@ -190,7 +190,9 @@ export function snapshotExecutionTimeline(
         steps.push({
           id: `ps_${ps.id}`,
           label: ps.label,
-          status: 'completed'
+          status: 'completed',
+          durationMs: ps.durationMs,
+          detail: ps.detail,
         })
       }
     } else {
@@ -307,7 +309,9 @@ export function buildLiveTimeline(
         steps.push({
           id: `ps_${ps.id}`,
           label: ps.label,
-          status: ps.status === 'active' ? 'active' : 'completed'
+          status: ps.status === 'active' ? 'active' : 'completed',
+          durationMs: ps.durationMs,
+          detail: ps.detail,
         })
       }
     } else {

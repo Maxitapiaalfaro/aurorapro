@@ -46,6 +46,8 @@ export interface ExecutionStep {
   query?: string
   /** Optional expandable detail text shown when the step accordion is opened */
   detail?: string
+  /** Milliseconds the step took (shown as a badge on completed steps) */
+  durationMs?: number
   result?: {
     sourcesFound?: number
     sourcesValidated?: number
@@ -103,6 +105,10 @@ export interface ProcessingStepEvent {
   id: string
   label: string
   status: 'active' | 'completed'
+  /** Milliseconds the step took (set on 'completed' events) */
+  durationMs?: number
+  /** Optional secondary detail (e.g. "3 memorias, 1 ficha") */
+  detail?: string
 }
 
 // Tool execution event emitted during processing
