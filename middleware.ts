@@ -88,7 +88,7 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
       "img-src 'self' data: https: blob:",
       "font-src 'self' data:",
       "connect-src 'self' https://*.sentry.io https://*.google.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://appleid.apple.com",
-      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com https://www.google.com",
+      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self' https://accounts.google.com https://appleid.apple.com"

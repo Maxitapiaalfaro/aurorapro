@@ -33,7 +33,7 @@ googleProvider.setCustomParameters({ prompt: 'select_account' })
 
 /**
  * Sign in with Google via popup.
- * Falls back to redirect automatically if popup is blocked (mobile browsers).
+ * Throws if the popup is blocked — the caller should handle the error.
  */
 export async function signInWithGoogle() {
   return signInWithPopup(auth, googleProvider)

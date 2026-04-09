@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -103,7 +103,6 @@ function PhoneAuthFlow({
   const [otp, setOtp] = useState("")
   const [loading, setLoading] = useState(false)
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     return () => {
@@ -154,7 +153,7 @@ function PhoneAuthFlow({
         <button
           type="button"
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          onClick={() => { setStep("input"); setOtp(""); onError("") }}
+          onClick={() => { setStep("input"); setOtp(""); setConfirmationResult(null); onError("") }}
         >
           <ArrowLeft className="h-4 w-4" />
           Cambiar número
@@ -227,7 +226,7 @@ function PhoneAuthFlow({
       </Button>
 
       {/* Invisible reCAPTCHA container */}
-      <div id="recaptcha-container" ref={recaptchaContainerRef} />
+      <div id="recaptcha-container" />
     </div>
   )
 }
