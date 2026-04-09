@@ -83,14 +83,15 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   if (process.env.NODE_ENV === 'production') {
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://www.gstatic.com https://apis.google.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.sentry.io https://*.google.com https://*.googleapis.com",
+      "connect-src 'self' https://*.sentry.io https://*.google.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://appleid.apple.com",
+      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
-      "form-action 'self'"
+      "form-action 'self' https://accounts.google.com https://appleid.apple.com"
     ].join('; ');
     
     headers.set('Content-Security-Policy', csp);
