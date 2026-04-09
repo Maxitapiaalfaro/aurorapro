@@ -638,6 +638,7 @@ export class HopeAISystem {
       patientRecord,
       fichas,
       clinicalMemories,
+      priorSessionSummaries,
     ] = await Promise.all([
       // 1. Session files from server storage
       this.getPendingFilesForSession(sessionId),
@@ -667,6 +668,20 @@ export class HopeAISystem {
             m.getRelevantMemories(currentState.userId, patientReference, message, 5)
           ).catch((err: unknown) => {
             sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
+            return [] as any[]
+          })
+        : Promise.resolve([] as any[]),
+
+      // 6. Prior session summaries — progressive context loading (Level 1)
+      // Loads AI-generated summaries of recent sessions without reading all messages.
+      (patientReference && currentState.userId)
+        ? this.storage.loadPriorSessionSummaries(
+            currentState.userId,
+            patientReference,
+            sessionId,
+            5, // Max 5 prior session summaries
+          ).catch((err: unknown) => {
+            sessionLogger.warn('⚠️ Failed to load prior session summaries (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
             return [] as any[]
           })
         : Promise.resolve([] as any[]),
@@ -839,6 +854,7 @@ export class HopeAISystem {
         patient_reference?: string;
         patient_summary?: string;
         clinicalMemories?: any[];
+        priorSessionSummaries?: any[];
       } = {
         patient_reference: patientReference,
         patient_summary: patientSummary,
@@ -852,6 +868,15 @@ export class HopeAISystem {
       if (effectiveMemories.length > 0) {
         enrichedSessionContext.clinicalMemories = effectiveMemories
         sessionLogger.info(`🧠 Clinical memories injected: ${effectiveMemories.length} memories for patient ${patientReference}${clientContext ? ' (client-ranked)' : ''}`)
+      }
+
+      // PROGRESSIVE CONTEXT: Inject prior session summaries (Level 1 — no message reads)
+      const effectiveSummaries = (priorSessionSummaries as any[])?.filter(
+        (s: any) => s.sessionSummary
+      ).map((s: any) => s.sessionSummary) || []
+      if (effectiveSummaries.length > 0) {
+        enrichedSessionContext.priorSessionSummaries = effectiveSummaries
+        sessionLogger.info(`📋 Prior session summaries injected: ${effectiveSummaries.length} summaries for patient ${patientReference}`)
       }
 
       // ─── Operational metadata (now synchronous — uses pre-fetched or client-provided data) ───
@@ -900,6 +925,7 @@ export class HopeAISystem {
         patient_summary: patientSummary,
         operationalMetadata: operationalMetadata,
         clinicalMemories: enrichedSessionContext.clinicalMemories || [],
+        priorSessionSummaries: enrichedSessionContext.priorSessionSummaries || [],
       }
 
       sessionLogger.debug(`🏥 SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
@@ -921,6 +947,7 @@ export class HopeAISystem {
       if (currentState.history.length > 1) ctxParts.push(pl(currentState.history.length, 'mensaje'))
       if (resolvedSessionFiles && resolvedSessionFiles.length > 0) ctxParts.push(pl(resolvedSessionFiles.length, 'archivo'))
       if (enrichedSessionContext.clinicalMemories && enrichedSessionContext.clinicalMemories.length > 0) ctxParts.push(pl(enrichedSessionContext.clinicalMemories.length, 'memoria'))
+      if (enrichedSessionContext.priorSessionSummaries && enrichedSessionContext.priorSessionSummaries.length > 0) ctxParts.push(pl(enrichedSessionContext.priorSessionSummaries.length, 'resumen previo'))
       emitStep('build_context', 'Contexto preparado', 'completed', ctxParts.length > 0 ? ctxParts.join(', ') : undefined)
 
       if (!clinicalAgentRouter.getActiveChatSessions().has(sessionId)) {
