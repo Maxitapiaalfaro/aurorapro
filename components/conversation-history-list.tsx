@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import { 
   Select, 
   SelectContent, 
@@ -360,7 +359,7 @@ export function ConversationHistoryList({
                               <AlertDialogHeader>
                                 <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Esta acción no se puede deshacer. La conversación &quot;{conversation.title}&quot; 
+                                  Esta acción no se puede deshacer. La conversación "{conversation.title}" 
                                   será eliminada permanentemente.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
