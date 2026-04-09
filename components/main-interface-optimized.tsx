@@ -643,18 +643,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Estados de carga y error
   if (!systemState.isInitialized) {
     return (
-      <motion.div
-        initial={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="flex h-screen w-full items-center justify-center bg-background"
-      >
+      <div className="flex h-screen w-full items-center justify-center bg-background animate-in fade-in duration-300">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-foreground/80">Inicializando HopeAI System...</p>
           <p className="text-sm text-foreground/60 mt-2">Cargando contexto y configuraciones avanzadas</p>
         </div>
-      </motion.div>
+      </div>
     )
   }
 
@@ -821,7 +816,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   }
 
   return (
-    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans">
+    <div className="flex min-h-[100dvh] h-[100dvh] md:h-screen overflow-hidden bg-background font-sans animate-in fade-in duration-500">
       {!isMobile && (
         <Sidebar
           isOpen={sidebarOpen} 

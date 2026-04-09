@@ -214,6 +214,8 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   // Estado para controlar colapso/expansión de referencias
   const [collapsedReferences, setCollapsedReferences] = useState<Record<string, boolean>>({})
   const academicSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Track known message IDs so we only animate newly added messages (avoid re-animating on re-render)
+  const knownMessageIdsRef = useRef<Set<string>>(new Set())
 
   // 🔄 Resetear estado del indicador académico cuando cambia la sesión
   useEffect(() => {
@@ -988,11 +990,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const messageAgentConfig = getAgentVisualConfigSafe(message.agent);
             const MessageIconComponent = messageAgentConfig.icon;
             const isFirstMessage = index === 0;
+            // Only animate messages that are new (not already known from a previous render)
+            const isNewMessage = !knownMessageIdsRef.current.has(message.id)
+            if (isNewMessage) knownMessageIdsRef.current.add(message.id)
             
             return (
               <motion.div
                 key={message.id}
-                initial={{ opacity: 0, y: 8 }}
+                initial={isNewMessage ? { opacity: 0, y: 8 } : false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className={cn(
