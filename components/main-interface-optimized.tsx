@@ -6,7 +6,7 @@ import { DocumentPreviewPanel } from "@/components/document-preview-panel"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
-import { X } from "lucide-react"
+import { X, FileText } from "lucide-react"
 
 
 import { MobileNav } from "@/components/mobile-nav"
@@ -89,6 +89,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     documentReady,
     isDocumentPanelOpen,
     closeDocumentPanel,
+    openDocumentPanel,
   } = useHopeAISystem()
 
   // Selected patient for current session (must be before any conditional returns)
@@ -923,6 +924,20 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
             isOpen={isDocumentPanelOpen}
             onClose={closeDocumentPanel}
           />
+
+          {/* Floating button to reopen document panel when a document exists but panel is closed */}
+          {!isDocumentPanelOpen && (documentReady || documentPreview) && (
+            <Button
+              onClick={openDocumentPanel}
+              variant="default"
+              size="sm"
+              className="fixed bottom-6 right-6 z-50 shadow-lg gap-2 rounded-full px-4 py-2"
+              title="Ver documento generado"
+            >
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Ver documento</span>
+            </Button>
+          )}
         </main>
       </div>
 

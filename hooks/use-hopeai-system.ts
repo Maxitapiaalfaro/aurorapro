@@ -88,6 +88,7 @@ interface UseHopeAISystemReturn {
   documentReady: DocumentReadyEvent | null
   isDocumentPanelOpen: boolean
   closeDocumentPanel: () => void
+  openDocumentPanel: () => void
 }
 
 export function useHopeAISystem(): UseHopeAISystemReturn {
@@ -152,6 +153,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
   const closeDocumentPanel = useCallback(() => {
     setIsDocumentPanelOpen(false)
+  }, [])
+
+  const openDocumentPanel = useCallback(() => {
+    setIsDocumentPanelOpen(true)
   }, [])
 
   // Cargar sesión existente
@@ -1151,5 +1156,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     documentReady,
     isDocumentPanelOpen,
     closeDocumentPanel,
+    openDocumentPanel,
   }
 }
