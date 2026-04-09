@@ -103,9 +103,9 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId, psychologistId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-border backdrop-blur-sm bg-background/95">
+    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between z-50 border-b border-border/30 backdrop-blur-md bg-background/90">
       {/* Gradient background for subtle separation - only in light mode */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-background/0 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-transparent pointer-events-none" />
 
       <div className="relative flex items-center gap-2 md:gap-4 flex-1 min-w-0">
         <Button

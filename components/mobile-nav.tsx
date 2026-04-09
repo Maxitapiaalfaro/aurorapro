@@ -182,13 +182,13 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
     <>
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
           
-          <SheetContent side="left" className="w-80 p-0 backdrop-blur-sm border-r paper-noise overflow-hidden bg-gradient-to-b from-secondary/40 via-secondary/30 to-secondary/20 border-border/60 shadow-sm">
+          <SheetContent side="left" className="w-80 p-0 backdrop-blur-md border-r border-border/30 overflow-hidden bg-background/95">
             <div className="flex flex-col h-full relative">
               {/* Subtle accent line */}
-              <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
+              <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-primary/10 to-transparent" />
               
               {/* Navigation Icons - Mobile optimized */}
-              <div className="flex flex-col flex-shrink-0 p-4 py-5 gap-3 overflow-visible border-b border-ash/50">
+              <div className="flex flex-col flex-shrink-0 px-4 py-5 gap-3 overflow-visible border-b border-border/20">
                 {/* Nueva consulta button */}
                 <Button
                   onClick={handleNewConversation}
@@ -247,8 +247,8 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
               </div>
 
               {/* Section header */}
-              <div className="px-5 py-3 flex-shrink-0 border-b border-ash/30">
-                <h2 className="text-xs text-mineral-gray-600 font-sans font-semibold tracking-wider uppercase whitespace-nowrap">
+              <div className="px-5 py-3 flex-shrink-0 border-b border-border/15">
+                <h2 className="text-[11px] text-muted-foreground/50 font-sans font-semibold tracking-widest uppercase whitespace-nowrap">
                   {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
                 </h2>
               </div>
@@ -257,7 +257,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                 {activeTab === 'conversations' ? (
                   <div className="h-full overflow-hidden relative">
                     <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
-                      <div className="px-3 py-5 space-y-1.5">
+                      <div className="px-3 py-4 space-y-1.5">
                         {isLoading ? (
                           <div className="flex items-center justify-center py-12">
                             <div className="flex flex-col items-center gap-3">
@@ -266,13 +266,13 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                             </div>
                           </div>
                         ) : conversations.length === 0 ? (
-                          <div className="text-center py-12 px-4 text-mineral-gray-600">
-                            <div className="bg-ash rounded-xl p-6">
-                              <ChatsCircleIcon className="h-10 w-10 mx-auto mb-3 opacity-40" weight="duotone" />
+                          <div className="text-center py-10 px-4 text-muted-foreground/70">
+                            <div className="p-5">
+                              <ChatsCircleIcon className="h-8 w-8 mx-auto mb-3 opacity-25" weight="duotone" />
                               <p className="text-sm font-medium">
                                 No hay conversaciones aún
                               </p>
-                              <p className="text-xs mt-1 opacity-70">
+                              <p className="text-xs mt-1.5 opacity-70">
                                 Inicia una nueva consulta
                               </p>
                             </div>
@@ -356,7 +356,7 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
 
                         {isLoadingMore && (
                           <div className="flex items-center justify-center py-6">
-                            <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/40 px-4 py-2.5 rounded-full border border-border/40">
+                            <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/30 px-4 py-2.5 rounded-full border border-border/30">
                               <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-primary" weight="bold" />
                               <span className="font-medium">Cargando más...</span>
                             </div>

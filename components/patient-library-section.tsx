@@ -468,7 +468,7 @@ export function PatientLibrarySection({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 flex-shrink-0"
+                className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
                 title="Agregar paciente"
               >
                 <Plus className="h-4 w-4" />
@@ -617,12 +617,12 @@ export function PatientLibrarySection({
 
         {/* Search - siempre renderizado, sin animación para evitar compensación */}
         <div className="relative mt-3">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
           <Input
             placeholder="Buscar pacientes..."
             value={searchQuery}
             onChange={(e) => searchPatients(e.target.value)}
-            className="pl-9 h-9 text-sm"
+            className="pl-9 h-9 text-sm rounded-xl border-border/40 bg-secondary/40 focus-visible:bg-card focus-visible:border-border/70 placeholder:text-muted-foreground/50 transition-all"
           />
         </div>
       </div>
@@ -630,23 +630,23 @@ export function PatientLibrarySection({
       {/* Patient List */}
       <div className="flex-1 overflow-hidden relative">
         <div className="h-full overflow-y-auto scrollbar-hide">
-          <div className="px-3 py-3 space-y-1.5">
+          <div className="px-3 py-3 space-y-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
-                <RefreshCw className="h-5 w-5 animate-spin text-clarity-blue-600" />
-                <span className="font-sans text-sm text-muted-foreground font-medium">Cargando pacientes...</span>
+                <RefreshCw className="h-4 w-4 animate-spin text-clarity-blue-600/70" />
+                <span className="font-sans text-sm text-muted-foreground/70">Cargando pacientes...</span>
               </div>
             </div>
           ) : filteredPatients.length === 0 ? (
-            <div className="text-center py-12 px-4 text-mineral-gray-600">
-              <div className="bg-ash rounded-xl p-6 border border-ash">
-                <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <div className="text-center py-10 px-4 text-muted-foreground/70">
+              <div className="p-5">
+                <User className="h-8 w-8 mx-auto mb-3 opacity-25" />
                 <p className="font-sans text-sm font-medium">
                   {searchQuery ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
                 </p>
                 {!searchQuery && (
-                  <p className="font-sans text-xs mt-1 opacity-70">
+                  <p className="font-sans text-xs mt-1.5 opacity-70">
                     Crea tu primer paciente
                   </p>
                 )}
@@ -678,63 +678,67 @@ export function PatientLibrarySection({
                     }
                   }}
                   className={cn(
-                    "w-full p-4 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
+                    "w-full px-4 py-3.5 h-auto rounded-xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                     selectedPatient?.id === patient.id
-                      ? "bg-clarity-blue-50 dark:bg-clarity-blue-900/20 border-clarity-blue-200 dark:border-clarity-blue-700 shadow-sm hover:shadow-md"
-                      : "bg-card border-border hover:bg-secondary hover:border-muted-foreground hover:shadow-sm",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 dark:focus-visible:ring-clarity-blue-700 focus-visible:ring-offset-2"
+                      ? "bg-clarity-blue-50/80 dark:bg-clarity-blue-900/20 border-clarity-blue-200/70 dark:border-clarity-blue-700/60 shadow-sm"
+                      : "bg-card/60 border-border/35 hover:bg-secondary/60 hover:border-border/60 hover:shadow-[0_1px_6px_rgba(0,0,0,0.06)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clarity-blue-200 dark:focus-visible:ring-clarity-blue-700 focus-visible:ring-offset-2 active:scale-[0.99]"
                   )}
                 >
                   {/* Accent border on active */}
                   {selectedPatient?.id === patient.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-10 bg-clarity-blue-500 rounded-r-full" />
                   )}
                   
                   
                   <div className="flex items-start gap-3 w-full pl-2 min-w-0">
                     <div className="flex-1 min-w-0">
                       {/* Header con nombre */}
-                      <div className="mb-2">
-                        <div className="font-sans text-sm text-foreground truncate font-medium leading-snug">
+                      <div className="mb-2.5">
+                        <div className="font-sans text-sm text-foreground truncate font-semibold leading-snug">
                           {patient.displayName}
                         </div>
                       </div>
                       
                       {/* Información demográfica */}
                       {(patient.demographics?.ageRange || patient.demographics?.gender || patient.demographics?.occupation) && (
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mb-2 font-sans">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground/70 mb-2 font-sans">
                           {patient.demographics.ageRange && (
-                            <span className="flex items-center gap-1 flex-shrink-0">
-                              <User className="h-3 w-3 opacity-60" />
+                            <span className="flex items-center gap-0.5 flex-shrink-0">
                               {patient.demographics.ageRange} años
                             </span>
                           )}
                           {patient.demographics.gender && (
-                            <span className="flex-shrink-0">• {patient.demographics.gender}</span>
+                            <span className="flex-shrink-0 before:content-['·'] before:mr-2">{patient.demographics.gender}</span>
                           )}
                           {patient.demographics.occupation && (
-                            <span className="truncate max-w-[150px]" title={patient.demographics.occupation}>
-                              • {patient.demographics.occupation}
+                            <span className="truncate max-w-[140px] before:content-['·'] before:mr-2" title={patient.demographics.occupation}>
+                              {patient.demographics.occupation}
                             </span>
                           )}
                         </div>
                       )}
                       
-                      {/* Áreas de enfoque - compactas */}
+                      {/* Áreas de enfoque - pills compactas */}
                       {patient.tags && patient.tags.length > 0 && (
-                        <div className="text-xs text-muted-foreground mb-2 font-sans min-w-0">
-                          <span className="opacity-70">Enfoque: </span>
-                          <span className="font-medium truncate inline-block max-w-[180px] align-bottom" title={patient.tags.slice(0, 3).join(', ')}>
-                            {patient.tags.slice(0, 3).join(', ')}
-                          </span>
-                          {patient.tags.length > 3 && <span className="flex-shrink-0"> +{patient.tags.length - 3}</span>}
+                        <div className="flex flex-wrap gap-1 mb-2.5 min-w-0">
+                          {patient.tags.slice(0, 3).map((tag, i) => (
+                            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-secondary/80 border border-border/30 text-[11px] text-muted-foreground/80 font-sans font-medium">
+                              {tag}
+                            </span>
+                          ))}
+                          {patient.tags.length > 3 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[11px] text-muted-foreground/50 font-sans">
+                              +{patient.tags.length - 3}
+                            </span>
+                          )}
                         </div>
                       )}
                       
                       {/* Notas clínicas - preview */}
                       {patient.notes && (
-                        <div className="text-xs text-muted-foreground/80 mb-2 font-sans line-clamp-2 italic">
-                          "{patient.notes}"
+                        <div className="text-[11px] text-muted-foreground/60 mb-2.5 font-sans line-clamp-1 italic leading-relaxed">
+                          {patient.notes}
                         </div>
                       )}
 
@@ -742,9 +746,8 @@ export function PatientLibrarySection({
                       {selectedPatient?.id === patient.id && <PatientSessionCount patient={patient} />}
                       
                       {/* Timestamp and Insights Badge */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground/60 font-sans flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 opacity-60" />
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <div className="text-[11px] text-muted-foreground/45 font-sans flex items-center gap-1">
                           {formatDistanceToNow(patient.updatedAt, { 
                             addSuffix: true, 
                             locale: es 
@@ -755,9 +758,9 @@ export function PatientLibrarySection({
                         {hasPatientInsights(patient.id) && (
                           <Badge 
                             variant="secondary" 
-                            className="bg-purple-100 text-purple-700 text-xs font-medium border-purple-200 flex items-center gap-1"
+                            className="bg-purple-50 text-purple-600 text-[11px] font-medium border-purple-200/60 flex items-center gap-1 py-0.5"
                           >
-                            <BarChart3 className="h-3 w-3" />
+                            <BarChart3 className="h-2.5 w-2.5" />
                             Nuevo análisis
                           </Badge>
                         )}
