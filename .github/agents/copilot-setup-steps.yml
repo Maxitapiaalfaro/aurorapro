@@ -1,0 +1,7 @@
+steps:
+  - name: Configure Firebase Service Account
+    run: |
+      echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > /tmp/firebase-service-account.json
+      echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-service-account.json" >> $GITHUB_ENV
+    env:
+      FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
