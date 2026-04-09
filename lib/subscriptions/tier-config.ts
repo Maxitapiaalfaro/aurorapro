@@ -28,6 +28,10 @@ import type { AgentType } from '@/types/clinical-types'
  * Static tier configuration.
  * Prices in CLP. Token limits per 30-day billing cycle.
  *
+ * NOTE: priceUSD values are approximate and used only for reference.
+ * Stripe handles actual CLP→USD conversion at checkout time using
+ * real-time exchange rates. The CLP price is the authoritative price.
+ *
  * NOTE: stripePriceId values should be set from environment variables
  * in production. The placeholders here are for development only.
  */

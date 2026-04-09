@@ -135,7 +135,11 @@ export async function evaluateAccess(
 
     return result
   } catch (error) {
-    // Fail open in case of Firestore errors to not block users
+    // Fail-open with freemium tier to avoid blocking users during Firestore outages.
+    // This is intentionally scoped: returning 'freemium' tier means the user only
+    // gets base agent access (socratico) and basic tools — not full platform access.
+    // TODO: Implement in-memory cache of last-known subscription state to provide
+    // more accurate fallback during transient Firestore errors.
     logger.error(`[Guard] Error evaluating access for ${userId}:`, error)
     return {
       allowed: true,
