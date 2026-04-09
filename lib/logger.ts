@@ -23,6 +23,7 @@ export type LogCategory =
   | 'session'
   | 'metrics'
   | 'performance'
+  | 'subscription'
 
 // 🔒 SEGURIDAD: Configuración de logging basada en entorno
 // Detectar producción de múltiples formas para compatibilidad con Vercel
@@ -146,7 +147,8 @@ const CATEGORY_PREFIXES: Record<LogCategory, string> = {
   patient: '🏥',
   session: '💬',
   metrics: '📊',
-  performance: '⚡'
+  performance: '⚡',
+  subscription: '💳'
 }
 
 // Prefijos para niveles de log

@@ -6,6 +6,14 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == psychologistId;
     }
 
+    // Subscription data — read-only from client, write-only from server (admin SDK).
+    // Client can read their own subscription to display tier/usage info.
+    // All writes go through server-side admin SDK (bypasses rules).
+    match /psychologists/{psychologistId}/subscription/{docId} {
+      allow read: if request.auth != null && request.auth.uid == psychologistId;
+      allow write: if false; // Server-only writes via admin SDK
+    }
+
     // CollectionGroup queries for sessions (needed for findSessionById)
     match /{path=**}/sessions/{sessionId} {
       allow read: if request.auth != null && resource.data._userId == request.auth.uid;
