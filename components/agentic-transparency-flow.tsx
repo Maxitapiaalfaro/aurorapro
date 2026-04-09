@@ -8,6 +8,16 @@ import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import { humanizeStepLabel, calculateProgress } from '@/lib/humanized-steps'
 import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, AcademicSourceReference } from '@/types/clinical-types'
 
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+/** Maximum character length for inline detail display; longer details go into the expandable section. */
+const INLINE_DETAIL_MAX_LENGTH = 40
+
+/** Format milliseconds as a readable seconds string (e.g. "1.2s"). */
+function formatDuration(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 // ─── Elapsed Timer ─────────────────────────────────────────────────────────
 function ElapsedTimer() {
   const [elapsed, setElapsed] = useState(0)
@@ -65,7 +75,7 @@ export function AgenticTransparencyFlow({
     }
   }
   if (timeline.durationMs && timeline.durationMs > 0) {
-    summaryParts.push(`${(timeline.durationMs / 1000).toFixed(1)}s`)
+    summaryParts.push(formatDuration(timeline.durationMs))
   }
 
   return (
@@ -193,7 +203,7 @@ function TransparencyStepItem({
   const humanLabel = humanizeStepLabel(step)
   const hasSources = step.sources && step.sources.length > 0
   const hasProgressSteps = step.progressSteps && step.progressSteps.length > 0
-  const hasExpandableContent = hasSources || hasProgressSteps || (step.detail && step.detail.length > 40)
+  const hasExpandableContent = hasSources || hasProgressSteps || (step.detail && step.detail.length > INLINE_DETAIL_MAX_LENGTH)
   const [isOpen, setIsOpen] = useState(false)
 
   // Auto-collapse when a step transitions active → completed
@@ -255,7 +265,7 @@ function TransparencyStepItem({
         >
           {humanLabel}
           {/* Short inline detail */}
-          {step.detail && step.status === 'completed' && step.detail.length <= 40 && (
+          {step.detail && step.status === 'completed' && step.detail.length <= INLINE_DETAIL_MAX_LENGTH && (
             <span className="text-[10px] text-muted-foreground/40 ml-1.5">
               — {step.detail}
             </span>
@@ -265,7 +275,7 @@ function TransparencyStepItem({
         {step.status === 'active' && <ElapsedTimer />}
         {step.status === 'completed' && step.durationMs != null && step.durationMs > 0 && (
           <span className="text-[10px] text-muted-foreground/30 tabular-nums flex-shrink-0">
-            {(step.durationMs / 1000).toFixed(1)}s
+            {formatDuration(step.durationMs)}
           </span>
         )}
 
@@ -292,7 +302,7 @@ function TransparencyStepItem({
             className="overflow-hidden"
           >
             <div className="px-2 pb-1 pl-7 space-y-1">
-              {step.detail && step.detail.length > 40 && (
+              {step.detail && step.detail.length > INLINE_DETAIL_MAX_LENGTH && (
                 <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
                   {step.detail}
                 </p>

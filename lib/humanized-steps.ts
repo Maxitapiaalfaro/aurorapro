@@ -83,7 +83,7 @@ export function humanizeStepLabel(step: ExecutionStep): string {
 /**
  * Calculates overall progress as a percentage (0–100).
  *
- * Active steps count as 50 % progress so the bar advances smoothly.
+ * Active steps count as 50% progress so the bar advances smoothly.
  */
 export function calculateProgress(steps: ExecutionStep[]): number {
   if (steps.length === 0) return 0
