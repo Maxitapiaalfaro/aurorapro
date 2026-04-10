@@ -35,9 +35,9 @@ const ibmPlexSans = IBM_Plex_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'Aurora | Plataforma Clínica con IA para Psicología',
+  description: 'Sistema de asistencia clínica con inteligencia artificial para psicólogos. Documentación inteligente, análisis de sesiones y evidencia científica integrada.',
+  generator: 'Aurora Clinical AI Platform',
 }
 
 export default function RootLayout({
