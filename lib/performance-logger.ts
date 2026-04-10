@@ -110,6 +110,7 @@ class PerformanceLogger {
     const operations = [
       'orchestration-total',
       'metadata-collection',
+      'context-building',
       'routing',
       'metrics-update'
     ]
