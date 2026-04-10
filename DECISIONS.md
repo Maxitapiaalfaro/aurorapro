@@ -208,6 +208,38 @@ psychologists/{uid}/
 - **Animations:** framer-motion v12.23.12 with `reducedMotion="user"` support
 - **Accessibility:** prefers-reduced-motion via CSS + framer-motion MotionConfig
 
+### PR #6: `claude/fix-academic-research-workflow`
+**Status:** IN PROGRESS
+**Key Decisions:**
+- **Loop Detection System:** SHA-256 hash-based duplicate detection for research tools
+  - Request-scoped `toolCallHistory` Map (auto-garbage collected)
+  - 60-second window for detecting duplicate queries
+  - Triggers pharmacological fallback on 3rd identical attempt
+  - Implementation: `lib/agents/streaming-handler.ts` (~220 lines)
+  - Prevents infinite retry loops consuming ~16,500 tokens
+- **4-Level Fallback Strategy for Polypharmacy:**
+  - Level 1: Full query (all drugs + comorbidities, minResults: 3)
+  - Level 2: Pairwise interactions (if 3+ drugs, minResults: 2)
+  - Level 3: Individual mechanisms + comorbidity (minResults: 1)
+  - Level 4: Drug classes + general principles (always executes)
+  - Sequential execution with early exit on success
+  - Progressive trust score relaxation (60 → 50 → 40 → 30)
+- **Automatic Polypharmacy Detection:** Regex-based detection for 12 common psychiatric medications
+  - Venlafaxine, Lisdexamfetamine, Mirtazapine, Sertraline, Fluoxetine, Escitalopram, Quetiapine, Aripiprazole, Lamotrigine, Bupropion, Clonazepam, Methylphenidate
+- **Pharmacological Reasoning Fallback:** Gemini Flash-Lite generates mechanism-based analysis when no literature exists
+  - ~400 tokens cost
+  - Provides actionable clinical guidance instead of "No results"
+  - Clear disclaimer about theoretical nature
+- **Parallel AI Prioritization:** All search levels use Parallel AI exclusively (per user request)
+  - No fallback to PubMed or Crossref during testing phase
+- **PICO Format Guidance:** Tool declaration now documents PICO (Population, Intervention, Comparison, Outcome) query structure
+  - Improves LLM's query construction for better search results
+- **Token Efficiency:**
+  - Loop detection overhead: ~150 tokens per tool call
+  - Pharmacological fallback: ~400 tokens (Gemini Flash-Lite)
+  - 4-level fallback: Progressive search with early exit (avg 2-3 levels executed)
+  - Total worst-case: <8,000 tokens (vs original ~16,500 in infinite loops)
+
 ---
 
 **End of Technical Decisions Document**
