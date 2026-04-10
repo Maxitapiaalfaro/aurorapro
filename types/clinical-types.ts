@@ -416,6 +416,9 @@ export interface PatientRecord {
   confidentiality?: PatientConfidentiality
   createdAt: Date
   updatedAt: Date
+  // Soft delete fields to prevent cascade deletion of conversations
+  isDeleted?: boolean
+  deletedAt?: Date
 }
 
 // Patient session metadata for orchestrator injection
