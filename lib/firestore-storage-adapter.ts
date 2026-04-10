@@ -30,6 +30,7 @@ import type {
 import { getAdminApp } from './firebase-admin-config'
 import { getFirestore, FieldValue, type Firestore, type DocumentData, type Query } from 'firebase-admin/firestore'
 import { createLogger } from '@/lib/logger'
+import { safeValidateSessionForFirestore } from '@/lib/session-schema'
 
 const logger = createLogger('storage')
 
@@ -224,20 +225,21 @@ export class FirestoreStorageAdapter {
     const patientId = this.resolvePatientId(chatState)
     const ref = this.sessionDocRef(userId, patientId, chatState.sessionId)
 
-    // Ensure Date objects are plain Dates (not strings)
-    chatState.metadata.createdAt = new Date(chatState.metadata.createdAt)
-    chatState.metadata.lastUpdated = new Date(chatState.metadata.lastUpdated)
-
     // Extract messages — they go to the subcollection, not inline
     const messages = chatState.history || []
     const { history: _history, ...sessionWithoutHistory } = chatState
 
-    // Store a flat _userId and _patientId at the doc root for index queries
-    const docData: DocumentData = {
-      ...sessionWithoutHistory,
-      _userId: userId,
-      _patientId: patientId,
+    // Zod gatekeeper: validate & sanitize (converts undefined → null for Firestore)
+    const rawDoc = { ...sessionWithoutHistory, _userId: userId, _patientId: patientId }
+    const result = safeValidateSessionForFirestore(rawDoc)
+    if (!result.success) {
+      logger.error('Session payload failed Zod validation — aborting Firestore write', {
+        sessionId: chatState.sessionId,
+        zodErrors: result.error.flatten(),
+      })
+      throw new Error(`[Firestore] Session validation failed: ${result.error.message}`)
     }
+    const docData: DocumentData = result.data
 
     await ref.set(docData, { merge: true })
 
@@ -279,16 +281,19 @@ export class FirestoreStorageAdapter {
     const patientId = this.resolvePatientId(chatState)
     const ref = this.sessionDocRef(userId, patientId, chatState.sessionId)
 
-    chatState.metadata.createdAt = new Date(chatState.metadata.createdAt)
-    chatState.metadata.lastUpdated = new Date(chatState.metadata.lastUpdated)
-
     const { history: _history, ...sessionWithoutHistory } = chatState
 
-    const docData: DocumentData = {
-      ...sessionWithoutHistory,
-      _userId: userId,
-      _patientId: patientId,
+    // Zod gatekeeper: validate & sanitize (converts undefined → null for Firestore)
+    const rawDoc = { ...sessionWithoutHistory, _userId: userId, _patientId: patientId }
+    const result = safeValidateSessionForFirestore(rawDoc)
+    if (!result.success) {
+      logger.error('Session metadata failed Zod validation — aborting Firestore write', {
+        sessionId: chatState.sessionId,
+        zodErrors: result.error.flatten(),
+      })
+      throw new Error(`[Firestore] Session metadata validation failed: ${result.error.message}`)
     }
+    const docData: DocumentData = result.data
 
     await ref.set(docData, { merge: true })
 

@@ -52,6 +52,7 @@ import type {
   PaginationOptions,
   PaginatedResponse,
 } from '@/types/clinical-types'
+import { safeValidateSessionForFirestore } from '@/lib/session-schema'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -163,7 +164,9 @@ export async function saveSessionMetadata(
   const ref = sessionRef(psychologistId, patientId, session.sessionId)
   // Strip history — messages go in subcollection
   const { history, ...sessionWithoutHistory } = session
-  const data = serializeDates({
+
+  // Zod gatekeeper: validate & sanitize (converts undefined → null for Firestore)
+  const rawDoc = {
     ...sessionWithoutHistory,
     _userId: psychologistId,
     _patientId: patientId,
@@ -171,7 +174,17 @@ export async function saveSessionMetadata(
       ...session.metadata,
       lastUpdated: new Date(),
     },
-  })
+  }
+  const result = safeValidateSessionForFirestore(rawDoc)
+  if (!result.success) {
+    console.error('[Firestore] Session payload failed Zod validation — aborting write', {
+      sessionId: session.sessionId,
+      zodErrors: result.error.flatten(),
+    })
+    throw new Error(`[Firestore] Session validation failed: ${result.error.message}`)
+  }
+
+  const data = serializeDates(result.data)
   await setDoc(ref, data, { merge: true })
 }
 
