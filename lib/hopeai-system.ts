@@ -677,10 +677,10 @@ export class HopeAISystem {
           })
         : Promise.resolve([] as any[]),
 
-      // 5. Clinical memories — SKIPPED when clientContext provided
+      // 5. Clinical memories — OPTIMIZACIÓN: Usa selección semántica con skip automático para queries simples
       (!hasClientContext && patientReference && currentState.userId)
         ? import('./clinical-memory-system').then(m =>
-            m.getRelevantMemories(currentState.userId, patientReference, message, 5)
+            m.getRelevantMemoriesSemantic(currentState.userId, patientReference, message, 5)
           ).catch((err: unknown) => {
             sessionLogger.warn('⚠️ Failed to retrieve clinical memories (non-blocking)', { error: err instanceof Error ? err.message : String(err) })
             return [] as any[]

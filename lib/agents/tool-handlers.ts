@@ -69,24 +69,88 @@ export function getRegisteredToolNames(): string[] {
 
 // ─── Built-in Handlers ───────────────────────────────────────────────────
 
+// OPTIMIZACIÓN: Session-scoped cache for academic search results
+// Prevents duplicate API calls for identical queries within the same session
+const academicSearchCache = new Map<string, { timestamp: number; results: any }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
+function getCacheKey(query: string, maxResults: number, language: string): string {
+  return `${query.toLowerCase().trim()}|${maxResults}|${language}`;
+}
+
+function getFromCache(key: string): any | null {
+  const cached = academicSearchCache.get(key);
+  if (!cached) return null;
+
+  // Check TTL
+  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
+    academicSearchCache.delete(key);
+    return null;
+  }
+
+  return cached.results;
+}
+
+function putInCache(key: string, results: any): void {
+  // Simple LRU: if cache > 100 entries, clear oldest 50%
+  if (academicSearchCache.size > 100) {
+    const entries = Array.from(academicSearchCache.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp);
+    entries.slice(0, 50).forEach(([k]) => academicSearchCache.delete(k));
+  }
+
+  academicSearchCache.set(key, { timestamp: Date.now(), results });
+}
+
 // 1. Academic Literature Search (consolidates 3 former tools into 1)
 registerToolHandler('search_academic_literature', async (args, ctx) => {
   try {
+    const query = args.query as string;
+    const maxResults = Math.min((args.max_results as number) || 8, 20);
+    const language = 'both';
+
+    // OPTIMIZACIÓN: Check cache first
+    const cacheKey = getCacheKey(query, maxResults, language);
+    const cached = getFromCache(cacheKey);
+
+    if (cached) {
+      logger.info(`[tool:search_academic_literature] CACHE HIT query="${query}" max=${maxResults}`);
+
+      // Still populate academic references for grounding metadata
+      if (cached?.results) {
+        for (const r of cached.results) {
+          ctx.academicReferences.push({
+            title: r.title || 'Sin título',
+            url: r.url || '',
+            doi: r.doi,
+            authors: r.authors,
+            year: r.year,
+            journal: r.journal,
+          });
+        }
+      }
+
+      return {
+        name: 'search_academic_literature',
+        response: cached,
+      };
+    }
+
     const { academicMultiSourceSearch } = await import(
       '../academic-multi-source-search'
     );
 
-    const query = args.query as string;
-    const maxResults = Math.min((args.max_results as number) || 8, 20);
-
-    logger.info(`[tool:search_academic_literature] query="${query}" max=${maxResults}`);
+    logger.info(`[tool:search_academic_literature] API CALL query="${query}" max=${maxResults}`);
 
     const results = await academicMultiSourceSearch.search({
       query,
       maxResults,
-      language: 'both',
+      language,
       minTrustScore: 60,
     });
+
+    // OPTIMIZACIÓN: Store in cache
+    putInCache(cacheKey, results);
 
     // Populate shared academic references for grounding metadata
     if (results?.results) {
