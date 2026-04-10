@@ -30,7 +30,11 @@ export interface ClinicalCanvasProps {
   documentPreview: DocumentPreviewEvent | null
   /** Document ready event — null while still generating */
   documentReady: DocumentReadyEvent | null
-  /** Whether the document panel is visible */
+  /**
+   * Whether the document panel is visible.
+   * Currently the Canvas renders DocumentPreviewPanel when content exists (isOpen is always true),
+   * but this prop is retained for future use (e.g. user-toggled collapse within the canvas).
+   */
   isDocumentPanelOpen: boolean
   /** Close the document panel */
   onCloseDocumentPanel: () => void

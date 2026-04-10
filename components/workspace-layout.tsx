@@ -216,7 +216,7 @@ function MobileTab({
         />
       )}
 
-      {/* Content badge — small dot when canvas has content */}
+      {/* Content badge — small dot when canvas has content. Offset from center by ~24px to sit near icon. */}
       {badge && !active && (
         <span className="absolute top-1.5 right-[calc(50%-24px)] w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
       )}
