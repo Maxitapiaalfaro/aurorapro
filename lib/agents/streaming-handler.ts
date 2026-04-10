@@ -274,6 +274,7 @@ export function prepareFunctionCallWithSecurity(
   patientId?: string,
   onDocumentPreview?: (preview: DocumentPreviewEvent) => void,
   onDocumentReady?: (document: DocumentReadyEvent) => void,
+  toolCallHistory?: Map<string, ToolCallRecord[]>
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -325,7 +326,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady }),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady }, toolCallHistory),
   } as PreparedToolCall;
 }
 
@@ -343,14 +344,25 @@ async function executeToolCall(
     onProgress?: (message: string) => void;
     onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
     onDocumentReady?: (document: DocumentReadyEvent) => void;
-  }
+  },
+  toolCallHistory?: Map<string, ToolCallRecord[]>
 ): Promise<ToolCallResult> {
+  // Loop detection: check if this is a duplicate retry
+  if (toolCallHistory) {
+    const loopCheck = detectToolLoop(call.name, call.args || {}, toolCallHistory)
+    if (loopCheck.isLoop) {
+      // Escape hatch: return pharmacological fallback instead of executing
+      logger.warn(`[LOOP ESCAPE] ${call.name} loop detected at attempt #${loopCheck.attemptCount}, returning fallback`)
+      return await generatePharmacologyFallbackResponse(call.name, call.args || {}, loopCheck.attemptCount)
+    }
+  }
+
   // Registry-based dispatch — delegates to tool-handlers.ts
   const { getToolHandler } = await import('./tool-handlers');
   const handler = getToolHandler(call.name);
 
   if (handler) {
-    return handler(call.args || {}, {
+    const result = await handler(call.args || {}, {
       psychologistId: context?.psychologistId || '',
       sessionId: context?.sessionId || '',
       patientId: context?.patientId,
@@ -359,6 +371,13 @@ async function executeToolCall(
       onDocumentPreview: context?.onDocumentPreview,
       onDocumentReady: context?.onDocumentReady,
     });
+
+    // Record this tool call in history for loop detection
+    if (toolCallHistory) {
+      recordToolCall(toolCallHistory, call.name, call.args || {}, result)
+    }
+
+    return result;
   }
 
   // Unknown tool that passed security — return null-like
@@ -531,6 +550,9 @@ export async function handleStreamingWithTools(
   const lastUserMessage = currentHistory.filter((m: any) => m.role === 'user').pop();
   const enhancedMessage = lastUserMessage?.content || '';
 
+  // 🔁 LOOP DETECTION: Per-message tool call history (request-scoped, auto-collected)
+  const toolCallHistory = new Map<string, ToolCallRecord[]>();
+
   // Create a new async generator that properly handles function calls during streaming
   return (async function* () {
     let accumulatedText = ""
@@ -622,7 +644,7 @@ export async function handleStreamingWithTools(
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name))
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name), toolCallHistory)
         );
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
@@ -810,7 +832,7 @@ export async function handleStreamingWithTools(
             };
 
             const recursivePreparedCalls: PreparedToolCall[] = followUpFunctionCalls.map((call: any) =>
-              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name))
+              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name), toolCallHistory)
             );
 
             // Start execution without awaiting — drain progress concurrently (same pattern as initial round)
@@ -943,10 +965,13 @@ export async function handleNonStreamingWithTools(
   const functionCalls = result.functionCalls
   let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
 
+  // 🔁 LOOP DETECTION: Per-message tool call history (request-scoped, auto-collected)
+  const toolCallHistory = new Map<string, ToolCallRecord[]>();
+
   if (functionCalls && functionCalls.length > 0) {
     // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
     const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId)
+      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId, undefined, undefined, toolCallHistory)
     );
 
     // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation
@@ -1015,4 +1040,201 @@ export async function handleNonStreamingWithTools(
   }
 
   return result
+}
+
+// ============================================================================
+// LOOP DETECTION & RETRY PREVENTION (Phase 2 Academic Research Optimization)
+// ============================================================================
+
+interface ToolCallRecord {
+  queryHash: string
+  timestamp: number
+  attempt: number
+  result?: 'success' | 'empty' | 'error'
+}
+
+/**
+ * Normalizes tool arguments for consistent hashing across retries
+ */
+function normalizeToolArgs(toolName: string, args: Record<string, any>): string {
+  if (toolName === 'research_evidence') {
+    // Normalize research question: lowercase, trim, remove extra spaces
+    const query = (args.research_question || args.query || '').toLowerCase().trim().replace(/\s+/g, ' ')
+    const focus = (args.focus_area || '').toLowerCase().trim().replace(/\s+/g, ' ')
+    return `research_evidence:${query}${focus ? '|' + focus : ''}`
+  }
+
+  if (toolName === 'search_academic_literature') {
+    // Normalize query: lowercase, trim, remove extra spaces
+    const query = (args.query || '').toLowerCase().trim().replace(/\s+/g, ' ')
+    return `search_academic_literature:${query}`
+  }
+
+  // Default: JSON stringify with sorted keys for consistent hashing
+  const sortedKeys = Object.keys(args).sort()
+  const normalized: Record<string, any> = {}
+  for (const key of sortedKeys) {
+    normalized[key] = args[key]
+  }
+  return `${toolName}:${JSON.stringify(normalized)}`
+}
+
+/**
+ * Generates SHA-256 hash of normalized tool arguments
+ */
+function sha256(input: string): string {
+  const crypto = require('crypto')
+  return crypto.createHash('sha256').update(input).digest('hex')
+}
+
+/**
+ * Detects if a tool call is a duplicate retry within the same message
+ */
+function detectToolLoop(
+  toolName: string,
+  args: Record<string, any>,
+  history: Map<string, ToolCallRecord[]>
+): { isLoop: boolean; attemptCount: number } {
+  // Only track research-related tools that can loop
+  const trackedTools = new Set(['research_evidence', 'search_academic_literature'])
+  if (!trackedTools.has(toolName)) {
+    return { isLoop: false, attemptCount: 1 }
+  }
+
+  // Normalize and hash arguments
+  const normalizedQuery = normalizeToolArgs(toolName, args)
+  const queryHash = sha256(normalizedQuery)
+
+  // Get tool's call history
+  const toolHistory = history.get(toolName) || []
+
+  // Find matching previous calls within last 60 seconds (request window)
+  const now = Date.now()
+  const recentMatches = toolHistory.filter(record =>
+    record.queryHash === queryHash &&
+    (now - record.timestamp) < 60000  // 60s window
+  )
+
+  // Determine if loop (≥2 previous identical calls = 3rd attempt triggers loop)
+  const attemptCount = recentMatches.length + 1  // +1 for current call
+  const isLoop = attemptCount > 2  // After 2 attempts, 3rd triggers escape hatch
+
+  if (isLoop) {
+    logger.warn(`[LOOP DETECTED] ${toolName} attempt #${attemptCount}, query hash: ${queryHash.substring(0, 8)}...`)
+  }
+
+  return { isLoop, attemptCount }
+}
+
+/**
+ * Records a tool call execution in the history
+ */
+function recordToolCall(
+  history: Map<string, ToolCallRecord[]>,
+  toolName: string,
+  args: Record<string, any>,
+  result: ToolCallResult
+): void {
+  // Only track research-related tools
+  const trackedTools = new Set(['research_evidence', 'search_academic_literature'])
+  if (!trackedTools.has(toolName)) {
+    return
+  }
+
+  const normalizedQuery = normalizeToolArgs(toolName, args)
+  const queryHash = sha256(normalizedQuery)
+
+  const responseData = result.response as Record<string, any> | null
+  const sourcesCount = responseData?.sourcesCount ?? responseData?.results?.length ?? 0
+
+  const record: ToolCallRecord = {
+    queryHash,
+    timestamp: Date.now(),
+    attempt: (history.get(toolName)?.length || 0) + 1,
+    result: responseData?.error ? 'error' : (sourcesCount === 0 ? 'empty' : 'success')
+  }
+
+  const toolHistory = history.get(toolName) || []
+  toolHistory.push(record)
+  history.set(toolName, toolHistory)
+
+  logger.info(`[TOOL RECORDED] ${toolName} attempt #${record.attempt}, result: ${record.result}, sources: ${sourcesCount}`)
+}
+
+/**
+ * Generates fallback response when research tool loop is detected
+ * Uses general pharmacological knowledge instead of failing silently
+ */
+async function generatePharmacologyFallbackResponse(
+  toolName: string,
+  args: Record<string, any>,
+  attemptCount: number
+): Promise<ToolCallResult> {
+  const query = args.research_question || args.query || 'unknown query'
+
+  logger.info(`[FALLBACK TRIGGER] Generating pharmacology fallback for: "${query}" (attempt #${attemptCount})`)
+
+  // Use Gemini Flash-Lite for fast, low-cost fallback generation
+  const { ai } = await import('../google-genai-config')
+  const SUBAGENT_MODEL = 'gemini-2.0-flash-lite'
+
+  const prompt = `Eres un asistente de farmacología clínica. El usuario investigó sobre:
+"${query}"
+
+No se encontraron estudios académicos específicos en bases de datos. Sin embargo, proporciona una síntesis basada en:
+
+1. **Principios farmacológicos generales** relevantes al tema
+2. **Mecanismos de acción** de los fármacos mencionados (si aplica)
+3. **Consideraciones clínicas estándar** basadas en farmacología básica
+4. **Advertencia clara**: Esta respuesta se basa en principios farmacológicos generales, no en estudios específicos. Se recomienda consultar literatura actualizada y guías clínicas oficiales para el caso particular.
+
+**Formato**: Profesional, conciso (máximo 200 palabras), en español clínico.
+**Tono**: Informativo pero cauteloso, reconociendo la limitación de evidencia específica.`
+
+  try {
+    const result = await ai.models.generateContent({
+      model: SUBAGENT_MODEL,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 400, // ~200 words
+      },
+    })
+
+    const synthesis = result.text || 'No se pudo generar síntesis de farmacología.'
+
+    return {
+      name: toolName,
+      response: {
+        synthesis,
+        sourcesCount: 0,
+        metadata: {
+          fallbackReason: 'loop_detected',
+          originalQuery: query,
+          attemptCount,
+          synthesisMethod: 'pharmacological-principles',
+          evidenceLevel: 'expert-opinion',
+          warningFlags: ['no-specific-literature-found', 'general-pharmacology-only']
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`[FALLBACK ERROR] Failed to generate pharmacology fallback:`, error)
+
+    // Ultra-safe fallback: structured error response
+    return {
+      name: toolName,
+      response: {
+        synthesis: `⚠️ No se encontró literatura específica para: "${query}"\n\nEsta búsqueda ha sido intentada múltiples veces sin resultados. Recomendaciones:\n\n1. Reformular la pregunta con términos más generales\n2. Consultar fuentes farmacológicas básicas (monografías de fármacos)\n3. Considerar consulta con especialista en psicofarmacología\n\nLa falta de literatura específica puede indicar:\n- Combinación de fármacos poco estudiada\n- Necesidad de evaluar interacciones por mecanismos farmacológicos\n- Importancia del monitoreo clínico individualizado`,
+        sourcesCount: 0,
+        metadata: {
+          fallbackReason: 'loop_detected',
+          originalQuery: query,
+          attemptCount,
+          synthesisMethod: 'static-guidance',
+          evidenceLevel: 'general-recommendations'
+        }
+      }
+    }
+  }
 }
