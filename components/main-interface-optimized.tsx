@@ -1,15 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { ChatInterface } from "@/components/chat-interface"
-import { DocumentPreviewPanel } from "@/components/document-preview-panel"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
-import { X, FileText } from "lucide-react"
+import { X } from "lucide-react"
 
-
+import { WorkspaceLayout } from "@/components/workspace-layout"
+import { ClinicalCanvas } from "@/components/clinical-canvas"
 import { MobileNav } from "@/components/mobile-nav"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useHopeAISystem } from "@/hooks/use-hopeai-system"
@@ -21,7 +20,6 @@ import { PioneerCircleInvitation } from "@/components/pioneer-circle-invitation"
 import { DebugPioneerInvitation } from "@/components/debug-pioneer-invitation"
 import type { AgentType, ClinicalFile, PatientRecord, FichaClinicaState } from "@/types/clinical-types"
 import { usePatientRecord } from "@/hooks/use-patient-library"
-import FichaClinicaPanel from "@/components/patient-library/FichaClinicaPanel"
 import { PatientContextComposer, PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 import * as Sentry from "@sentry/nextjs"
 import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-client-storage"
@@ -875,94 +873,69 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         )}
 
         <main className="flex-1 flex overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0">
-            <ChatInterface
-              activeAgent={systemState.activeAgent}
-              isProcessing={systemState.isLoading}
-              isUploading={isUploading}
-              currentSession={compatibleSession}
-              sendMessage={handleSendMessage}
-              uploadDocument={handleUploadDocument}
-              addStreamingResponseToHistory={addStreamingResponseToHistory}
-              pendingFiles={pendingFiles}
-              onRemoveFile={handleRemoveFile}
-              transitionState={systemState.transitionState}
-              routingInfo={systemState.routingInfo}
-              reasoningBullets={systemState.reasoningBullets}
-              processingStatus={systemState.processingStatus}
-              onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
-              onCancelFichaGeneration={handleCancelFichaGeneration}
-              onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}
-              onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
-              onOpenPatientLibrary={() => {
-                // Mobile: Abrir MobileNav en tab de pacientes
-                if (isMobile) {
-                  setMobileNavInitialTab('patients')
-                  setMobileNavOpen(true)
-                } else {
-                  // Desktop: Abrir Sidebar en tab de pacientes
-                  setSidebarActiveTab('patients')
-                  if (!sidebarOpen) {
-                    setSidebarOpen(true)
+          <WorkspaceLayout
+            isMobile={isMobile}
+            hasCanvasContent={!!(documentPreview || documentReady) || (!!patient && isFichaOpen)}
+            chatPanel={
+              <ChatInterface
+                activeAgent={systemState.activeAgent}
+                isProcessing={systemState.isLoading}
+                isUploading={isUploading}
+                currentSession={compatibleSession}
+                sendMessage={handleSendMessage}
+                uploadDocument={handleUploadDocument}
+                addStreamingResponseToHistory={addStreamingResponseToHistory}
+                pendingFiles={pendingFiles}
+                onRemoveFile={handleRemoveFile}
+                transitionState={systemState.transitionState}
+                routingInfo={systemState.routingInfo}
+                reasoningBullets={systemState.reasoningBullets}
+                processingStatus={systemState.processingStatus}
+                onGenerateFichaClinica={patient ? handleGenerateFichaFromChat : undefined}
+                onCancelFichaGeneration={handleCancelFichaGeneration}
+                onDiscardFicha={lastGeneratedFichaId ? handleDiscardFichaAndRevert : undefined}
+                onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
+                onOpenPatientLibrary={() => {
+                  if (isMobile) {
+                    setMobileNavInitialTab('patients')
+                    setMobileNavOpen(true)
+                  } else {
+                    setSidebarActiveTab('patients')
+                    if (!sidebarOpen) {
+                      setSidebarOpen(true)
+                    }
                   }
-                }
-              }}
-              hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
-              fichaLoading={isFichaLoading}
-              generateLoading={isGenerateFichaLoading}
-              canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
-              sendError={systemState.sendError}
-              onClearSendError={clearSendError}
-            />
-            {patient && (
-              <FichaClinicaPanel
-                open={isFichaOpen}
-                onOpenChange={setIsFichaOpen}
-                patient={patient}
-                fichas={fichasClinicasLocal}
-                onRefresh={refreshFichaList}
-                onGenerate={handleGenerateFichaFromChat}
-                isGenerating={isGenerateFichaLoading}
-                onCancelGeneration={handleCancelFichaGeneration}
-                canRevert={!!lastGeneratedFichaId && !!previousFichaBackup}
-                onRevert={handleDiscardFichaAndRevert}
-                initialTab={fichaInitialTab}
+                }}
+                hasExistingFicha={(fichasClinicasLocal && fichasClinicasLocal.length > 0) || false}
+                fichaLoading={isFichaLoading}
+                generateLoading={isGenerateFichaLoading}
+                canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
+                sendError={systemState.sendError}
+                onClearSendError={clearSendError}
               />
-            )}
-          </div>
-
-          {/* Document Preview Panel — slides in from right when document generation starts */}
-          <DocumentPreviewPanel
-            previewEvent={documentPreview}
-            readyEvent={documentReady}
-            isOpen={isDocumentPanelOpen}
-            onClose={closeDocumentPanel}
-            onSaveEdit={saveDocumentEdit}
+            }
+            canvasPanel={
+              <ClinicalCanvas
+                documentPreview={documentPreview}
+                documentReady={documentReady}
+                isDocumentPanelOpen={isDocumentPanelOpen}
+                onCloseDocumentPanel={closeDocumentPanel}
+                onOpenDocumentPanel={openDocumentPanel}
+                onSaveDocumentEdit={saveDocumentEdit}
+                patient={patient ?? null}
+                isFichaOpen={isFichaOpen}
+                onFichaOpenChange={setIsFichaOpen}
+                fichasClinicas={fichasClinicasLocal}
+                onRefreshFichas={refreshFichaList}
+                onGenerateFicha={handleGenerateFichaFromChat}
+                isGeneratingFicha={isGenerateFichaLoading}
+                onCancelFichaGeneration={handleCancelFichaGeneration}
+                canRevertFicha={!!lastGeneratedFichaId && !!previousFichaBackup}
+                onRevertFicha={handleDiscardFichaAndRevert}
+                fichaInitialTab={fichaInitialTab}
+              />
+            }
           />
-
-          {/* Floating button to reopen document panel when a document exists but panel is closed */}
-          <AnimatePresence>
-            {!isDocumentPanelOpen && (documentReady || documentPreview) && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.8, y: 10 }}
-                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                className="fixed bottom-6 right-6 z-50"
-              >
-                <Button
-                  onClick={openDocumentPanel}
-                  variant="default"
-                  size="sm"
-                  className="shadow-lg gap-2 rounded-full px-4 py-2"
-                  title="Ver documento generado"
-                >
-                  <FileText className="h-4 w-4" />
-                  <span className="hidden sm:inline">Ver documento</span>
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </main>
       </div>
 
