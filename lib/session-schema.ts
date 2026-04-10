@@ -31,12 +31,14 @@ export const ClinicalContextSchema = z.object({
 // Date coercion helper — handles JS Dates, ISO strings, and Firestore Timestamps
 // ────────────────────────────────────────────────────────────────────────────
 
+/** Type guard for Firestore Timestamp objects (both firebase-admin and JS SDK). */
+function isFirestoreTimestamp(val: unknown): val is { toDate(): Date } {
+  return val != null && typeof val === 'object' && 'toDate' in val && typeof (val as any).toDate === 'function'
+}
+
 const firestoreDateSchema = z.preprocess((val) => {
   if (val instanceof Date) return val
-  // firebase-admin Timestamp has toDate(); firebase JS SDK Timestamp too
-  if (val != null && typeof val === 'object' && 'toDate' in val && typeof (val as any).toDate === 'function') {
-    return (val as any).toDate()
-  }
+  if (isFirestoreTimestamp(val)) return val.toDate()
   if (typeof val === 'string' || typeof val === 'number') return new Date(val)
   return val
 }, z.date())
@@ -160,7 +162,7 @@ export const SessionDocSchema = z.object({
   riskState: RiskStateSchema,
   sessionMeta: PatientSessionMetaSchema,
   sessionSummary: SessionSummarySchema,
-  // Denormalized fields added by the storage layer
+  // Denormalized fields — always set by the storage layer before write
   _userId: z.string().optional(),
   _patientId: z.string().optional(),
 }).passthrough()
