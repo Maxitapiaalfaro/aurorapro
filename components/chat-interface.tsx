@@ -1235,9 +1235,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             
             return (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
+                transition={{ duration: 0 }}
                 className={cn("flex items-start", messageSpacingClass)}
               >
                 <motion.div
@@ -1245,7 +1245,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     borderColor: realConfig.borderColor,
                     backgroundColor: realConfig.bgColor
                   }}
-                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                  transition={{ duration: 0 }}
                   className={cn("chat-message-bubble relative rounded-lg border w-full min-w-0 overflow-hidden", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
                 >
                   {/* Agent Context Header - Aurora v2.0 Design with Animation */}
@@ -1254,9 +1254,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       {/* Agent Icon - Animated */}
                       <motion.div
                         key={`agent-icon-${realAgent}`}
-                        initial={{ scale: 0.8, opacity: 0 }}
+                        initial={false}
                         animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0.4, ease: "easeOut" }}
+                        transition={{ duration: 0 }}
                         className={cn(
                           "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
                           realConfig.bgColor,
@@ -1275,7 +1275,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <motion.h3
                             key={`agent-name-${realAgent}`}
-                            initial={{ opacity: 0, x: -10 }}
+                            initial={false}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.3, ease: "easeOut" }}
                             className={cn(
@@ -1333,7 +1333,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 )}
                 {/* Contenido de streaming - solo cuando hay texto */}
                 {streamingResponse && (
-                  <div className="p-4 min-w-0 overflow-hidden">
+                  <div
+                    className="p-4 min-w-0 overflow-hidden"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="false"
+                    aria-busy="true"
+                  >
+                    <span className="sr-only">Respuesta en progreso</span>
                     <StreamingMarkdownRenderer
                       content={streamingResponse}
                       className="text-base leading-relaxed"

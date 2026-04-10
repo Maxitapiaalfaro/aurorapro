@@ -83,6 +83,10 @@ export interface SendMessageParams {
  */
 export class SSEClient {
   private abortController: AbortController | null = null
+  private retryCount = 0
+  private hasStartedStream = false
+  private readonly MAX_RETRIES = 3
+  private readonly RETRY_DELAYS = [1000, 2000, 4000] // 1s, 2s, 4s
 
   /**
    * Envía un mensaje y procesa eventos SSE
@@ -91,11 +95,29 @@ export class SSEClient {
     params: SendMessageParams,
     callbacks: SSECallbacks
   ): Promise<any> {
+    // Reset retry state for new request
+    this.retryCount = 0
+    this.hasStartedStream = false
+
+    return this.attemptConnection(params, callbacks)
+  }
+
+  /**
+   * Internal method to attempt connection with retry logic
+   */
+  private async attemptConnection(
+    params: SendMessageParams,
+    callbacks: SSECallbacks
+  ): Promise<any> {
     // Crear AbortController para poder cancelar la request
     this.abortController = new AbortController()
 
     try {
-      logger.info('🔄 [SSEClient] Enviando mensaje vía SSE...')
+      if (this.retryCount > 0) {
+        logger.info(`🔄 [SSEClient] Reconectando... (intento ${this.retryCount + 1}/${this.MAX_RETRIES + 1})`)
+      } else {
+        logger.info('🔄 [SSEClient] Enviando mensaje vía SSE...')
+      }
 
       const response = await authenticatedFetch('/api/send-message', {
         method: 'POST',
@@ -125,6 +147,9 @@ export class SSEClient {
         throw new Error('No se recibió stream del servidor')
       }
 
+      // Mark stream as started (prevents retry after stream begins)
+      this.hasStartedStream = true
+
       logger.info('✅ [SSEClient] Stream iniciado, procesando eventos...')
 
       // Procesar stream SSE
@@ -140,8 +165,19 @@ export class SSEClient {
         throw new Error('Request cancelada')
       }
 
+      // Retry logic: only retry if stream hasn't started and we have retries left
+      if (!this.hasStartedStream && this.retryCount < this.MAX_RETRIES) {
+        const delay = this.RETRY_DELAYS[this.retryCount]
+        this.retryCount++
+
+        logger.warn(`⚠️ [SSEClient] Error de conexión. Reintentando en ${delay}ms...`, error)
+
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return this.attemptConnection(params, callbacks)
+      }
+
       logger.error('❌ [SSEClient] Error:', error)
-      
+
       if (callbacks.onError) {
         callbacks.onError(
           error instanceof Error ? error.message : 'Error desconocido',
@@ -162,11 +198,29 @@ export class SSEClient {
     params: SendMessageParams,
     callbacks: SSECallbacks
   ): AsyncGenerator<any, any, unknown> {
+    // Reset retry state for new request
+    this.retryCount = 0
+    this.hasStartedStream = false
+
+    yield* this.attemptStreamConnection(params, callbacks)
+  }
+
+  /**
+   * Internal method to attempt streaming connection with retry logic
+   */
+  private async *attemptStreamConnection(
+    params: SendMessageParams,
+    callbacks: SSECallbacks
+  ): AsyncGenerator<any, any, unknown> {
     // Crear AbortController para poder cancelar la request
     this.abortController = new AbortController()
 
     try {
-      logger.info('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
+      if (this.retryCount > 0) {
+        logger.info(`🔄 [SSEClient] Reconectando... (intento ${this.retryCount + 1}/${this.MAX_RETRIES + 1})`)
+      } else {
+        logger.info('🔄 [SSEClient] Enviando mensaje vía SSE (streaming)...')
+      }
 
       const response = await authenticatedFetch('/api/send-message', {
         method: 'POST',
@@ -195,6 +249,9 @@ export class SSEClient {
       if (!response.body) {
         throw new Error('No se recibió stream del servidor')
       }
+
+      // Mark stream as started (prevents retry after stream begins)
+      this.hasStartedStream = true
 
       logger.info('✅ [SSEClient] Stream iniciado, yielding chunks...')
 
@@ -351,6 +408,18 @@ export class SSEClient {
       if (error instanceof Error && error.name === 'AbortError') {
         logger.info('⚠️ [SSEClient] Request cancelada por el usuario')
         throw new Error('Request cancelada')
+      }
+
+      // Retry logic: only retry if stream hasn't started and we have retries left
+      if (!this.hasStartedStream && this.retryCount < this.MAX_RETRIES) {
+        const delay = this.RETRY_DELAYS[this.retryCount]
+        this.retryCount++
+
+        logger.warn(`⚠️ [SSEClient] Error de conexión. Reintentando en ${delay}ms...`, error)
+
+        await new Promise(resolve => setTimeout(resolve, delay))
+        yield* this.attemptStreamConnection(params, callbacks)
+        return
       }
 
       logger.error('❌ [SSEClient] Error:', error)
