@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Loader2, AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import { humanizeStepLabel, calculateProgress } from '@/lib/humanized-steps'
@@ -46,8 +46,10 @@ interface AgenticTransparencyFlowProps {
  * Elegant, progressive disclosure component that visualizes the AI agent's
  * execution pipeline with human-readable labels and smooth transitions.
  *
- * - **Live mode** (`defaultCollapsed=false`): progress bar + expanding step list.
+ * - **Live mode** (`defaultCollapsed=false`): progress bar + expanding step list
+ *   inside an isolated container with agency glow animation.
  * - **Historical mode** (`defaultCollapsed=true`): compact summary, expandable.
+ *   Container dims to reduce visual weight once processing is complete.
  */
 export function AgenticTransparencyFlow({
   timeline,
@@ -63,6 +65,7 @@ export function AgenticTransparencyFlow({
   const completedCount = timeline.steps.filter(s => s.status === 'completed').length
   const hasActiveStep = timeline.steps.some(s => s.status === 'active')
   const isLive = !defaultCollapsed || hasActiveStep
+  const allCompleted = !hasActiveStep && completedCount === timeline.steps.length && completedCount > 0
 
   // Summary text for collapsed view
   const summaryParts: string[] = []
@@ -79,7 +82,21 @@ export function AgenticTransparencyFlow({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-md", className)}>
+    <motion.div
+      className={cn(
+        "overflow-hidden rounded-lg border",
+        // Isolated container: low-contrast background + subtle border
+        "bg-slate-50/80 border-slate-200/60 dark:bg-slate-900/60 dark:border-slate-700/40",
+        // Agency glow while processing
+        hasActiveStep && "animate-agency-glow",
+        className,
+      )}
+      // Dim when all steps complete (live mode finishing)
+      animate={{
+        opacity: allCompleted && !defaultCollapsed ? 0.6 : 1,
+      }}
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+    >
       {/* ── Progress bar ────────────────────────────────────────── */}
       <ProgressBar progress={progress} isLive={isLive} agentType={timeline.agentType} />
 
@@ -88,7 +105,7 @@ export function AgenticTransparencyFlow({
         <button
           type="button"
           onClick={() => setIsExpanded(prev => !prev)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary/30 transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors"
           aria-expanded={isExpanded}
           aria-label={`${timeline.agentDisplayName} - ${completedCount} paso${completedCount !== 1 ? 's' : ''} completados`}
         >
@@ -159,7 +176,7 @@ export function AgenticTransparencyFlow({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   )
 }
 
@@ -217,27 +234,33 @@ function TransparencyStepItem({
     prevStatusRef.current = step.status
   }, [step.status])
 
-  const icon =
+  // Agency indicator: pulsing dot for active, solid dot for completed, alert for error
+  const statusIndicator =
     step.status === 'active' ? (
-      <Loader2 className="w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
+      <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-clarity-blue-500" />
+      </span>
     ) : step.status === 'error' ? (
       <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
     ) : (
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
+      <motion.span
+        className="inline-flex rounded-full h-2 w-2 bg-serene-teal-500/70 flex-shrink-0"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-      >
-        <Check className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
-      </motion.div>
+      />
     )
 
   return (
     <motion.li
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{
+        opacity: step.status === 'completed' ? 0.75 : 1,
+        y: 0,
+      }}
       transition={{
-        duration: 0.25,
+        duration: 0.3,
         delay: isLive ? index * 0.04 : 0,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
@@ -246,9 +269,10 @@ function TransparencyStepItem({
       {/* ── Main row ──────────────────────────────────────────── */}
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-colors",
-          step.status === 'active' && 'bg-secondary/40',
-          hasExpandableContent && 'cursor-pointer hover:bg-secondary/30',
+          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-all duration-300",
+          step.status === 'active' && 'bg-clarity-blue-50/60 dark:bg-clarity-blue-900/20',
+          step.status === 'completed' && 'bg-transparent',
+          hasExpandableContent && 'cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/30',
         )}
         onClick={hasExpandableContent ? () => setIsOpen(prev => !prev) : undefined}
         role={hasExpandableContent ? 'button' : undefined}
@@ -256,15 +280,15 @@ function TransparencyStepItem({
         aria-label={hasExpandableContent ? `${humanLabel} - ${isOpen ? 'Expandido' : 'Contraído'}` : humanLabel}
       >
         <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
-          {icon}
+          {statusIndicator}
         </div>
 
         <span
           className={cn(
-            'flex-1 min-w-0 truncate',
+            'flex-1 min-w-0 truncate transition-colors duration-300',
             step.status === 'active'
               ? 'text-foreground/90 font-medium'
-              : 'text-muted-foreground/70',
+              : 'text-muted-foreground/60',
           )}
         >
           {humanLabel}
@@ -346,9 +370,12 @@ function ProgressSubSteps({
             className="flex items-center gap-1.5"
           >
             {isActive ? (
-              <Loader2 className="w-2 h-2 animate-spin text-clarity-blue-500/60 flex-shrink-0" />
+              <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-clarity-blue-500/60" />
+              </span>
             ) : (
-              <Check className="w-2 h-2 text-serene-teal-500/40 flex-shrink-0" />
+              <span className="inline-flex rounded-full h-1.5 w-1.5 bg-serene-teal-500/40 flex-shrink-0" />
             )}
             <span
               className={cn(
