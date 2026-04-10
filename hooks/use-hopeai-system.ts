@@ -86,7 +86,6 @@ interface UseHopeAISystemReturn {
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
     executionTimeline?: ExecutionTimeline,
-    sessionIdOverride?: string,
     serverAiMessageId?: string
   ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
@@ -1159,11 +1158,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
     executionTimelineForThisResponse?: ExecutionTimeline,
-    sessionIdOverride?: string,
     serverAiMessageId?: string
   ): Promise<void> => {
     // Resolver sessionId objetivo de forma robusta
-    let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
+    let targetSessionId: string | null = systemState.sessionId || lastSessionIdRef.current
     if (!targetSessionId) {
       try {
         if (psychologistId) {

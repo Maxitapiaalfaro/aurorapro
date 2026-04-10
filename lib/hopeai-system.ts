@@ -553,7 +553,9 @@ export class HopeAISystem {
 
     // Helper: emit a processing step event to the client for pipeline transparency
     // Tracks per-step elapsed time so the UI can show durations like Claude Code does.
+    // Also accumulates completed steps for server-side ExecutionTimeline persistence.
     const stepTimers = new Map<string, number>()
+    const collectedProcessingSteps: ExecutionStep[] = []
     const emitStep = (id: string, label: string, status: 'active' | 'completed', detail?: string) => {
       let durationMs: number | undefined
       if (status === 'active') {
@@ -561,6 +563,8 @@ export class HopeAISystem {
       } else if (status === 'completed') {
         const start = stepTimers.get(id)
         if (start) durationMs = Date.now() - start
+        // Accumulate completed steps so the wrappedStream can build a full timeline
+        collectedProcessingSteps.push({ id: `ps_${id}`, label, status: 'completed', durationMs, detail })
       }
       onProcessingStep?.({ id, label, status, durationMs, detail })
     }
@@ -1094,17 +1098,25 @@ export class HopeAISystem {
           } finally {
             // Stream fully consumed (or aborted) — persist the assistant response
             if (accumulatedText) {
-              // Build ExecutionTimeline from collected tool steps
+              // Build ExecutionTimeline from processing steps + tool steps
+              // Processing steps (session_load, patient_context, build_context, model_call)
+              // are collected in the outer sendMessage scope via emitStep().
+              // Tool steps (tool_call_start/complete) are collected here in the wrappedStream.
+              const allSteps: ExecutionStep[] = [
+                ...collectedProcessingSteps,
+                ...collectedToolSteps.map(s => ({
+                  ...s,
+                  // Mark any still-active steps as completed (stream ended)
+                  status: s.status === 'active' ? 'completed' as const : s.status,
+                })),
+              ]
+
               const executionTimeline: ExecutionTimeline | undefined =
-                collectedToolSteps.length > 0
+                allSteps.length > 0
                   ? {
                       agentType: currentState.activeAgent,
                       agentDisplayName: currentState.activeAgent,
-                      steps: collectedToolSteps.map(s => ({
-                        ...s,
-                        // Mark any still-active steps as completed (stream ended)
-                        status: s.status === 'active' ? 'completed' as const : s.status,
-                      })),
+                      steps: allSteps,
                     }
                   : undefined
 
@@ -1164,6 +1176,16 @@ export class HopeAISystem {
       } else {
         responseContent = response.text
 
+        // Build ExecutionTimeline from accumulated processing steps (non-streaming)
+        const nonStreamTimeline: ExecutionTimeline | undefined =
+          collectedProcessingSteps.length > 0
+            ? {
+                agentType: currentState.activeAgent,
+                agentDisplayName: currentState.activeAgent,
+                steps: collectedProcessingSteps,
+              }
+            : undefined
+
         // Add AI response to history (include metadata if available)
         const aiMessage: ChatMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -1172,6 +1194,7 @@ export class HopeAISystem {
           agent: currentState.activeAgent,
           timestamp: new Date(),
           groundingUrls: response.groundingUrls?.length > 0 ? response.groundingUrls : undefined,
+          executionTimeline: nonStreamTimeline,
         }
 
         currentState.history.push(aiMessage)
