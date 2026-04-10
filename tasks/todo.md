@@ -60,7 +60,8 @@
 - [ ] Complete markdown parser migration (remove legacy `markdown-parser.ts`) | Priority: L | Status: pending
 
 ### Firebase CLI
-- [ ] Deploy rules via `firebase deploy --only firestore:rules` | Priority: H | Status: pending (manual)
+- [x] Deploy indexes via `firebase deploy --only firestore:indexes` | Priority: H | Status: ✅ DONE (2026-04-10)
+- [x] Deploy rules via `firebase deploy --only firestore:rules` | Priority: H | Status: ✅ DONE (2026-04-10)
 
 ## Completed Tasks
 <!-- Move completed items here with date -->
