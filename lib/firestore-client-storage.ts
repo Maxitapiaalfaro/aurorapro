@@ -408,6 +408,8 @@ export async function savePatient(
   const data = serializeDates({
     ...patient,
     updatedAt: new Date(),
+    // Ensure new patients are not marked as deleted
+    isDeleted: patient.isDeleted ?? false,
   })
   await setDoc(ref, data, { merge: true })
 }
@@ -424,7 +426,11 @@ export async function loadPatient(
 export async function getAllPatients(
   psychologistId: string
 ): Promise<PatientRecord[]> {
-  const q = query(patientsCol(psychologistId), orderBy('updatedAt', 'desc'))
+  const q = query(
+    patientsCol(psychologistId),
+    where('isDeleted', '==', false),
+    orderBy('updatedAt', 'desc')
+  )
   const snapshot = await getDocs(q)
   return snapshot.docs.map(d => reviveDates(d.data()) as PatientRecord)
 }
@@ -433,7 +439,13 @@ export async function deletePatient(
   psychologistId: string,
   patientId: string
 ): Promise<void> {
-  await deleteDoc(patientRef(psychologistId, patientId))
+  // Soft delete: Mark patient as deleted instead of removing document
+  // This prevents cascade deletion of conversations which are subcollections
+  const ref = patientRef(psychologistId, patientId)
+  await setDoc(ref, {
+    isDeleted: true,
+    deletedAt: Timestamp.fromDate(new Date())
+  }, { merge: true })
 }
 
 /**
@@ -458,7 +470,11 @@ export function subscribeToPatients(
   psychologistId: string,
   callback: (patients: PatientRecord[], hasPendingWrites: boolean) => void
 ): Unsubscribe {
-  const q = query(patientsCol(psychologistId), orderBy('updatedAt', 'desc'))
+  const q = query(
+    patientsCol(psychologistId),
+    where('isDeleted', '==', false),
+    orderBy('updatedAt', 'desc')
+  )
   return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
     const patients = snapshot.docs.map(d => reviveDates(d.data()) as PatientRecord)
     const hasPendingWrites = snapshot.docs.some(d => d.metadata.hasPendingWrites)
