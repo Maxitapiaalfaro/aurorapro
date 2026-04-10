@@ -243,37 +243,6 @@ export class ClinicalAgentRouter {
         sessionMetricsTracker.recordModelCallStart(interactionId, modelUsed, contextTokens);
       }
 
-      // Switch to API-key client when files are attached and current session uses Vertex AI.
-      // Files uploaded via the API-key Files API have URIs from generativelanguage.googleapis.com
-      // which are not accessible from the Vertex AI endpoint (aiplatform.googleapis.com).
-      // Only recreate the chat if we're not already on the API-key client.
-      const hasFileAttachments = Array.isArray(enrichedContext?.sessionFiles) && enrichedContext.sessionFiles.length > 0
-
-      if (hasFileAttachments && !sessionData.usesApiKeyClient) {
-        try {
-          const agentConfig = this.unifiedConfig
-          const geminiHistory = await this.convertHistoryToGeminiFormat(sessionId, sessionData.history || [])
-          const fileChat = aiFiles.chats.create({
-            model: agentConfig?.config?.model || 'gemini-3.1-flash-lite-preview',
-            config: {
-              temperature: agentConfig?.config?.temperature,
-              topK: agentConfig?.config?.topK,
-              topP: agentConfig?.config?.topP,
-              maxOutputTokens: agentConfig?.config?.maxOutputTokens,
-              safetySettings: agentConfig?.config?.safetySettings,
-              systemInstruction: agentConfig?.systemInstruction,
-              tools: agentConfig?.tools && agentConfig?.tools.length > 0 ? agentConfig.tools : undefined,
-              thinkingConfig: agentConfig?.config?.thinkingConfig,
-            },
-            history: geminiHistory,
-          })
-          this.activeChatSessions.set(sessionId, { chat: fileChat, agent: 'socratico', usesApiKeyClient: true })
-          chat = fileChat
-        } catch (switchErr) {
-          logger.warn('⚠️ Could not switch to API-key client for file-attached message', { error: switchErr instanceof Error ? switchErr.message : String(switchErr) })
-        }
-      }
-
       // Construir las partes del mensaje (texto + archivos adjuntos)
       const messageParts: any[] = [{ text: enhancedMessage }]
 
