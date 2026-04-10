@@ -2,6 +2,7 @@ import { ai, aiFiles } from "./google-genai-config"
 import { createUnifiedAgentConfig } from "./agents/agent-definitions"
 import { clinicalFileManager, createPartFromUri } from "./clinical-file-manager"
 import { sessionMetricsTracker } from "./session-metrics-comprehensive-tracker"
+import { PerformanceLogger } from "./performance-logger"
 // P1.1: Reactive context compaction — detect context-exhausted errors and compact history
 import { ContextWindowManager, isContextExhaustedError } from "./context-window-manager"
 // P3: Streaming & Tool handler — extracted to agents/streaming-handler.ts
@@ -225,10 +226,14 @@ export class ClinicalAgentRouter {
 
     try {
       // Enriquecer el mensaje con contexto si está disponible
+      // 📊 PHASE 5: Measure message context building (this is what "routing" measures in the orchestration path)
+      const contextBuildStart = performance.now()
       let enhancedMessage = message
       if (enrichedContext) {
         enhancedMessage = buildEnhancedMessage(message, enrichedContext, 'socratico')
       }
+      const contextBuildDuration = performance.now() - contextBuildStart
+      PerformanceLogger.log('context-building', contextBuildDuration)
 
       // 📊 RECORD MODEL CALL START - Estimate context tokens if interaction tracking enabled
       if (interactionId) {
