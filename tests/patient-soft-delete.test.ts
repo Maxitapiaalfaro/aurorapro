@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   savePatient,
   deletePatient,
-  getAllPatients,
-  loadPatient
+  getAllPatients
 } from '@/lib/firestore-client-storage'
 import type { PatientRecord } from '@/types/clinical-types'
 
