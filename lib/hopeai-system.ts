@@ -12,6 +12,7 @@ import type { OperationalMetadata, AgentTransition } from "@/types/operational-m
 import { queryCheckpoint, type QueryProfile } from '@/lib/utils/query-profiler'
 
 import { createLogger } from '@/lib/logger'
+import { PerformanceLogger } from '@/lib/performance-logger'
 
 const systemLogger = createLogger('system')
 const sessionLogger = createLogger('session')
@@ -631,6 +632,9 @@ export class HopeAISystem {
     queryCheckpoint(queryProfile, 'saves_dispatched')
     const interactionId = sessionMetricsTracker.startInteraction(sessionId, currentState.userId, message);
 
+    // 📊 PHASE 5: Start orchestration performance measurement
+    const orchestrationStart = performance.now()
+
     // Hoist patient reference derivation (needed by parallel I/O below)
     const patientReference = sessionMeta?.patient?.reference || currentState.clinicalContext?.patientId;
     const providedSummary = sessionMeta?.patient?.summaryText;
@@ -895,6 +899,8 @@ export class HopeAISystem {
       }
 
       // ─── Operational metadata (now synchronous — uses pre-fetched or client-provided data) ───
+      // 📊 PHASE 5: Measure metadata collection
+      const metadataStart = performance.now()
       const operationalMetadata = this.collectOperationalMetadata(
         sessionId,
         currentState.userId,
@@ -904,6 +910,8 @@ export class HopeAISystem {
         fichas,
         clientContext?.operationalHints
       );
+      const metadataDuration = performance.now() - metadataStart
+      PerformanceLogger.log('metadata-collection', metadataDuration)
 
       // Agregar el mensaje del usuario al historial
       const userMessage: ChatMessage = {
@@ -984,6 +992,8 @@ export class HopeAISystem {
 
       emitStep('model_call', 'Conectando con modelo de análisis…', 'active')
 
+      // 📊 PHASE 5: Measure routing latency (happens inside sendMessage)
+      const routingStart = performance.now()
       const response = await clinicalAgentRouter.sendMessage(
         sessionId,
         message,
@@ -992,6 +1002,8 @@ export class HopeAISystem {
         interactionId,  // 📊 Pass interaction ID for metrics tracking
         currentState.userId  // 🔒 P0.1: Pass psychologistId for tool permission checks
       )
+      const routingDuration = performance.now() - routingStart
+      PerformanceLogger.log('routing', routingDuration)
 
       emitStep('model_call', 'Modelo conectado', 'completed')
 
@@ -1167,9 +1179,14 @@ export class HopeAISystem {
         // The client will use this ID when writing the richer message to Firestore.
         ;(wrappedStream as any).routingInfo = routingInfo
         ;(wrappedStream as any).predictedAiMessageId = aiMessageId
-        
-        return { 
-          response: wrappedStream, 
+
+        // 📊 PHASE 5: Log total orchestration time and increment message counter
+        const orchestrationDuration = performance.now() - orchestrationStart
+        PerformanceLogger.log('orchestration-total', orchestrationDuration)
+        PerformanceLogger.incrementMessageCount()
+
+        return {
+          response: wrappedStream,
           updatedState: currentState,
           interactionMetrics: null // Will be captured by wrapper when stream completes
         }
@@ -1233,10 +1250,15 @@ export class HopeAISystem {
       // 📊 METRICS TRACKING for non-streaming
       // Note: Metrics are already completed in clinical-agent-router.ts after token extraction
       // Attempting to call completeInteraction here would return null as interaction is already completed
-      
+
       sessionLogger.info(`🎉 Non-streaming interaction completed: ${sessionId}`);
 
-      return { 
+      // 📊 PHASE 5: Log total orchestration time and increment message counter
+      const orchestrationDuration = performance.now() - orchestrationStart
+      PerformanceLogger.log('orchestration-total', orchestrationDuration)
+      PerformanceLogger.incrementMessageCount()
+
+      return {
         response: {
           ...response,
           // Mark non-streaming responses as already persisted server-side
@@ -1247,7 +1269,7 @@ export class HopeAISystem {
             confidence: 1.0,
             extractedEntities: [] as string[]
           }
-        }, 
+        },
         updatedState: currentState,
         interactionMetrics: null // Already captured and completed in router
       }
