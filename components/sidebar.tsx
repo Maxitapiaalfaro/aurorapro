@@ -208,6 +208,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       }}
       onMouseEnter={() => !isOpen && onToggle()}
       onMouseLeave={() => isOpen && !shouldPreventAutoClose && onToggle()}
+      role="navigation"
+      aria-label="Navegación principal y biblioteca de casos"
     >
       {/* Navigation Icons - Always visible */}
       <div className="flex flex-col flex-shrink-0 p-3 py-5 gap-2.5 overflow-visible border-b border-border/40">
@@ -243,6 +245,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                     style={{
                       transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
                     }}
+                    aria-hidden={!isOpen}
                   >
                     Nueva consulta
                   </span>

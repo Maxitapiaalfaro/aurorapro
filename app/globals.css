@@ -134,6 +134,13 @@
   .dark body {
     background-color: hsl(var(--background));
   }
+
+  /* Optimización de fuentes: Simular peso 500 usando 400 + font-synthesis */
+  .font-medium,
+  [class*="font-medium"] {
+    font-weight: 500;
+    font-synthesis: weight;
+  }
 }
 
 /* Estilos específicos para contenido markdown en mensajes clínicos */

@@ -89,6 +89,8 @@ export function AgenticTransparencyFlow({
           type="button"
           onClick={() => setIsExpanded(prev => !prev)}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary/30 transition-colors"
+          aria-expanded={isExpanded}
+          aria-label={`${timeline.agentDisplayName} - ${completedCount} paso${completedCount !== 1 ? 's' : ''} completados`}
         >
           {/* Mini stepper dots */}
           <div className="flex items-center gap-[3px]">
@@ -127,7 +129,7 @@ export function AgenticTransparencyFlow({
 
       {/* ── Live mode agent name ───────────────────────────────── */}
       {isLive && (
-        <div className="flex items-center gap-1.5 px-3 py-1">
+        <div className="flex items-center gap-1.5 px-3 py-1" role="status" aria-live="polite" aria-label="Procesamiento de IA en curso">
           <span className={cn("text-[11px] font-semibold", agentConfig.textColor)}>
             {timeline.agentDisplayName}
           </span>
@@ -250,6 +252,8 @@ function TransparencyStepItem({
         )}
         onClick={hasExpandableContent ? () => setIsOpen(prev => !prev) : undefined}
         role={hasExpandableContent ? 'button' : undefined}
+        aria-expanded={hasExpandableContent ? isOpen : undefined}
+        aria-label={hasExpandableContent ? `${humanLabel} - ${isOpen ? 'Expandido' : 'Contraído'}` : humanLabel}
       >
         <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
           {icon}

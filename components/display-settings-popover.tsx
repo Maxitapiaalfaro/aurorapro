@@ -62,12 +62,15 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
   const drawerContent = isOpen && (
     <>
       {/* Overlay semi-transparente que permite ver el contenido */}
-      <div 
+      <div
         className={cn(
           "fixed inset-0 z-[100] transition-all duration-300",
           isMobile ? "bg-black/40" : "bg-black/10"
         )}
         onClick={() => setIsOpen(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="display-settings-title"
       />
       
       {/* Drawer / Sheet */}
@@ -86,14 +89,15 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
           {/* Header Compacto */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
             <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <span className="font-sans text-sm font-semibold">Ajustes de visualización</span>
+              <Settings className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <span className="font-sans text-sm font-semibold" id="display-settings-title">Ajustes de visualización</span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={resetPreferences}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md transition-colors"
                 title="Restaurar valores por defecto"
+                aria-label="Restaurar valores por defecto"
               >
                 <RotateCcw className="h-3 w-3" />
               </button>
@@ -101,6 +105,7 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                 onClick={() => setIsOpen(false)}
                 className="inline-flex items-center justify-center h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md transition-colors"
                 title="Cerrar"
+                aria-label="Cerrar ajustes de visualización"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -110,12 +115,12 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
           {/* Content - Scrollable */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
             {/* Tamaño de Texto - Compacto */}
-            <div className="space-y-2">
-              <Label className="font-sans text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <Type className="h-3 w-3" />
+            <div className="space-y-2" role="group" aria-labelledby="font-size-label">
+              <Label className="font-sans text-xs font-medium text-muted-foreground flex items-center gap-1.5" id="font-size-label">
+                <Type className="h-3 w-3" aria-hidden="true" />
                 Texto
               </Label>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5" role="radiogroup" aria-labelledby="font-size-label">
                 {fontSizeOptions.map((option) => (
                   <button
                     key={option.value}
@@ -126,6 +131,9 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                         ? "bg-primary text-primary-foreground shadow-sm"
                         : "bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
                     )}
+                    role="radio"
+                    aria-checked={preferences.fontSize === option.value}
+                    aria-label={`Tamaño de texto ${option.value}`}
                   >
                     {option.label}
                   </button>
@@ -245,6 +253,9 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
         className={cn("h-8 w-8", className)}
         onClick={() => setIsOpen(!isOpen)}
         title="Ajustes de visualización"
+        aria-label="Abrir ajustes de visualización"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
         <Settings className="h-4 w-4" />
       </Button>

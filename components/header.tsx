@@ -103,9 +103,9 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId, psychologistId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3.5 md:py-4 flex items-center justify-between z-50 border-b border-border/60 backdrop-blur-md bg-background/90">
+    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3.5 md:py-4 flex items-center justify-between z-50 border-b border-border/60 backdrop-blur-md bg-background/90" role="banner">
       {/* Subtle gradient separator */}
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-border/80 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-border/80 to-transparent" aria-hidden="true" />
 
       <div className="relative flex items-center gap-3 md:gap-4 flex-1 min-w-0">
         <Button
@@ -113,6 +113,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           size="icon"
           className="md:hidden h-10 w-10 flex-shrink-0 rounded-xl text-muted-foreground hover:text-clarity-blue-600 dark:hover:text-clarity-blue-400 hover:bg-clarity-blue-50/80 dark:hover:bg-clarity-blue-900/30 transition-colors"
           onClick={onHistoryToggle}
+          aria-label="Abrir menú de navegación"
         >
           <ListIcon className="h-5 w-5" weight="bold" />
         </Button>
@@ -273,6 +274,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           className="h-10 w-10 rounded-xl text-mineral-gray hover:text-clarity-blue-600 hover:bg-clarity-blue-50/80 dark:text-mineral-gray dark:hover:text-clarity-blue-400 dark:hover:bg-clarity-blue-900/30 transition-colors"
           onClick={() => setTheme((resolvedTheme === 'dark' || theme === 'dark') ? 'light' : 'dark')}
           title={(resolvedTheme === 'dark' || theme === 'dark') ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          aria-label={(resolvedTheme === 'dark' || theme === 'dark') ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         >
           {(resolvedTheme === 'dark' || theme === 'dark') ? (
             <SunIcon className="h-5 w-5" weight="duotone" />
@@ -286,6 +288,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           className="h-10 w-10 rounded-xl text-mineral-gray hover:text-destructive hover:bg-destructive/10 transition-colors"
           onClick={() => signOut(auth)}
           title="Cerrar sesión"
+          aria-label="Cerrar sesión"
         >
           <SignOutIcon className="h-5 w-5" weight="duotone" />
         </Button>
