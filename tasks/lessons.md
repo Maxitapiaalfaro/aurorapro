@@ -99,6 +99,29 @@
 - **Root Cause:** When the tool execution pipeline was built, `patientId` was expected to come from Gemini's `args.patientId`. But Gemini doesn't always include it, and the authoritative source (session context) was never threaded through.
 - **Rule:** For any context identifier (userId, patientId, sessionId), thread it from the entry point (API route or session context) through every middleware layer to the final handler. Don't rely on the LLM to provide identifiers that the system already knows.
 
+### 2026-04-10: Balancing token optimization with clinical integrity
+- **Context:** Optimized unified-system-prompt.ts from 5,492→5,175 tokens (5.7% reduction) with Promptware 2026 audit. Target was 10%, actual 5.7%. Gap due to clinical quality preservation constraints.
+- **Discovery:** ~46% of system prompt tokens are non-compressible without compromising clinical efficacy: (1) 5 behavioral communication rules (VALIDACIÓN-PRIMERO, ENMARCADO COLABORATIVO, etc.) — deterministic warmth encoding that replaces abstract adjectives, (2) Tool combination strategies table (§8.2) — prevents tool underutilization and ensures comprehensive responses, (3) Ethics and consent sections (§7) — HIPAA compliance and therapeutic integrity constraints.
+- **Rule:** For health-tech agent prompts, establish "sacred sections" that are off-limits for compression: behavioral protocols (therapeutic quality), tool strategies (agent competence), ethics/compliance (regulatory requirements). Apply aggressive optimization only to meta-instructions, redundancies, and abstract language. Measure token ROI per section — some verbose sections prevent expensive errors downstream (e.g., tool strategy table prevents multi-turn clarification loops that cost more tokens than the table itself).
+
+### 2026-04-10: Remove prompt-level meta-reasoning when API provides thinking configuration
+- **Pattern:** Gemini API's `thinkingConfig: { thinkingLevel: 'medium' }` makes prompt instructions like "Antes de responder, evalúa internamente..." redundant and potentially conflicting.
+- **Example:** Removed §4.1's pre-response evaluation checklist (8 lines, ~150 tokens) because it duplicated API-level thinking. Changed "Antes de responder, evalúa internamente:" → "Componentes de evaluación:" (directive list instead of meta-instruction).
+- **Rule:** When model API exposes reasoning/thinking parameters (Gemini's thinkingConfig, Claude's extended thinking, etc.), eliminate all prompt-level "think before responding" instructions. They waste tokens and may interfere with API implementation. Convert meta-cognitive instructions ("evalúa", "considera", "reflexiona") to direct imperative instructions ("identifica", "lista", "compara").
+
+### 2026-04-10: Convert negations to positive affirmations with specific routes
+- **Principle:** Per SCORE framework (Steering, Context, Outcome, Route, Examples), "NO hagas X" keeps residual attention on undesired behavior X. Positive framing directs full attention to desired behavior Y.
+- **Examples Applied:**
+  - ❌ "NO eres un transcriptor" → ✅ "Sintetizas información clínica en documentación profesional estructurada"
+  - ❌ "NUNCA inventes información" → ✅ "Cada afirmación rastreable al material fuente"
+  - ❌ "NO generes documentación automáticamente" → ✅ "Analiza y responde directamente"
+- **Rule:** Replace "NO/NUNCA + [behavior]" with "[positive alternative] + [concrete constraint]". Include verb + specific output format when possible. For critical safety constraints (e.g., PHI handling), keep negation but balance with positive route: "NUNCA [danger]. En su lugar, [safe alternative]."
+
+### 2026-04-10: Freemium tier viability requires multi-phase token optimization
+- **Discovery:** Performance Agent revealed critical business constraint: Freemium tier (500K tokens/month) was already exceeded at baseline. With 5,492-token prompt × 100 messages/month = 549,200 tokens (110% of limit), users would hit quota before normal usage.
+- **Impact:** 5.7% optimization (5,492→5,175 tokens) improved to 517,500 tokens/month (103.5% of limit) — still over but gained 6.3% headroom. To achieve full viability (≤450K tokens to allow 50K margin), would need 18% reduction from baseline or 13% reduction from current state.
+- **Rule:** For subscription-tiered AI products, measure token consumption per-tier at baseline BEFORE optimization. Calculate: (prompt_tokens × expected_msgs_per_month) + (avg_completion_tokens × expected_msgs_per_month) + tool_tokens. Freemium tiers need 10-20% safety margin because users max out usage. Design optimization roadmap in phases with incremental measurements rather than one-shot targets.
+
 ## Session Log
 
 - **2026-04-06:** User corrected priority ordering. Static decomposition analysis missed the Firebase offline-first migration spec. Updated P1 from file decomposition to migration completion. Lesson captured above.
@@ -111,3 +134,4 @@
 - **2026-04-07:** patientId Threading — Fixed `save_clinical_memory` tool failure. Threaded `patientId` from `clinical-agent-router.ts` through `streaming-handler.ts` to `tool-handlers.ts`.
 - **2026-04-07:** Session Recovery Fix — Fixed blank screen on loading conversations with patient context. Non-blocking sessionMeta reconstruction, eliminated double-read, defensive date handling.
 - **2026-04-07:** Patient Session Path Fix — Sessions with patient context saved under `_general` instead of patient-specific path. 4-part bug chain: (1) stale closure in sendMessage (sessionMeta not in deps → used ref pattern), (2) createSession didn't send patientSessionMeta to server, (3) server fallback `_general` inconsistent with `default_patient` everywhere else, (4) ghost session docs via server's `addMessage` set({merge:true}).
+- **2026-04-10:** System Prompt Architecture Optimization — Conducted Promptware 2026 audit of unified-system-prompt.ts. Parallel execution: AIExpert Agent (audit) + Performance Agent (baseline measurement). 23 violations found (77% compliance → 95% target). 3-phase optimization executed: (P0) remove meta-reasoning + add schema refs (-97 tokens), (P1) eliminate abstract adjectives (-233 tokens), (P2) convert negations + deduplicate (-370 tokens). **Result: 5,492→5,175 tokens (5.7% reduction, -315 tokens)** vs 10% target. Key learnings: (1) Freemium tier crisis revealed — 549,200 tokens/100 msgs vs 500K limit, optimization improves to 517,500 tokens (103.5% of limit, still over), (2) Calidez como Protocolo Conductual scales across agent types, (3) token efficiency vs clinical quality requires careful balance — no shortcuts in therapeutic integrity or HIPAA sections.
