@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { Card } from "@/components/ui/card"
 import { Brain, BookOpen, Stethoscope, User, FileText, ImageIcon, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -23,10 +24,11 @@ interface MessageBubbleProps {
   message: Message
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const isUser = message.sender === "user"
-  const config = message.agent ? getAgentVisualConfigSafe(message.agent) : getAgentVisualConfigSafe()
-  const IconComponent = config.icon
+export const MessageBubble = React.memo(
+  function MessageBubble({ message }: MessageBubbleProps) {
+    const isUser = message.sender === "user"
+    const config = message.agent ? getAgentVisualConfigSafe(message.agent) : getAgentVisualConfigSafe()
+    const IconComponent = config.icon
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
@@ -113,4 +115,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       )}
     </div>
   )
-}
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison: only re-render if message content, timestamp, or attachments change
+    return (
+      prevProps.message.id === nextProps.message.id &&
+      prevProps.message.content === nextProps.message.content &&
+      prevProps.message.timestamp.getTime() === nextProps.message.timestamp.getTime() &&
+      prevProps.message.attachments?.length === nextProps.message.attachments?.length
+    )
+  }
+)
