@@ -14,6 +14,7 @@ import {
   updateClinicalDocumentContent,
   loadSessionDocuments,
   getActivePatientMemories,
+  addMessage,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
@@ -84,7 +85,8 @@ interface UseHopeAISystemReturn {
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
-    executionTimeline?: ExecutionTimeline
+    executionTimeline?: ExecutionTimeline,
+    serverAiMessageId?: string
   ) => Promise<void>
   setSessionMeta: (sessionMeta: any) => void
   
@@ -414,7 +416,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         userId,
         mode,
         activeAgent: agent,
-        history: chatState.history,
+        // CRITICAL FIX: Preserve existing history (including optimistic user messages)
+        // instead of overwriting with the server's empty history for new sessions.
+        // This prevents the race condition where the first user message disappears.
+        history: prev.history.length > 0 ? prev.history : (chatState.history || []),
         isLoading: false
       }))
       lastSessionIdRef.current = sessionId
@@ -1153,10 +1158,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
     executionTimelineForThisResponse?: ExecutionTimeline,
-    sessionIdOverride?: string
+    serverAiMessageId?: string
   ): Promise<void> => {
     // Resolver sessionId objetivo de forma robusta
-    let targetSessionId: string | null = sessionIdOverride || systemState.sessionId || lastSessionIdRef.current
+    let targetSessionId: string | null = systemState.sessionId || lastSessionIdRef.current
     if (!targetSessionId) {
       try {
         if (psychologistId) {
@@ -1173,9 +1178,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       return
     }
 
-    // Crear el mensaje AI
+    // Crear el mensaje AI (usar el ID del servidor si está disponible para coordinación con Firestore)
     const aiMessage: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: serverAiMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       content: responseContent,
       role: "model",
       agent: agent,
@@ -1216,9 +1221,18 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
     logger.info('✅ Respuesta de streaming agregada al historial')
     logger.info('📊 Historial actualizado con', historyRef.current.length + 1, 'mensajes')
 
-    // NOTE: AI message is NOT persisted from the frontend to avoid duplication.
-    // The server already persists AI messages as part of saveChatSessionBoth() during streaming/response handling.
-  }, [systemState.sessionId, currentMessageBullets])
+    // 💾 Persist the client-side AI message to Firestore using the server's message ID.
+    // This overwrites the server's initial write with richer metadata:
+    // - Full executionTimeline (processingSteps + tool steps) from snapshotExecutionTimeline
+    // - reasoningBullets from the streaming session
+    // The server writes first; the client writes ~100ms later with the same doc ID (idempotent).
+    if (serverAiMessageId && psychologistId && targetSessionId) {
+      const patientId = resolvePatientId(systemStateRef.current as Partial<ChatState>)
+      addMessage(psychologistId, patientId, targetSessionId, aiMessage).catch(err =>
+        logger.warn('⚠️ Client-side AI message Firestore write failed (non-blocking):', err)
+      )
+    }
+  }, [systemState.sessionId, currentMessageBullets, psychologistId])
 
   // Establecer contexto del paciente
   const setSessionMeta = useCallback((sessionMeta: any) => {

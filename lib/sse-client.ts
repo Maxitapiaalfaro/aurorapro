@@ -308,6 +308,14 @@ export class SSEClient {
                     if (callbacks.onResponse) {
                       callbacks.onResponse(event.result)
                     }
+                    // Yield the server's AI message ID so the consumer (use-hopeai-system)
+                    // can pass it to addStreamingResponseToHistory for Firestore coordination.
+                    if (event.result?.response?.aiMessageId) {
+                      yield {
+                        text: "",
+                        metadata: { type: "ai_message_id", messageId: event.result.response.aiMessageId }
+                      }
+                    }
                     break
 
                   case 'error':

@@ -51,7 +51,8 @@ interface ChatInterfaceProps {
     agent: AgentType,
     groundingUrls?: Array<{title: string, url: string, domain?: string}>,
     reasoningBulletsForThisResponse?: ReasoningBullet[],
-    executionTimeline?: import('@/types/clinical-types').ExecutionTimeline
+    executionTimeline?: import('@/types/clinical-types').ExecutionTimeline,
+    serverAiMessageId?: string
   ) => Promise<void>
   pendingFiles?: ClinicalFile[]
   onRemoveFile?: (fileId: string) => void
@@ -560,6 +561,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             let accumulatedGroundingUrls: Array<{title: string, url: string, domain?: string}> = []
             let accumulatedAcademicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
             let chunkCount = 0
+            let serverAiMessageId: string | undefined
             const streamingStartTime = Date.now()
             
             try {
@@ -620,6 +622,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 if (chunk.metadata?.type === "academic_references" && chunk.metadata.references) {
                   accumulatedAcademicReferences = chunk.metadata.references
                   setStreamingAcademicReferences(accumulatedAcademicReferences)
+                }
+                // 🔑 Capturar el ID del mensaje AI del servidor para coordinación con Firestore
+                if (chunk.metadata?.type === "ai_message_id" && chunk.metadata.messageId) {
+                  serverAiMessageId = chunk.metadata.messageId
                 }
                 // 🎨 UX: Capturar eventos de tool calls
                 if (chunk.metadata) {
@@ -694,7 +700,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   const timeline = latestStatus
                     ? snapshotExecutionTimeline(latestStatus, responseAgent, streamingDuration)
                     : undefined
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline)
+                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline, serverAiMessageId)
                 } catch (historyError) {
                   logger.error('❌ Frontend: Error agregando al historial:', historyError)
                   Sentry.captureException(historyError)

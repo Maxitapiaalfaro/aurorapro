@@ -7,7 +7,7 @@ import { getFirestore as getAdminFirestore, Timestamp as AdminTimestamp } from '
 import { PatientSummaryBuilder } from "./patient-summary-builder"
 // Removed singleton-monitor import to avoid circular dependency
 import * as Sentry from '@sentry/nextjs'
-import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet } from "@/types/clinical-types"
+import type { AgentType, ClinicalMode, ChatState, ChatMessage, ClinicalFile, PatientSessionMeta, PatientRecord, ReasoningBullet, ExecutionTimeline, ExecutionStep } from "@/types/clinical-types"
 import type { OperationalMetadata, AgentTransition } from "@/types/operational-metadata"
 import { queryCheckpoint, type QueryProfile } from '@/lib/utils/query-profiler'
 
@@ -553,7 +553,9 @@ export class HopeAISystem {
 
     // Helper: emit a processing step event to the client for pipeline transparency
     // Tracks per-step elapsed time so the UI can show durations like Claude Code does.
+    // Also accumulates completed steps for server-side ExecutionTimeline persistence.
     const stepTimers = new Map<string, number>()
+    const collectedProcessingSteps: ExecutionStep[] = []
     const emitStep = (id: string, label: string, status: 'active' | 'completed', detail?: string) => {
       let durationMs: number | undefined
       if (status === 'active') {
@@ -561,6 +563,8 @@ export class HopeAISystem {
       } else if (status === 'completed') {
         const start = stepTimers.get(id)
         if (start) durationMs = Date.now() - start
+        // Accumulate completed steps so the wrappedStream can build a full timeline
+        collectedProcessingSteps.push({ id: `ps_${id}`, label, status: 'completed', durationMs, detail })
       }
       onProcessingStep?.({ id, label, status, durationMs, detail })
     }
@@ -1031,24 +1035,99 @@ export class HopeAISystem {
         // Wrap the async generator to save the assistant response to history
         // when the stream is fully consumed by the API route
         const self = this
+        // Pre-generate the AI message ID so it can be exposed on the generator
+        // and reused by the client-side addStreamingResponseToHistory for an
+        // idempotent Firestore merge (client writes richer metadata on top).
+        const aiMessageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
         const wrappedStream = (async function* () {
           let accumulatedText = ''
+          // ── METADATA COLLECTION: Accumulate metadata as it flows through chunks ──
+          const collectedGroundingUrls: Array<{title: string, url: string, domain?: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
+          const collectedToolSteps: ExecutionStep[] = []
+          // Track active tool calls so we can compute duration on completion
+          const toolStartTimes = new Map<string, number>()
           try {
             for await (const chunk of streamingResponse as AsyncIterable<any>) {
               if (chunk.text) {
                 accumulatedText += chunk.text
+              }
+              // ── Collect grounding URLs from streaming chunks ──
+              if (chunk.groundingUrls && Array.isArray(chunk.groundingUrls)) {
+                for (const url of chunk.groundingUrls) {
+                  // Deduplicate by URL
+                  if (url?.url && !collectedGroundingUrls.some(u => u.url === url.url)) {
+                    collectedGroundingUrls.push(url)
+                  }
+                }
+              }
+              // ── Collect tool execution metadata for ExecutionTimeline ──
+              if (chunk.metadata) {
+                if (chunk.metadata.type === 'tool_call_start') {
+                  toolStartTimes.set(chunk.metadata.toolName, Date.now())
+                  collectedToolSteps.push({
+                    id: `tool_${collectedToolSteps.length}`,
+                    label: chunk.metadata.toolName,
+                    status: 'active',
+                    toolName: chunk.metadata.toolName,
+                    query: chunk.metadata.query,
+                  })
+                } else if (chunk.metadata.type === 'tool_call_complete') {
+                  const startTime = toolStartTimes.get(chunk.metadata.toolName)
+                  const durationMs = startTime ? Date.now() - startTime : undefined
+                  // Find and update the matching active step (iterate backwards for most recent match)
+                  for (let i = collectedToolSteps.length - 1; i >= 0; i--) {
+                    if (collectedToolSteps[i].toolName === chunk.metadata.toolName && collectedToolSteps[i].status === 'active') {
+                      collectedToolSteps[i] = {
+                        ...collectedToolSteps[i],
+                        status: 'completed',
+                        durationMs,
+                        result: {
+                          sourcesFound: chunk.metadata.sourcesFound,
+                          sourcesValidated: chunk.metadata.sourcesValidated,
+                        },
+                        sources: chunk.metadata.academicSources,
+                        completionDetail: chunk.metadata.completionDetail,
+                      }
+                      break
+                    }
+                  }
+                }
               }
               yield chunk
             }
           } finally {
             // Stream fully consumed (or aborted) — persist the assistant response
             if (accumulatedText) {
+              // Build ExecutionTimeline from processing steps + tool steps
+              // Processing steps (session_load, patient_context, build_context, model_call)
+              // are collected in the outer sendMessage scope via emitStep().
+              // Tool steps (tool_call_start/complete) are collected here in the wrappedStream.
+              const allSteps: ExecutionStep[] = [
+                ...collectedProcessingSteps,
+                ...collectedToolSteps.map(s => ({
+                  ...s,
+                  // Mark any still-active steps as completed (stream ended)
+                  status: s.status === 'active' ? 'completed' as const : s.status,
+                })),
+              ]
+
+              const executionTimeline: ExecutionTimeline | undefined =
+                allSteps.length > 0
+                  ? {
+                      agentType: currentState.activeAgent,
+                      agentDisplayName: currentState.activeAgent,
+                      steps: allSteps,
+                    }
+                  : undefined
+
               const aiMessage: ChatMessage = {
-                id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+                id: aiMessageId,
                 content: accumulatedText,
                 role: "model",
                 agent: currentState.activeAgent,
                 timestamp: new Date(),
+                groundingUrls: collectedGroundingUrls.length > 0 ? collectedGroundingUrls : undefined,
+                executionTimeline,
               }
               currentState.history.push(aiMessage)
               currentState.metadata.lastUpdated = new Date()
@@ -1083,8 +1162,11 @@ export class HopeAISystem {
           }
         })();
         
-        // Preserve routing info on the wrapped stream
-        (wrappedStream as any).routingInfo = routingInfo
+        // Preserve routing info and the predicted AI message ID on the wrapped stream
+        // so the API route can include the ID in the SSE response event.
+        // The client will use this ID when writing the richer message to Firestore.
+        ;(wrappedStream as any).routingInfo = routingInfo
+        ;(wrappedStream as any).predictedAiMessageId = aiMessageId
         
         return { 
           response: wrappedStream, 
@@ -1094,13 +1176,25 @@ export class HopeAISystem {
       } else {
         responseContent = response.text
 
-        // Add AI response to history
+        // Build ExecutionTimeline from accumulated processing steps (non-streaming)
+        const nonStreamTimeline: ExecutionTimeline | undefined =
+          collectedProcessingSteps.length > 0
+            ? {
+                agentType: currentState.activeAgent,
+                agentDisplayName: currentState.activeAgent,
+                steps: collectedProcessingSteps,
+              }
+            : undefined
+
+        // Add AI response to history (include metadata if available)
         const aiMessage: ChatMessage = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           content: responseContent,
           role: "model",
           agent: currentState.activeAgent,
           timestamp: new Date(),
+          groundingUrls: response.groundingUrls?.length > 0 ? response.groundingUrls : undefined,
+          executionTimeline: nonStreamTimeline,
         }
 
         currentState.history.push(aiMessage)
