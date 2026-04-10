@@ -679,9 +679,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-agency-glow,
-  .animate-gentle-glow,
-  .animate-slide-up {
+  .animate-agency-glow {
+    animation: none;
+  }
+
+  /* Disable Tailwind's animate-ping for pulsing indicators */
+  .animate-ping {
     animation: none;
   }
 }
