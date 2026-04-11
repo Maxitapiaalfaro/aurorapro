@@ -1120,9 +1120,8 @@ function detectToolLoop(
   )
 
   // Determine loop threshold per tool category:
-  // - write tools (save_clinical_memory, create_patient, update_clinical_document): strict (>1 = loop)
-  // - read-only tools (get_patient_*, list_patients, get_session_documents): moderate (>2 = loop)
-  // - external/research tools: original threshold (>2 = loop)
+  // - write tools (save_clinical_memory, create_patient, update_clinical_document): strict — 2nd attempt triggers loop
+  // - read-only/external tools (get_patient_*, list_patients, research_evidence, etc.): moderate — 3rd attempt triggers loop
   const writeLikeTools = new Set(['save_clinical_memory', 'create_patient', 'update_clinical_document'])
   const maxAttempts = writeLikeTools.has(toolName) ? 1 : 2
 
