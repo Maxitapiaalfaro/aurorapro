@@ -229,8 +229,8 @@ registerToolHandler('save_clinical_memory', async (args, ctx) => {
 
     // Determinar estado de verificación inicial basado en confianza y contexto
     const resolvedVerificationStatus = verificationStatus
-      || (confidence >= 0.9 ? 'therapist_confirmed'
-        : confidence >= 0.5 ? 'pending_review'
+      || (confidence >= 0.9 ? 'pending_review'
+        : confidence >= 0.5 ? 'ai_inferred'
         : 'hypothesis');
 
     await saveMemory({

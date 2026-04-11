@@ -141,7 +141,7 @@ export async function extractSessionMemories(
 
         // Determine verification status based on confidence
         const verificationStatus: import('@/types/memory-types').VerificationStatus =
-          conf >= 0.9 ? 'therapist_confirmed'
+          conf >= 0.9 ? 'pending_review'
             : conf >= 0.5 ? 'ai_inferred'
             : 'hypothesis';
 
@@ -160,8 +160,12 @@ export async function extractSessionMemories(
         if (/(?:intervenci|técnica|tecnica|tcc|terapia|emdr|mindfulness)/.test(lower)) {
           contentFlags.push('includes_intervention');
         }
-        if (item.category === 'observation') {
+        // Detect source based on content cues rather than category alone
+        if (/(?:paciente\s+(?:reporta|refiere|dice|menciona|indica|expresa|señala))/.test(lower)) {
           contentFlags.push('is_patient_reported');
+        }
+        if (/(?:se\s+observa|observación\s+clínica|en\s+sesión\s+se|conducta\s+observada)/.test(lower)) {
+          contentFlags.push('is_clinician_observed');
         }
 
         memories.push({

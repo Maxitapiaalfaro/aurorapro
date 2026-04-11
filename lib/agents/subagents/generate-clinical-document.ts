@@ -13,6 +13,7 @@ import { ai } from '../../google-genai-config';
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
 import type { DocumentSection, DocumentSectionId } from '@/types/clinical-types';
+import type { ContentFlag } from '@/types/memory-types';
 import { SUBAGENT_MODEL } from './types';
 
 const logger = createLogger('subagent');
@@ -349,19 +350,20 @@ function emitSectionPreview(
  * Detects content flags based on document text using keyword heuristics.
  * Returns an array of ContentFlag strings describing the clinical content.
  */
-function detectContentFlags(markdown: string): string[] {
-  const flags: string[] = [];
+function detectContentFlags(markdown: string): ContentFlag[] {
+  const flags: ContentFlag[] = [];
   const lower = markdown.toLowerCase();
 
-  // Pharmacology: drug names, dosages, interactions
+  // Pharmacology: drug names, dosages, interactions (use word boundary for "mg")
   const pharmaPatterns = [
-    'mg', 'dosis', 'fármaco', 'farmaco', 'medicación', 'medicacion', 'prescri',
-    'venlafaxina', 'sertralina', 'fluoxetina', 'escitalopram', 'quetiapina',
-    'aripiprazol', 'lamotrigina', 'bupropion', 'clonazepam', 'metilfenidato',
-    'lisdexamfetamina', 'mirtazapina', 'antidepresivo', 'ansiolítico', 'ansiolitico',
-    'interacción farmacológica', 'interaccion farmacologica', 'polifarmacia',
+    /\b\d+\s*mg\b/, /\bdosis\b/, /\bfármaco/, /\bfarmaco/, /\bmedicación/, /\bmedicacion/,
+    /\bprescri/, /\bvenlafaxina/, /\bsertralina/, /\bfluoxetina/, /\bescitalopram/,
+    /\bquetiapina/, /\baripiprazol/, /\blamotrigina/, /\bbupropion/, /\bclonazepam/,
+    /\bmetilfenidato/, /\blisdexamfetamina/, /\bmirtazapina/, /\bantidepresivo/,
+    /\bansiolítico/, /\bansiolitico/, /\binteracción farmacológica/, /\binteraccion farmacologica/,
+    /\bpolifarmacia/,
   ];
-  if (pharmaPatterns.some(p => lower.includes(p))) {
+  if (pharmaPatterns.some(p => p.test(lower))) {
     flags.push('includes_pharmacology');
   }
 
@@ -394,6 +396,14 @@ function detectContentFlags(markdown: string): string[] {
   ];
   if (interventionPatterns.some(p => lower.includes(p))) {
     flags.push('includes_intervention');
+  }
+
+  // Detect source based on content cues
+  if (/paciente\s+(?:reporta|refiere|dice|menciona|indica|expresa)/.test(lower)) {
+    flags.push('is_patient_reported');
+  }
+  if (/(?:se\s+observa|observación\s+clínica|conducta\s+observada|estado\s+mental)/.test(lower)) {
+    flags.push('is_clinician_observed');
   }
 
   return flags;

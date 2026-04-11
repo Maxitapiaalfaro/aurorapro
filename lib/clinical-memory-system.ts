@@ -94,10 +94,13 @@ export async function saveMemory(memory: ClinicalMemory): Promise<void> {
     )
 
     // Convertir Dates a Timestamps de Firestore para consistencia
+    // Denormalize verificationStatus to top-level for efficient Firestore queries
+    // (nested field queries require composite indexes)
     await ref.set({
       ...memory,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt,
+      _verificationStatus: memory.verificationMetadata?.verificationStatus ?? 'pending_review',
     })
 
     logger.info('Memoria clínica guardada', {
@@ -140,9 +143,9 @@ export async function getPatientMemories(
     const activeFilter = options?.isActive ?? true
     q = q.where('isActive', '==', activeFilter)
 
-    // Filtrar por estado de verificación si se especifica
+    // Filtrar por estado de verificación si se especifica (uses denormalized top-level field)
     if (options?.verificationStatus) {
-      q = q.where('verificationMetadata.verificationStatus', '==', options.verificationStatus)
+      q = q.where('_verificationStatus', '==', options.verificationStatus)
     }
 
     q = q.orderBy('updatedAt', 'desc')
@@ -193,6 +196,10 @@ export async function updateMemory(
     await ref.update({
       ...safeUpdates,
       updatedAt: FieldValue.serverTimestamp(),
+      // Keep denormalized verification status in sync
+      ...(safeUpdates.verificationMetadata?.verificationStatus
+        ? { _verificationStatus: safeUpdates.verificationMetadata.verificationStatus }
+        : {}),
     })
 
     logger.info('Memoria clínica actualizada', { memoryId })

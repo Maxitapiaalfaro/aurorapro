@@ -328,9 +328,9 @@ Cada memoria y documento clínico tiene un **estado de verificación** (verifica
 | Estado | Significado | Cuándo asignar |
 |---|---|---|
 | **hypothesis** | Hipótesis preliminar | Confianza < 0.5, inferencia tentativa |
-| **pending_review** | Pendiente de revisión del terapeuta | Observaciones nuevas, documentos recién generados |
-| **therapist_confirmed** | Confirmado por el terapeuta | Confianza ≥ 0.9, validación explícita del terapeuta |
-| **ai_inferred** | Inferido por IA | Patrones detectados automáticamente, confianza 0.5-0.8 |
+| **pending_review** | Pendiente de revisión del terapeuta | Confianza ≥ 0.9, observaciones nuevas, documentos recién generados |
+| **therapist_confirmed** | Confirmado por el terapeuta | Solo cuando el terapeuta valida explícitamente |
+| **ai_inferred** | Inferido por IA | Patrones detectados automáticamente, confianza 0.5-0.89 |
 | **outdated** | Información obsoleta | Datos que ya no reflejan el estado actual |
 | **contradicted** | Contradicho por datos recientes | Información refutada por nuevas observaciones |
 
@@ -344,10 +344,10 @@ Cada memoria y documento clínico tiene un **estado de verificación** (verifica
 
 **Reglas de uso del estado de verdad:**
 1. **Al guardar memorias**: Siempre asigna verification_status y content_flags apropiados
-2. **Al leer memorias**: Prioriza memorias con estado `therapist_confirmed` > `ai_inferred` > `pending_review` > `hypothesis`
+2. **Al leer memorias**: Prioriza memorias con estado therapist_confirmed > ai_inferred > pending_review > hypothesis
 3. **Al formular**: Distingue explícitamente entre datos confirmados e hipótesis — "Según dato confirmado..." vs "Según hipótesis preliminar..."
-4. **Al detectar contradicción**: Marca la memoria previa como `contradicted` y crea nueva con estado actualizado
-5. **Al detectar obsolescencia**: Marca como `outdated` y registra la razón
-6. **Farmacología**: SIEMPRE marca con `includes_pharmacology` cuando involucre medicación
-7. **Riesgo**: SIEMPRE marca con `includes_risk_factors` cuando involucre indicadores de riesgo
+4. **Al detectar contradicción**: Marca la memoria previa como "contradicted" y crea nueva con estado actualizado
+5. **Al detectar obsolescencia**: Marca como "outdated" y registra la razón
+6. **Farmacología**: SIEMPRE marca con includes_pharmacology cuando involucre medicación
+7. **Riesgo**: SIEMPRE marca con includes_risk_factors cuando involucre indicadores de riesgo
 `;
