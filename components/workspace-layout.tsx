@@ -110,6 +110,7 @@ const MobileWorkspaceLayout = memo(function MobileWorkspaceLayout({
 }: Pick<WorkspaceLayoutProps, 'chatPanel' | 'canvasPanel' | 'hasCanvasContent' | 'className'>) {
   const [activeTab, setActiveTab] = useState<'chat' | 'canvas'>('chat')
   const containerRef = useRef<HTMLDivElement>(null)
+  const dragBoundsRef = useRef<HTMLDivElement>(null)
 
   // x tracks the pixel offset of the sliding container during drag.
   // When idle, it's animated to 0 (chat) or -containerWidth (canvas).
@@ -188,12 +189,12 @@ const MobileWorkspaceLayout = memo(function MobileWorkspaceLayout({
       </div>
 
       {/* Swipeable Content Area — both panels mounted side by side */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative" ref={dragBoundsRef}>
         <motion.div
           className="absolute inset-0 flex touch-pan-y"
           style={{ x, width: '200%' }}
           drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
+          dragConstraints={dragBoundsRef}
           dragElastic={0.15}
           onDragEnd={handleDragEnd}
           dragMomentum={false}
