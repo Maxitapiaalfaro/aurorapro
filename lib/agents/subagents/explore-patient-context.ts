@@ -44,17 +44,25 @@ export async function executeExplorePatientContext(
         import('../../clinical-memory-system'),
       ]);
 
+    // P0.4: Use pre-loaded patient record from Main Agent if available,
+    // eliminating a redundant Firestore read (~100ms saved per invocation)
+    const usePreloaded = ctx.preloadedPatientRecord && ctx.preloadedPatientRecord.id === patientId;
+
     // Run all independent Firestore reads in parallel:
-    // - Patient record and memories are independent reads on the same patient
-    // - Semantic memory search (if contextHint) is also independent
-    ctx.onProgress?.('Cargando registro, memorias y contexto en paralelo…');
+    // - Patient record: skip if pre-loaded, otherwise fetch from Firestore
+    // - Memories and semantic search are always independent reads
+    ctx.onProgress?.(usePreloaded
+      ? 'Usando registro pre-cargado, cargando memorias en paralelo…'
+      : 'Cargando registro, memorias y contexto en paralelo…');
 
     const parallelFetches: [
       Promise<any>,                    // patient record
       Promise<any[]>,                  // all active memories
       Promise<any[]>,                  // semantic memories (or empty)
     ] = [
-      loadPatientFromFirestore(ctx.psychologistId, patientId),
+      usePreloaded
+        ? Promise.resolve(ctx.preloadedPatientRecord)
+        : loadPatientFromFirestore(ctx.psychologistId, patientId),
       getPatientMemories(ctx.psychologistId, patientId, { isActive: true, limit: 20 }),
       contextHint
         ? getRelevantMemoriesSemantic(ctx.psychologistId, patientId, contextHint, 5)

@@ -113,20 +113,29 @@ export async function executeGenerateClinicalDocument(
     ctx.onProgress?.(`Iniciando documento tipo ${documentType}`);
 
     // --- Optional patient context enrichment ---
+    // P0.5: Use pre-loaded patient record from Main Agent if available,
+    // eliminating a redundant Firestore read (~100ms saved per invocation)
     let patientContext = '';
     if (patientId && ctx.psychologistId) {
       try {
-        ctx.onProgress?.('Conectando con Firestore…');
-        const { loadPatientFromFirestore } = await import('../../hopeai-system');
+        const usePreloaded = ctx.preloadedPatientRecord && ctx.preloadedPatientRecord.id === patientId;
+        let record: Record<string, any> | null = null;
 
-        ctx.onProgress?.('Cargando registro del paciente…');
-        const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
+        if (usePreloaded) {
+          record = ctx.preloadedPatientRecord as Record<string, any>;
+          ctx.onProgress?.(`Usando registro pre-cargado: ${record.displayName || patientId}`);
+        } else {
+          ctx.onProgress?.('Conectando con Firestore…');
+          const { loadPatientFromFirestore } = await import('../../hopeai-system');
+          ctx.onProgress?.('Cargando registro del paciente…');
+          record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
+        }
 
         if (record) {
           patientContext = `\n\n## Datos del Paciente\n- Nombre: ${record.displayName || 'No especificado'}`;
           if (record.tags?.length) patientContext += `\n- Tags: ${record.tags.join(', ')}`;
           if (record.notes) patientContext += `\n- Notas: ${record.notes}`;
-          ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
+          if (!usePreloaded) ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
         } else {
           ctx.onProgress?.('Paciente no encontrado, continuando sin contexto');
         }

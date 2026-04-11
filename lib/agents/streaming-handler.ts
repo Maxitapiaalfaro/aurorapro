@@ -1093,19 +1093,18 @@ function sha256(input: string): string {
 }
 
 /**
- * Detects if a tool call is a duplicate retry within the same message
+ * Detects if a tool call is a duplicate retry within the same message.
+ *
+ * P1.1: Extended to ALL tools (previously only research_evidence and
+ * search_academic_literature). Read-only tools get a higher threshold (3)
+ * while external/write tools keep the original threshold (2) since
+ * redundant writes are more costly.
  */
 function detectToolLoop(
   toolName: string,
   args: Record<string, any>,
   history: Map<string, ToolCallRecord[]>
 ): { isLoop: boolean; attemptCount: number } {
-  // Only track research-related tools that can loop
-  const trackedTools = new Set(['research_evidence', 'search_academic_literature'])
-  if (!trackedTools.has(toolName)) {
-    return { isLoop: false, attemptCount: 1 }
-  }
-
   // Normalize and hash arguments
   const normalizedQuery = normalizeToolArgs(toolName, args)
   const queryHash = sha256(normalizedQuery)
@@ -1120,19 +1119,26 @@ function detectToolLoop(
     (now - record.timestamp) < 60000  // 60s window
   )
 
-  // Determine if loop (≥2 previous identical calls = 3rd attempt triggers loop)
+  // Determine loop threshold per tool category:
+  // - write tools (save_clinical_memory, create_patient, update_clinical_document): strict (>1 = loop)
+  // - read-only tools (get_patient_*, list_patients, get_session_documents): moderate (>2 = loop)
+  // - external/research tools: original threshold (>2 = loop)
+  const writeLikeTools = new Set(['save_clinical_memory', 'create_patient', 'update_clinical_document'])
+  const maxAttempts = writeLikeTools.has(toolName) ? 1 : 2
+
   const attemptCount = recentMatches.length + 1  // +1 for current call
-  const isLoop = attemptCount > 2  // After 2 attempts, 3rd triggers escape hatch
+  const isLoop = attemptCount > maxAttempts
 
   if (isLoop) {
-    logger.warn(`[LOOP DETECTED] ${toolName} attempt #${attemptCount}, query hash: ${queryHash.substring(0, 8)}...`)
+    logger.warn(`[LOOP DETECTED] ${toolName} attempt #${attemptCount} (max: ${maxAttempts}), query hash: ${queryHash.substring(0, 8)}...`)
   }
 
   return { isLoop, attemptCount }
 }
 
 /**
- * Records a tool call execution in the history
+ * Records a tool call execution in the history.
+ * P1.1: Now tracks ALL tools (previously only research-related).
  */
 function recordToolCall(
   history: Map<string, ToolCallRecord[]>,
@@ -1140,12 +1146,6 @@ function recordToolCall(
   args: Record<string, any>,
   result: ToolCallResult
 ): void {
-  // Only track research-related tools
-  const trackedTools = new Set(['research_evidence', 'search_academic_literature'])
-  if (!trackedTools.has(toolName)) {
-    return
-  }
-
   const normalizedQuery = normalizeToolArgs(toolName, args)
   const queryHash = sha256(normalizedQuery)
 
