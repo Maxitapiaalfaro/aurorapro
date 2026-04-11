@@ -13,10 +13,14 @@
  *
  * The layout is purely structural — it receives Chat and Canvas as children
  * and arranges them spatially. No business logic lives here.
+ *
+ * **Scroll Persistence**: Both panels stay mounted at all times (translated
+ * off-screen when inactive) so that DOM state, including scroll position,
+ * is preserved across tab switches.
  */
 
 import React, { memo, useState, useCallback, useRef } from 'react'
-import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from 'framer-motion'
+import { motion, useMotionValue, animate, type PanInfo } from 'framer-motion'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { cn } from '@/lib/utils'
 import { MessageSquare, LayoutDashboard } from 'lucide-react'
@@ -85,8 +89,15 @@ const DesktopWorkspaceLayout = memo(function DesktopWorkspaceLayout({
 })
 
 // ---------------------------------------------------------------------------
-// Mobile Layout — Swipeable Tabs
+// Mobile Layout — Dual-Mounted Sliding Panels
 // ---------------------------------------------------------------------------
+//
+// Both chat and canvas panels are always mounted (never unmounted) to preserve
+// scroll position and DOM state. The visible panel is determined by translating
+// a container that holds both panels side-by-side.
+//
+// Tab switch → animate translateX to 0% (chat) or -100% (canvas)
+// Swipe      → real-time drag feedback, snap to nearest panel on release
 
 const SWIPE_THRESHOLD = 50 // px drag before committing to a tab switch
 const SWIPE_VELOCITY_THRESHOLD = 300 // px/s velocity for quick swipe
@@ -99,21 +110,62 @@ const MobileWorkspaceLayout = memo(function MobileWorkspaceLayout({
 }: Pick<WorkspaceLayoutProps, 'chatPanel' | 'canvasPanel' | 'hasCanvasContent' | 'className'>) {
   const [activeTab, setActiveTab] = useState<'chat' | 'canvas'>('chat')
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // x tracks the pixel offset of the sliding container during drag.
+  // When idle, it's animated to 0 (chat) or -containerWidth (canvas).
   const x = useMotionValue(0)
 
+  /** Animate the sliding container to show the given tab. */
+  const slideTo = useCallback(
+    (tab: 'chat' | 'canvas') => {
+      const width = containerRef.current?.offsetWidth ?? 0
+      const target = tab === 'chat' ? 0 : -width
+      animate(x, target, {
+        type: 'spring',
+        stiffness: 350,
+        damping: 35,
+        mass: 0.8,
+      })
+      setActiveTab(tab)
+    },
+    [x],
+  )
+
+  /** Handle drag end — decide whether to switch tabs or snap back. */
   const handleDragEnd = useCallback(
     (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
       const { offset, velocity } = info
-      const swipeRight = offset.x > SWIPE_THRESHOLD || velocity.x > SWIPE_VELOCITY_THRESHOLD
-      const swipeLeft = offset.x < -SWIPE_THRESHOLD || velocity.x < -SWIPE_VELOCITY_THRESHOLD
+      const width = containerRef.current?.offsetWidth ?? 0
 
-      if (activeTab === 'chat' && swipeLeft) {
-        setActiveTab('canvas')
-      } else if (activeTab === 'canvas' && swipeRight) {
-        setActiveTab('chat')
+      // Determine intent based on distance or velocity
+      const swipedRight = offset.x > SWIPE_THRESHOLD || velocity.x > SWIPE_VELOCITY_THRESHOLD
+      const swipedLeft = offset.x < -SWIPE_THRESHOLD || velocity.x < -SWIPE_VELOCITY_THRESHOLD
+
+      if (activeTab === 'chat' && swipedLeft) {
+        slideTo('canvas')
+      } else if (activeTab === 'canvas' && swipedRight) {
+        slideTo('chat')
+      } else {
+        // Snap back to current tab
+        const target = activeTab === 'chat' ? 0 : -width
+        animate(x, target, {
+          type: 'spring',
+          stiffness: 400,
+          damping: 30,
+        })
       }
     },
-    [activeTab],
+    [activeTab, slideTo, x],
+  )
+
+  /** Handle tab button click — animate to target. */
+  const handleTabClick = useCallback(
+    (tab: 'chat' | 'canvas') => {
+      if (tab !== activeTab) {
+        slideTo(tab)
+      }
+    },
+    [activeTab, slideTo],
   )
 
   return (
@@ -122,54 +174,41 @@ const MobileWorkspaceLayout = memo(function MobileWorkspaceLayout({
       <div className="flex-shrink-0 flex items-center border-b border-border/50 bg-background/95 backdrop-blur-sm px-2">
         <MobileTab
           active={activeTab === 'chat'}
-          onClick={() => setActiveTab('chat')}
+          onClick={() => handleTabClick('chat')}
           icon={<MessageSquare className="h-4 w-4" />}
           label="Chat"
         />
         <MobileTab
           active={activeTab === 'canvas'}
-          onClick={() => setActiveTab('canvas')}
+          onClick={() => handleTabClick('canvas')}
           icon={<LayoutDashboard className="h-4 w-4" />}
           label="Canvas"
           badge={hasCanvasContent}
         />
       </div>
 
-      {/* Swipeable Content Area */}
-      <motion.div
-        className="flex-1 overflow-hidden relative touch-pan-y"
-        drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.15}
-        onDragEnd={handleDragEnd}
-        style={{ x }}
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {activeTab === 'chat' ? (
-            <motion.div
-              key="mobile-chat"
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -20, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="absolute inset-0 flex flex-col overflow-hidden"
-            >
-              {chatPanel}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="mobile-canvas"
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 20, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="absolute inset-0 flex flex-col overflow-hidden"
-            >
-              {canvasPanel}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+      {/* Swipeable Content Area — both panels mounted side by side */}
+      <div className="flex-1 overflow-hidden relative">
+        <motion.div
+          className="absolute inset-0 flex touch-pan-y"
+          style={{ x, width: '200%' }}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.15}
+          onDragEnd={handleDragEnd}
+          dragMomentum={false}
+        >
+          {/* Chat Panel — always mounted, left half */}
+          <div className="w-1/2 h-full flex flex-col overflow-hidden">
+            {chatPanel}
+          </div>
+
+          {/* Canvas Panel — always mounted, right half */}
+          <div className="w-1/2 h-full flex flex-col overflow-hidden">
+            {canvasPanel}
+          </div>
+        </motion.div>
+      </div>
     </div>
   )
 })
