@@ -227,7 +227,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 }}
                 className={cn(
                   "h-9 rounded-lg font-medium relative",
-                  "bg-foreground/90 text-background hover:bg-foreground/80",
+                  "bg-secondary text-foreground/80 hover:bg-secondary/70 border border-border/30",
                   isOpen
                     ? "w-full px-3 gap-2.5 justify-start"
                     : "w-9 px-0 justify-center"
@@ -236,7 +236,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                   transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
                 }}
               >
-                <PlusIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
+                <PlusIcon className="h-4 w-4 flex-shrink-0" weight="regular" />
                 {isOpen && (
                   <span
                     className="text-xs whitespace-nowrap overflow-hidden"
@@ -279,8 +279,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                     ? "w-full px-3 gap-2.5 justify-start"
                     : "w-9 px-0 justify-center",
                   activeTab === 'conversations'
-                    ? "bg-secondary text-foreground/90 hover:bg-secondary/80"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    ? "bg-secondary/60 text-foreground/80 hover:bg-secondary/50"
+                    : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/30"
                 )}
                 style={{
                   transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
@@ -288,9 +288,9 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               >
                 {/* Active indicator */}
                 {activeTab === 'conversations' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/60 rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-3.5 bg-foreground/30 rounded-r-full" />
                 )}
-                <ChatsCircleIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
+                <ChatsCircleIcon className="h-4 w-4 flex-shrink-0" weight="regular" />
                 {isOpen && (
                   <span
                     className="text-xs whitespace-nowrap overflow-hidden"
@@ -332,8 +332,8 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                     ? "w-full px-3 gap-2.5 justify-start"
                     : "w-9 px-0 justify-center",
                   activeTab === 'patients'
-                    ? "bg-secondary text-foreground/90 hover:bg-secondary/80"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    ? "bg-secondary/60 text-foreground/80 hover:bg-secondary/50"
+                    : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/30"
                 )}
                 style={{
                   transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
@@ -341,9 +341,9 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               >
                 {/* Active indicator */}
                 {activeTab === 'patients' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/60 rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-3.5 bg-foreground/30 rounded-r-full" />
                 )}
-                <FoldersIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
+                <FoldersIcon className="h-4 w-4 flex-shrink-0" weight="regular" />
                 {isOpen && (
                   <span
                     className="text-xs whitespace-nowrap overflow-hidden"
@@ -368,14 +368,14 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       {/* Section header - always rendered, visible only when expanded */}
       <div
         className={cn(
-          "px-4 py-3 flex-shrink-0 border-b border-border/20 overflow-hidden",
+          "px-4 py-2.5 flex-shrink-0 border-b border-border/15 overflow-hidden",
           isOpen ? "h-auto opacity-100" : "h-0 opacity-0"
         )}
         style={{
           transition: 'height 350ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1)'
         }}
       >
-        <h2 className="text-[11px] text-muted-foreground/60 font-sans font-medium tracking-widest uppercase whitespace-nowrap">
+        <h2 className="text-[10px] text-muted-foreground/40 font-sans font-medium tracking-[0.12em] uppercase whitespace-nowrap">
           {activeTab === 'conversations' ? 'Recientes' : 'Casos clínicos'}
         </h2>
       </div>
@@ -395,15 +395,15 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 {isLoading && isOpen ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="flex flex-col items-center gap-2">
-                      <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-muted-foreground" weight="bold" />
-                      <span className="text-xs text-muted-foreground/60">Cargando...</span>
+                      <ArrowClockwiseIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground/40" weight="regular" />
+                      <span className="text-[11px] text-muted-foreground/40">Cargando...</span>
                     </div>
                   </div>
                 ) : filteredConversations.length === 0 ? (
                   isOpen && (
                     <div className="text-center py-12 px-4">
-                      <ChatsCircleIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" weight="duotone" />
-                      <p className="text-xs text-muted-foreground/60">
+                      <ChatsCircleIcon className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" weight="light" />
+                      <p className="text-[11px] text-muted-foreground/40">
                         Sin conversaciones
                       </p>
                     </div>
@@ -420,15 +420,15 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                             "w-full transition-colors duration-150 relative overflow-visible",
                             isOpen ? "justify-start p-2.5 pr-10 h-auto text-left rounded-lg" : "justify-center p-2 h-9 rounded-lg",
                             selectedConversation === conversation.sessionId
-                              ? "bg-secondary hover:bg-secondary/80"
-                              : "hover:bg-secondary/50",
+                              ? "bg-secondary/50 hover:bg-secondary/40"
+                              : "hover:bg-secondary/30",
                           )}
                           onClick={() => handleConversationSelect(conversation.sessionId)}
                           title={!isOpen ? conversation.title : undefined}
                         >
                           {/* Accent border on active */}
                           {selectedConversation === conversation.sessionId && isOpen && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-foreground/50 rounded-r-full" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/25 rounded-r-full" />
                           )}
                           {isOpen ? (
                             <div className="flex items-start gap-2.5 w-full pl-1.5 min-w-0">
@@ -437,10 +437,10 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                                 agentConfig.button.bg
                               )} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-sans text-[13px] truncate leading-snug text-foreground/80 min-w-0">
+                                <div className="font-sans text-[13px] truncate leading-snug text-foreground/70 min-w-0">
                                   {conversation.title}
                                 </div>
-                                <div className="text-[11px] text-muted-foreground/50 mt-0.5 min-w-0 truncate">
+                                <div className="text-[10px] text-muted-foreground/35 mt-0.5 min-w-0 truncate">
                                   {formatDistanceToNow(new Date(conversation.lastUpdated), {
                                     addSuffix: true,
                                     locale: es
