@@ -56,6 +56,9 @@ export async function executeGetSessionDocuments(
         updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
         createdBy: data.createdBy || 'ai',
         characterCount: data.markdown?.length || 0,
+        verificationStatus: data.verificationMetadata?.verificationStatus ?? 'pending_review',
+        contentFlags: data.verificationMetadata?.contentFlags ?? [],
+        verifiedBy: data.verificationMetadata?.verifiedBy,
         ...(includeContent ? { markdown: data.markdown } : {}),
       };
 
@@ -81,6 +84,9 @@ export async function executeGetSessionDocuments(
         updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
         createdBy: data.createdBy || 'ai',
         characterCount: data.markdown?.length || 0,
+        verificationStatus: data.verificationMetadata?.verificationStatus ?? 'pending_review',
+        contentFlags: data.verificationMetadata?.contentFlags ?? [],
+        verifiedBy: data.verificationMetadata?.verifiedBy,
         ...(includeContent ? { markdown: data.markdown } : {}),
       };
     });

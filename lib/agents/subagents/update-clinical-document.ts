@@ -119,6 +119,11 @@ REGLAS:
         markdown: fullUpdatedMarkdown,
         version: newVersion,
         updatedAt: AdminTimestamp.now(),
+        // When document is edited, reset verification to pending_review
+        'verificationMetadata.verificationStatus': 'pending_review',
+        'verificationMetadata.verifiedBy': 'ai_agent',
+        'verificationMetadata.verifiedAt': AdminTimestamp.now(),
+        'verificationMetadata.statusReason': `Actualizado a v${newVersion} — pendiente re-verificación`,
       }, { merge: true });
 
       logger.info(`[update_clinical_document] Persisted v${newVersion} for ${documentId}`);

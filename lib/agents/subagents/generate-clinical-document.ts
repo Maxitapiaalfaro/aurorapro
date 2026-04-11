@@ -269,6 +269,13 @@ export async function executeGenerateClinicalDocument(
           createdAt: now,
           updatedAt: now,
           generationDurationMs: durationMs,
+          verificationMetadata: {
+            verificationStatus: 'pending_review',
+            contentFlags: detectContentFlags(document),
+            verifiedBy: 'ai_agent',
+            verifiedAt: now,
+            statusReason: 'Documento generado automáticamente por IA — pendiente de revisión del terapeuta',
+          },
         });
         logger.info(`[subagent:generate_clinical_document] 💾 Persisted to Firestore: ${docPath}`);
       } catch (persistErr) {
@@ -336,4 +343,58 @@ function emitSectionPreview(
     documentType,
     accumulatedMarkdown,
   });
+}
+
+/**
+ * Detects content flags based on document text using keyword heuristics.
+ * Returns an array of ContentFlag strings describing the clinical content.
+ */
+function detectContentFlags(markdown: string): string[] {
+  const flags: string[] = [];
+  const lower = markdown.toLowerCase();
+
+  // Pharmacology: drug names, dosages, interactions
+  const pharmaPatterns = [
+    'mg', 'dosis', 'fármaco', 'farmaco', 'medicación', 'medicacion', 'prescri',
+    'venlafaxina', 'sertralina', 'fluoxetina', 'escitalopram', 'quetiapina',
+    'aripiprazol', 'lamotrigina', 'bupropion', 'clonazepam', 'metilfenidato',
+    'lisdexamfetamina', 'mirtazapina', 'antidepresivo', 'ansiolítico', 'ansiolitico',
+    'interacción farmacológica', 'interaccion farmacologica', 'polifarmacia',
+  ];
+  if (pharmaPatterns.some(p => lower.includes(p))) {
+    flags.push('includes_pharmacology');
+  }
+
+  // Risk factors
+  const riskPatterns = [
+    'riesgo', 'suicid', 'autolesión', 'autolesion', 'ideación', 'ideacion',
+    'abuso', 'negligencia', 'violencia', 'crisis', 'descompensación', 'descompensacion',
+    'hospitalización', 'hospitalizacion', 'urgencia',
+  ];
+  if (riskPatterns.some(p => lower.includes(p))) {
+    flags.push('includes_risk_factors');
+  }
+
+  // Diagnosis
+  const diagPatterns = [
+    'dsm-5', 'dsm5', 'cie-11', 'cie11', 'diagnóst', 'diagnost',
+    'trastorno', 'f32', 'f33', 'f41', 'f40', 'f43', 'f60',
+    'tdah', 'tea', 'tept', 'toc', 'tag',
+  ];
+  if (diagPatterns.some(p => lower.includes(p))) {
+    flags.push('includes_diagnosis');
+  }
+
+  // Interventions
+  const interventionPatterns = [
+    'intervención', 'intervencion', 'técnica', 'tecnica', 'tcc', 'terapia',
+    'mindfulness', 'reestructuración', 'reestructuracion', 'exposición', 'exposicion',
+    'emdr', 'desensibilización', 'desensibilizacion', 'socrático', 'socratico',
+    'psicoeducación', 'psicoeducacion', 'activación conductual', 'activacion conductual',
+  ];
+  if (interventionPatterns.some(p => lower.includes(p))) {
+    flags.push('includes_intervention');
+  }
+
+  return flags;
 }

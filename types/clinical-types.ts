@@ -211,6 +211,8 @@ export interface ClinicalDocument {
   updatedAt: Date
   /** Generation duration in ms (original generation only) */
   generationDurationMs?: number
+  /** Estado de verdad y metadatos de verificación */
+  verificationMetadata?: import('@/types/memory-types').VerificationMetadata
 }
 
 // Granular message processing status for transparency UI

@@ -86,6 +86,12 @@ export const UNIFIED_TOOL_DECLARATIONS = [
               description:
                 'Número máximo de memorias a retornar. Default: 10.',
             },
+            verification_status: {
+              type: 'string',
+              description:
+                'Filtrar memorias por estado de verificación. Omitir para obtener todas. "therapist_confirmed" = solo confirmadas, "pending_review" = pendientes de revisión, "hypothesis" = hipótesis, "ai_inferred" = inferidas por IA, "outdated" = obsoletas.',
+              enum: ['hypothesis', 'pending_review', 'therapist_confirmed', 'ai_inferred', 'outdated', 'contradicted'],
+            },
           },
           required: ['patientId'],
         },
@@ -165,6 +171,21 @@ export const UNIFIED_TOOL_DECLARATIONS = [
               items: { type: 'string' },
               description:
                 'Etiquetas clínicas para facilitar recuperación futura. Ejemplo: ["minimización", "progreso", "autoeficacia"]',
+            },
+            verification_status: {
+              type: 'string',
+              description:
+                'Estado de verificación de la memoria. "hypothesis" para hipótesis preliminar, "pending_review" para observaciones que requieren revisión (default), "therapist_confirmed" para datos confirmados por el terapeuta, "ai_inferred" para patrones inferidos por IA, "outdated" para información obsoleta, "contradicted" para datos contradichos.',
+              enum: ['hypothesis', 'pending_review', 'therapist_confirmed', 'ai_inferred', 'outdated', 'contradicted'],
+            },
+            content_flags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['includes_pharmacology', 'includes_risk_factors', 'includes_diagnosis', 'includes_intervention', 'is_patient_reported', 'is_clinician_observed'],
+              },
+              description:
+                'Flags de contenido clínico: "includes_pharmacology" (fármacos/dosis), "includes_risk_factors" (riesgo), "includes_diagnosis" (diagnóstico), "includes_intervention" (técnicas), "is_patient_reported" (reportado por paciente), "is_clinician_observed" (observado por clínico).',
             },
           },
           required: ['patientId', 'category', 'content', 'confidence'],

@@ -63,6 +63,16 @@ function snapshotToMemory(
     isActive: data.isActive ?? true,
     tags: data.tags ?? [],
     relevanceScore: data.relevanceScore ?? 0,
+    verificationMetadata: data.verificationMetadata
+      ? {
+          verificationStatus: data.verificationMetadata.verificationStatus ?? 'pending_review',
+          contentFlags: data.verificationMetadata.contentFlags ?? [],
+          verifiedBy: data.verificationMetadata.verifiedBy,
+          verifiedAt: data.verificationMetadata.verifiedAt?.toDate?.()
+            ?? (data.verificationMetadata.verifiedAt ? new Date(data.verificationMetadata.verifiedAt) : undefined),
+          statusReason: data.verificationMetadata.statusReason,
+        }
+      : undefined,
   }
 }
 
@@ -129,6 +139,11 @@ export async function getPatientMemories(
     // isActive filtra por defecto a true, salvo que se pase explícitamente
     const activeFilter = options?.isActive ?? true
     q = q.where('isActive', '==', activeFilter)
+
+    // Filtrar por estado de verificación si se especifica
+    if (options?.verificationStatus) {
+      q = q.where('verificationMetadata.verificationStatus', '==', options.verificationStatus)
+    }
 
     q = q.orderBy('updatedAt', 'desc')
 

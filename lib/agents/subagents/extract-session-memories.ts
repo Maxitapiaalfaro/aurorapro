@@ -71,6 +71,10 @@ export interface ExtractedMemory {
   content: string
   confidence: number
   tags: string[]
+  /** Initial verification status based on extraction confidence */
+  verificationStatus: import('@/types/memory-types').VerificationStatus
+  /** Content flags detected during extraction */
+  contentFlags: import('@/types/memory-types').ContentFlag[]
 }
 
 const VALID_CATEGORIES: Set<string> = new Set([
@@ -131,15 +135,44 @@ export async function extractSessionMemories(
         item.content.length >= 10 &&
         VALID_CATEGORIES.has(item.category)
       ) {
+        const conf = typeof item.confidence === 'number'
+          ? Math.min(1, Math.max(0, item.confidence))
+          : 0.7;
+
+        // Determine verification status based on confidence
+        const verificationStatus: import('@/types/memory-types').VerificationStatus =
+          conf >= 0.9 ? 'therapist_confirmed'
+            : conf >= 0.5 ? 'ai_inferred'
+            : 'hypothesis';
+
+        // Detect content flags from the memory text
+        const contentFlags: import('@/types/memory-types').ContentFlag[] = [];
+        const lower = item.content.toLowerCase();
+        if (/(?:mg|dosis|fármaco|farmaco|medicaci|prescri|antidepresivo|ansiol)/.test(lower)) {
+          contentFlags.push('includes_pharmacology');
+        }
+        if (/(?:riesgo|suicid|autolesi|crisis|violencia|abuso)/.test(lower)) {
+          contentFlags.push('includes_risk_factors');
+        }
+        if (/(?:dsm|cie-11|diagnóst|diagnost|trastorno)/.test(lower)) {
+          contentFlags.push('includes_diagnosis');
+        }
+        if (/(?:intervenci|técnica|tecnica|tcc|terapia|emdr|mindfulness)/.test(lower)) {
+          contentFlags.push('includes_intervention');
+        }
+        if (item.category === 'observation') {
+          contentFlags.push('is_patient_reported');
+        }
+
         memories.push({
           category: item.category as ClinicalMemoryCategory,
           content: item.content.substring(0, 500),
-          confidence: typeof item.confidence === 'number'
-            ? Math.min(1, Math.max(0, item.confidence))
-            : 0.7,
+          confidence: conf,
           tags: Array.isArray(item.tags)
             ? item.tags.filter((t: unknown) => typeof t === 'string').slice(0, 5)
             : [],
+          verificationStatus,
+          contentFlags,
         })
       }
     }

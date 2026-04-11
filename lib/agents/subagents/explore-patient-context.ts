@@ -95,7 +95,10 @@ export async function executeExplorePatientContext(
     if (memories.length > 0) {
       sections.push(`\n## Memorias Clínicas Inter-Sesión (${memories.length})`);
       for (const m of memories) {
-        sections.push(`- [${m.category}] ${m.content} (confianza: ${m.confidence})`);
+        const verStatus = (m as any).verificationMetadata?.verificationStatus ?? 'pending_review';
+        const flags = (m as any).verificationMetadata?.contentFlags ?? [];
+        const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
+        sections.push(`- [${m.category}|${verStatus}${flagStr}] ${m.content} (confianza: ${m.confidence})`);
       }
     }
 

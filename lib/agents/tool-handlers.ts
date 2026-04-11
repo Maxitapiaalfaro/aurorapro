@@ -123,6 +123,7 @@ registerToolHandler('get_patient_memories', async (args, ctx) => {
     const patientId = ctx.patientId || args.patientId as string;
     const category = args.category as string | undefined;
     const limit = (args.limit as number) || 10;
+    const verificationStatus = args.verification_status as string | undefined;
 
     logger.info(
       `[tool:get_patient_memories] patient=${patientId} category=${category || 'all'} limit=${limit}`,
@@ -132,6 +133,7 @@ registerToolHandler('get_patient_memories', async (args, ctx) => {
       category: category as 'observation' | 'pattern' | 'therapeutic-preference' | undefined,
       isActive: true,
       limit,
+      verificationStatus: verificationStatus as import('@/types/memory-types').VerificationStatus | undefined,
     });
 
     return {
@@ -144,6 +146,10 @@ registerToolHandler('get_patient_memories', async (args, ctx) => {
           confidence: m.confidence,
           tags: m.tags,
           updatedAt: m.updatedAt,
+          verificationStatus: m.verificationMetadata?.verificationStatus ?? 'pending_review',
+          contentFlags: m.verificationMetadata?.contentFlags ?? [],
+          verifiedBy: m.verificationMetadata?.verifiedBy,
+          verifiedAt: m.verificationMetadata?.verifiedAt,
         })),
         count: memories.length,
         patientId,
@@ -212,12 +218,20 @@ registerToolHandler('save_clinical_memory', async (args, ctx) => {
     const content = args.content as string;
     const confidence = args.confidence as number;
     const tags = (args.tags as string[]) || [];
+    const verificationStatus = args.verification_status as string | undefined;
+    const contentFlags = (args.content_flags as string[]) || [];
 
     logger.info(
       `[tool:save_clinical_memory] patient=${patientId} category=${category} confidence=${confidence}`,
     );
 
     const memoryId = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Determinar estado de verificación inicial basado en confianza y contexto
+    const resolvedVerificationStatus = verificationStatus
+      || (confidence >= 0.9 ? 'therapist_confirmed'
+        : confidence >= 0.5 ? 'pending_review'
+        : 'hypothesis');
 
     await saveMemory({
       memoryId,
@@ -232,11 +246,25 @@ registerToolHandler('save_clinical_memory', async (args, ctx) => {
       isActive: true,
       tags,
       relevanceScore: 0,
+      verificationMetadata: {
+        verificationStatus: resolvedVerificationStatus as import('@/types/memory-types').VerificationStatus,
+        contentFlags: contentFlags as import('@/types/memory-types').ContentFlag[],
+        verifiedBy: 'ai_agent',
+        verifiedAt: new Date(),
+        statusReason: `Creado por agente con confianza ${confidence}`,
+      },
     });
 
     return {
       name: 'save_clinical_memory',
-      response: { saved: true, memoryId, category, patientId },
+      response: {
+        saved: true,
+        memoryId,
+        category,
+        patientId,
+        verificationStatus: resolvedVerificationStatus,
+        contentFlags,
+      },
     };
   } catch (error) {
     logger.error('[tool:save_clinical_memory] Error:', error);

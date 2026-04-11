@@ -9,6 +9,74 @@
  */
 
 // ---------------------------------------------------------------------------
+// Estado de Verdad (Truth State) — Flags de verificación para agentes
+// ---------------------------------------------------------------------------
+
+/**
+ * Estado de verificación de un dato clínico.
+ *
+ * Permite a los agentes saber en qué estado epistemológico se encuentra
+ * cada pieza de información almacenada, facilitando la toma de decisiones
+ * informada y la actualización progresiva del conocimiento clínico.
+ *
+ * - `hypothesis`:       Hipótesis preliminar, aún no confirmada por el terapeuta
+ * - `pending_review`:   Información registrada que espera revisión del terapeuta
+ * - `therapist_confirmed`: Confirmado explícitamente por el terapeuta
+ * - `ai_inferred`:      Inferido por IA a partir de patrones (requiere validación humana)
+ * - `outdated`:         Información que fue relevante pero ya no refleja el estado actual
+ * - `contradicted`:     Información que ha sido contradicha por datos más recientes
+ */
+export type VerificationStatus =
+  | 'hypothesis'
+  | 'pending_review'
+  | 'therapist_confirmed'
+  | 'ai_inferred'
+  | 'outdated'
+  | 'contradicted'
+
+/**
+ * Flags de contenido que describen las características clínicas de un dato.
+ *
+ * - `includes_pharmacology`:  Contiene información farmacológica (fármacos, dosis, interacciones)
+ * - `includes_risk_factors`:  Contiene factores de riesgo clínico
+ * - `includes_diagnosis`:     Contiene información diagnóstica (DSM-5/CIE-11)
+ * - `includes_intervention`:  Contiene técnicas o intervenciones terapéuticas
+ * - `is_patient_reported`:    Información reportada directamente por el paciente
+ * - `is_clinician_observed`:  Observación directa del clínico en sesión
+ */
+export type ContentFlag =
+  | 'includes_pharmacology'
+  | 'includes_risk_factors'
+  | 'includes_diagnosis'
+  | 'includes_intervention'
+  | 'is_patient_reported'
+  | 'is_clinician_observed'
+
+/**
+ * Metadatos de verificación y estado de verdad de un dato clínico.
+ *
+ * Cada entidad persistida (memoria, documento, registro) puede incluir
+ * estos metadatos para que los agentes tomen decisiones informadas sobre
+ * la relevancia, fiabilidad y actualidad de la información.
+ */
+export interface VerificationMetadata {
+  /** Estado de verificación actual */
+  verificationStatus: VerificationStatus
+
+  /** Flags de contenido clínico */
+  contentFlags: ContentFlag[]
+
+  /** Quién o qué estableció el estado de verificación actual */
+  verifiedBy?: 'therapist' | 'ai_agent' | 'system'
+
+  /** Cuándo se verificó por última vez */
+  verifiedAt?: Date
+
+  /** Razón del último cambio de estado (ej: "Terapeuta confirmó en sesión 5") */
+  statusReason?: string
+}
+
+// ---------------------------------------------------------------------------
 // Categorías de memoria clínica
 // ---------------------------------------------------------------------------
 
@@ -79,6 +147,9 @@ export interface ClinicalMemory {
 
   /** Relevancia estimada para el tratamiento actual (0 = irrelevante, 1 = crítica) */
   relevanceScore: number
+
+  /** Estado de verdad y metadatos de verificación */
+  verificationMetadata?: VerificationMetadata
 }
 
 // ---------------------------------------------------------------------------
@@ -97,4 +168,7 @@ export interface ClinicalMemoryQueryOptions {
 
   /** Número máximo de resultados */
   limit?: number
+
+  /** Filtrar por estado de verificación */
+  verificationStatus?: VerificationStatus
 }

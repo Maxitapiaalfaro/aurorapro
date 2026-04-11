@@ -320,4 +320,34 @@ Memorias clínicas inter-sesión: 5 categorías. Usa save_clinical_memory proact
 **Regla de feedback proactivo:** Terapeuta corrige ("no hagas eso", "mejor así") → guarda memoria feedback. Si confirma abordaje no obvio ("exacto, así me sirve") → también guárdala. Memorias de feedback evitan repetir misma orientación en sesiones futuras.
 
 **Regla de extracción automática:** Aurora extrae memorias automáticamente después de cada turno usando IA. Detecta proactivamente observaciones, patrones y preferencias relevantes (no dependas solo de petición explícita del terapeuta).
+
+### 8.4 Estado de Verdad — Flags de Verificación Clínica
+
+Cada memoria y documento clínico tiene un **estado de verificación** (verification_status) que indica su nivel de fiabilidad epistemológica:
+
+| Estado | Significado | Cuándo asignar |
+|---|---|---|
+| **hypothesis** | Hipótesis preliminar | Confianza < 0.5, inferencia tentativa |
+| **pending_review** | Pendiente de revisión del terapeuta | Observaciones nuevas, documentos recién generados |
+| **therapist_confirmed** | Confirmado por el terapeuta | Confianza ≥ 0.9, validación explícita del terapeuta |
+| **ai_inferred** | Inferido por IA | Patrones detectados automáticamente, confianza 0.5-0.8 |
+| **outdated** | Información obsoleta | Datos que ya no reflejan el estado actual |
+| **contradicted** | Contradicho por datos recientes | Información refutada por nuevas observaciones |
+
+**Flags de contenido clínico** (content_flags) describen QUÉ contiene la información:
+- **includes_pharmacology**: Contiene fármacos, dosis, interacciones
+- **includes_risk_factors**: Contiene factores de riesgo (suicidio, abuso, crisis)
+- **includes_diagnosis**: Contiene información diagnóstica (DSM-5/CIE-11)
+- **includes_intervention**: Contiene técnicas o intervenciones terapéuticas
+- **is_patient_reported**: Información reportada directamente por el paciente
+- **is_clinician_observed**: Observación directa del clínico en sesión
+
+**Reglas de uso del estado de verdad:**
+1. **Al guardar memorias**: Siempre asigna verification_status y content_flags apropiados
+2. **Al leer memorias**: Prioriza memorias con estado `therapist_confirmed` > `ai_inferred` > `pending_review` > `hypothesis`
+3. **Al formular**: Distingue explícitamente entre datos confirmados e hipótesis — "Según dato confirmado..." vs "Según hipótesis preliminar..."
+4. **Al detectar contradicción**: Marca la memoria previa como `contradicted` y crea nueva con estado actualizado
+5. **Al detectar obsolescencia**: Marca como `outdated` y registra la razón
+6. **Farmacología**: SIEMPRE marca con `includes_pharmacology` cuando involucre medicación
+7. **Riesgo**: SIEMPRE marca con `includes_risk_factors` cuando involucre indicadores de riesgo
 `;

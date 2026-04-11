@@ -1671,6 +1671,13 @@ export class HopeAISystem {
           isActive: true,
           tags: mem.tags,
           relevanceScore: mem.confidence * 0.8, // Initial relevance derived from confidence
+          verificationMetadata: {
+            verificationStatus: mem.verificationStatus,
+            contentFlags: mem.contentFlags,
+            verifiedBy: 'ai_agent' as const,
+            verifiedAt: new Date(),
+            statusReason: `Extraída automáticamente con confianza ${mem.confidence}`,
+          },
         }
         await saveMemory(memoryDoc)
       }
