@@ -112,7 +112,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           onClick={onHistoryToggle}
           aria-label="Abrir menú de navegación"
         >
-          <ListIcon className="h-4.5 w-4.5" weight="bold" />
+          <ListIcon className="h-[1.125rem] w-[1.125rem]" weight="bold" />
         </Button>
         
         <h1 className="font-serif text-lg md:text-xl tracking-tight text-foreground/85 flex-shrink-0">

@@ -930,9 +930,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
-              <div className="text-xs text-muted-foreground bg-secondary/60 rounded-lg px-3 py-1.5 inline-block">
+              <div className="text-xs text-muted-foreground bg-secondary/60 rounded-lg px-3 py-1.5 inline-block" role="status">
                 Mostrando {visibleMessageCount} de {currentSession.history.length} mensajes
-                <span className="mx-1">·</span>
+                <span className="mx-1" aria-hidden="true">·</span>
                 <span>Desplázate para más</span>
               </div>
             </div>
