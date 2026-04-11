@@ -44,6 +44,20 @@ export interface ToolExecutionContext {
   onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
   /** Callback for document generation sub-agent to signal document completion */
   onDocumentReady?: (document: DocumentReadyEvent) => void;
+  /**
+   * P0.2: Pre-loaded patient record from the main agent's parallel I/O block.
+   * Sub-agents should use this instead of re-reading from Firestore when available.
+   * Eliminates 1-3 redundant Firestore reads per request with sub-agent tools.
+   */
+  preloadedPatientRecord?: {
+    id: string;
+    displayName?: string;
+    demographics?: Record<string, unknown>;
+    tags?: string[];
+    notes?: string;
+    summaryCache?: { text?: string };
+    [key: string]: unknown;
+  } | null;
 }
 
 export type ToolHandler = (

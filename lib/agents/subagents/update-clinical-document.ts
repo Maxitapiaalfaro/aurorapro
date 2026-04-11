@@ -43,17 +43,21 @@ export async function executeUpdateClinicalDocument(
     const patientId = ctx.patientId || 'default_patient';
     const docPath = `psychologists/${ctx.psychologistId}/patients/${patientId}/sessions/${ctx.sessionId}/documents/${documentId}`;
 
+    // Read document once upfront — reused for both LLM-based editing and version bumping
+    // (P0.1: eliminates redundant Firestore read that previously existed at the version-bump step)
+    let docSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+
     // If full_updated_markdown not provided, auto-fetch current doc and apply edits via LLM
     if (!fullUpdatedMarkdown) {
       ctx.onProgress?.('Leyendo documento actual…');
-      const snap = await adminDb.doc(docPath).get();
-      if (!snap.exists) {
+      docSnap = await adminDb.doc(docPath).get();
+      if (!docSnap.exists) {
         return {
           name: 'update_clinical_document',
           response: { error: `Documento no encontrado: ${documentId}. Usa get_session_documents para verificar IDs disponibles.` },
         };
       }
-      const currentMarkdown = snap.data()?.markdown as string;
+      const currentMarkdown = docSnap.data()?.markdown as string;
       if (!currentMarkdown) {
         return {
           name: 'update_clinical_document',
@@ -110,9 +114,11 @@ REGLAS:
 
     // Persist to Firestore (server-side via firebase-admin)
     if (ctx.psychologistId && ctx.sessionId) {
-      // Read current doc to bump version
-      const snap = await adminDb.doc(docPath).get();
-      const currentVersion = snap.exists ? (snap.data()?.version ?? 1) : 1;
+      // Reuse cached snapshot if available; otherwise read once for version bump
+      if (!docSnap) {
+        docSnap = await adminDb.doc(docPath).get();
+      }
+      const currentVersion = docSnap.exists ? (docSnap.data()?.version ?? 1) : 1;
       const newVersion = currentVersion + 1;
 
       await adminDb.doc(docPath).set({

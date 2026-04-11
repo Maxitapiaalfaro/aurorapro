@@ -418,7 +418,8 @@ export class ClinicalAgentRouter {
 
         // Unified agent always has tools — handle function calls via streaming handler
         const patientId = enrichedContext?.patient_reference as string | undefined
-        result = await handleStreamingWithTools(streamResult, sessionId, { activeChatSessions: this.activeChatSessions }, interactionId, psychologistId, patientId)
+        const preloadedPatientRecord = enrichedContext?.preloadedPatientRecord ?? null
+        result = await handleStreamingWithTools(streamResult, sessionId, { activeChatSessions: this.activeChatSessions }, interactionId, psychologistId, patientId, preloadedPatientRecord)
       } else {
         // ─── Non-streaming path with P1.1 reactive compaction ───
         try {

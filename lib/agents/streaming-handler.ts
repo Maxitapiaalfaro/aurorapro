@@ -274,7 +274,8 @@ export function prepareFunctionCallWithSecurity(
   patientId?: string,
   onDocumentPreview?: (preview: DocumentPreviewEvent) => void,
   onDocumentReady?: (document: DocumentReadyEvent) => void,
-  toolCallHistory?: Map<string, ToolCallRecord[]>
+  toolCallHistory?: Map<string, ToolCallRecord[]>,
+  preloadedPatientRecord?: Record<string, unknown> | null
 ): PreparedToolCall {
   const toolRegistry = ToolRegistry.getInstance();
   const registeredTool = toolRegistry.getToolByDeclarationName(call.name);
@@ -326,7 +327,7 @@ export function prepareFunctionCallWithSecurity(
   return {
     call,
     securityCategory,
-    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady }, toolCallHistory),
+    execute: async (): Promise<ToolCallResult> => executeToolCall(call, academicReferences, { psychologistId: psychologistId || undefined, sessionId, patientId, onProgress, onDocumentPreview, onDocumentReady, preloadedPatientRecord: preloadedPatientRecord ?? undefined }, toolCallHistory),
   } as PreparedToolCall;
 }
 
@@ -344,6 +345,7 @@ async function executeToolCall(
     onProgress?: (message: string) => void;
     onDocumentPreview?: (preview: DocumentPreviewEvent) => void;
     onDocumentReady?: (document: DocumentReadyEvent) => void;
+    preloadedPatientRecord?: Record<string, unknown> | null;
   },
   toolCallHistory?: Map<string, ToolCallRecord[]>
 ): Promise<ToolCallResult> {
@@ -370,6 +372,7 @@ async function executeToolCall(
       onProgress: context?.onProgress,
       onDocumentPreview: context?.onDocumentPreview,
       onDocumentReady: context?.onDocumentReady,
+      preloadedPatientRecord: context?.preloadedPatientRecord,
     });
 
     // Record this tool call in history for loop detection
@@ -538,7 +541,8 @@ export async function handleStreamingWithTools(
   ctx: StreamingContext,
   interactionId?: string,
   psychologistId?: string,
-  patientId?: string
+  patientId?: string,
+  preloadedPatientRecord?: Record<string, unknown> | null
 ): Promise<any> {
   const sessionData = ctx.activeChatSessions.get(sessionId)
   if (!sessionData) {
@@ -644,7 +648,7 @@ export async function handleStreamingWithTools(
 
         // ─── P1.2: Build PreparedToolCall[] with security pre-checks + progress callbacks ───
         const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name), toolCallHistory)
+          prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createProgressCallback(call.name), patientId, createDocumentPreviewCallback(call.name), createDocumentReadyCallback(call.name), toolCallHistory, preloadedPatientRecord)
         );
 
         // Start tool execution WITHOUT awaiting — drain progress concurrently
@@ -832,7 +836,7 @@ export async function handleStreamingWithTools(
             };
 
             const recursivePreparedCalls: PreparedToolCall[] = followUpFunctionCalls.map((call: any) =>
-              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name), toolCallHistory)
+              prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, createRecursiveProgressCb(call.name), patientId, createRecursiveDocPreviewCb(call.name), createRecursiveDocReadyCb(call.name), toolCallHistory, preloadedPatientRecord)
             );
 
             // Start execution without awaiting — drain progress concurrently (same pattern as initial round)
@@ -960,7 +964,8 @@ export async function handleNonStreamingWithTools(
   sessionId: string,
   ctx: StreamingContext,
   psychologistId?: string,
-  patientId?: string
+  patientId?: string,
+  preloadedPatientRecord?: Record<string, unknown> | null
 ): Promise<any> {
   const functionCalls = result.functionCalls
   let academicReferences: Array<{title: string, url: string, doi?: string, authors?: string, year?: number, journal?: string}> = []
@@ -971,7 +976,7 @@ export async function handleNonStreamingWithTools(
   if (functionCalls && functionCalls.length > 0) {
     // ─── P1.2: Build PreparedToolCall[] with security pre-checks, then orchestrate ───
     const preparedCalls: PreparedToolCall[] = functionCalls.map((call: any) =>
-      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId, undefined, undefined, toolCallHistory)
+      prepareFunctionCallWithSecurity(call, psychologistId ?? null, sessionId, academicReferences, undefined, patientId, undefined, undefined, toolCallHistory, preloadedPatientRecord)
     );
 
     // 🎯 P1.2: Execute with concurrency limits and per-tool error isolation

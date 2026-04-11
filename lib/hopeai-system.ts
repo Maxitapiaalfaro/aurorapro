@@ -949,6 +949,8 @@ export class HopeAISystem {
         operationalMetadata: operationalMetadata,
         clinicalMemories: enrichedSessionContext.clinicalMemories || [],
         priorSessionSummaries: enrichedSessionContext.priorSessionSummaries || [],
+        // P0.2: Pass pre-loaded patient record so sub-agents skip redundant Firestore reads
+        preloadedPatientRecord: patientRecord || null,
       }
 
       sessionLogger.debug(`🏥 SessionMeta patient reference: ${sessionMeta?.patient?.reference || 'None'}`)
