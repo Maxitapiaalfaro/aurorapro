@@ -187,10 +187,9 @@ export class ClinicalAgentRouter {
                   logger.debug(`Successfully added file part for: ${fileRef.name}`)
 
                   // Track in filesFullySentMap so sendMessage() won't re-attach this file
-                  const sentSet = this.filesFullySentMap.get(sessionId) || new Set<string>()
-                  this.filesFullySentMap.set(sessionId, sentSet)
+                  if (!this.filesFullySentMap.has(sessionId)) this.filesFullySentMap.set(sessionId, new Set<string>())
                   const sentId = fileRef.id || fileRef.geminiFileId || fileUri
-                  if (sentId) sentSet.add(sentId)
+                  if (sentId) this.filesFullySentMap.get(sessionId)!.add(sentId)
                 } catch (error) {
                   logger.error(`Error processing file reference ${fileRef.name}`, { error: error instanceof Error ? error.message : String(error) })
                   // Continuar con el siguiente archivo en lugar de fallar completamente
