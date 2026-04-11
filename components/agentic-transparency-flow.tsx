@@ -13,7 +13,7 @@ import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, Academi
 /** Maximum character length for inline detail display; longer details go into the expandable section. */
 const INLINE_DETAIL_MAX_LENGTH = 40
 
-/** Maximum height (px) for the scrollable step list area to prevent infinite growth. */
+/** Maximum height in pixels for the scrollable step list area to prevent infinite growth. */
 const STEP_LIST_MAX_HEIGHT = 250
 
 /** Format milliseconds as a readable seconds string (e.g. "1.2s"). */
@@ -369,7 +369,7 @@ function CurrentSubStepLine({ steps }: { steps: string[] }) {
   const current = steps[steps.length - 1] || ''
 
   return (
-    <div className="px-2 pl-7 h-5 flex items-center overflow-hidden">
+    <div className="px-2 pl-7 min-h-5 flex items-center overflow-hidden">
       <AnimatePresence mode="wait">
         <motion.div
           key={current}
