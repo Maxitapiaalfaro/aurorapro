@@ -261,7 +261,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
       </div>
 
       <div className="relative flex items-center gap-1 md:gap-1.5 flex-shrink-0">
-        <SyncStatusIndicator showLabel={false} className="mr-0.5" />
+        <SyncStatusIndicator className="mr-0.5" />
         <DisplaySettingsPopover />
         <Button
           variant="ghost"

@@ -70,8 +70,8 @@ persistentLocalCache + persistentMultipleTabManager + CACHE_SIZE_UNLIMITED
 
 **Solución implementada:** `components/sync-status-indicator.tsx` + `hooks/use-sync-status.ts`
 
-- **Dot indicator** no intrusivo en el header
-- 3 estados: Offline (gris) → Sincronizando (ámbar pulsante) → Sincronizado (verde, se desvanece)
+- **Icono de nube auto-descriptivo** (CloudCheck / CloudArrowUp / CloudSlash) en el header
+- 3 estados: Offline (CloudSlash gris + label) → Sincronizando (CloudArrowUp ámbar con pulso + label) → Sincronizado (CloudCheck verde, se desvanece)
 - Tooltip con información detallada incluyendo hora de última sync
 - `aria-live="polite"` para accesibilidad
 - Auto-fade después de 4 segundos en estado "synced" para mínima distracción
@@ -130,12 +130,12 @@ Hook reactivo que monitorea el estado de sincronización Firestore:
 
 ### 4.2 `components/sync-status-indicator.tsx`
 
-Indicador visual no intrusivo:
+Indicador visual auto-descriptivo con iconos de nube Phosphor:
 
-- **Synced:** Dot verde que se desvanece a los 4 segundos
-- **Syncing:** Dot ámbar con pulso suave (animación CSS)
-- **Offline:** Dot gris con label visible
-- Tooltip con icono Phosphor y texto descriptivo
+- **Synced:** CloudCheck verde que se desvanece a los 4 segundos
+- **Syncing:** CloudArrowUp ámbar con pulso de opacidad + label "Guardando…"
+- **Offline:** CloudSlash gris con label "Sin conexión"
+- Tooltip con texto descriptivo y hora de última sync
 - Integrado en `header.tsx` junto a controles existentes
 
 ### 4.3 `hooks/use-local-data-controls.ts`
@@ -160,8 +160,8 @@ Panel de privacidad de datos:
 
 ```css
 @keyframes sync-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 ```
 
@@ -182,13 +182,14 @@ Panel de privacidad de datos:
 
 ## 6. Decisiones de Diseño
 
-### ¿Por qué un dot y no un badge completo?
+### ¿Por qué iconos de nube y no un dot o badge completo?
 
-El indicador de sync usa un dot de 1.5x1.5 (6px) porque:
-1. **Aurora es una herramienta clínica** — el psicólogo no debe distraerse del paciente
-2. **El estado "synced" se desvanece** — el mejor sync UX es invisible
-3. **El tooltip contiene la info completa** — disponible on-demand sin ruido visual
-4. **Consistencia** con el design system existente (dots de 2x2 para agentes, 3.5h para indicators)
+El indicador de sync usa iconos Phosphor de nube (h-3.5 w-3.5, 14px) porque:
+1. **Auto-descriptivo** — la forma de nube comunica "sincronización" sin necesidad de tooltip
+2. **Aurora es una herramienta clínica** — el psicólogo no debe distraerse del paciente
+3. **El estado "synced" se desvanece** — el mejor sync UX es invisible
+4. **Labels para estados no-synced** — "Guardando…" y "Sin conexión" eliminan ambigüedad
+5. **Consistencia** con el design system existente (Phosphor duotone icons throughout)
 
 ### ¿Por qué no implementamos bloqueo biométrico?
 
