@@ -375,7 +375,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
           transition: 'height 350ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1)'
         }}
       >
-        <h2 className="text-[10px] text-muted-foreground/60 font-sans font-medium tracking-widest uppercase whitespace-nowrap">
+        <h2 className="text-[11px] text-muted-foreground/60 font-sans font-medium tracking-widest uppercase whitespace-nowrap">
           {activeTab === 'conversations' ? 'Recientes' : 'Casos clínicos'}
         </h2>
       </div>
