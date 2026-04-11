@@ -25,6 +25,7 @@ import * as Sentry from "@sentry/nextjs"
 import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-client-storage"
 import { useAuth } from "@/providers/auth-provider"
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
+import { AppSkeleton } from '@/components/app-skeleton'
 
 
 import { createLogger } from '@/lib/logger'
@@ -640,17 +641,9 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
     }
   } : null
 
-  // Estados de carga y error
+  // Estados de carga — skeleton UI matching final layout for seamless transition
   if (!systemState.isInitialized) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background animate-in fade-in duration-500">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-border border-t-foreground/40 rounded-full animate-spin mx-auto mb-6"></div>
-          <p className="font-serif text-lg text-foreground/70">Aurora</p>
-          <p className="text-xs text-muted-foreground/50 mt-1.5">Preparando tu espacio clínico</p>
-        </div>
-      </div>
-    )
+    return <AppSkeleton />
   }
 
   const handleGenerateFichaFromChat = async () => {
