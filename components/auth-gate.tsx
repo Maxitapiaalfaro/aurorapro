@@ -281,21 +281,28 @@ export function AuthGate() {
   if (view === "phone") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Aurora</CardTitle>
-            <CardDescription>Inicia sesión con tu número de teléfono</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <p className="text-sm text-destructive mb-4">{error}</p>
-            )}
-            <PhoneAuthFlow
-              onBack={() => { setView("login"); setError("") }}
-              onError={setError}
-            />
-          </CardContent>
-        </Card>
+        <div className="w-full max-w-sm mx-auto">
+          {/* Branding */}
+          <div className="text-center mb-10">
+            <h1 className="font-serif text-3xl tracking-tight text-foreground/90">Aurora</h1>
+            <p className="mt-2 text-sm text-muted-foreground font-sans">Plataforma clínica con IA</p>
+          </div>
+
+          <Card className="border-border/40 shadow-sm bg-card/95 backdrop-blur-sm">
+            <CardHeader className="text-center pb-2 pt-6">
+              <CardDescription>Inicia sesión con tu número de teléfono</CardDescription>
+            </CardHeader>
+            <CardContent className="pb-6">
+              {error && (
+                <p className="text-sm text-destructive mb-4">{error}</p>
+              )}
+              <PhoneAuthFlow
+                onBack={() => { setView("login"); setError("") }}
+                onError={setError}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     )
   }
@@ -306,137 +313,152 @@ export function AuthGate() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Aurora</CardTitle>
-          <CardDescription>
-            {isLogin
-              ? "Inicia sesión para continuar"
-              : "Crea tu cuenta profesional"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* ── Social Login Buttons ──────────────────────────────── */}
-          <div className="grid gap-2">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-              type="button"
-            >
-              <GoogleIcon className="mr-2" />
-              Continuar con Google
-            </Button>
+      <div className="w-full max-w-sm mx-auto">
+        {/* Branding — separated from card for elegance */}
+        <div className="text-center mb-10">
+          <h1 className="font-serif text-3xl tracking-tight text-foreground/90">Aurora</h1>
+          <p className="mt-2 text-sm text-muted-foreground font-sans">Plataforma clínica con IA</p>
+        </div>
 
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => { setView("phone"); setError("") }}
-              disabled={loading}
-              type="button"
-            >
-              <Phone className="mr-2 h-5 w-5" />
-              Continuar con teléfono
-            </Button>
-          </div>
+        <Card className="border-border/40 shadow-sm bg-card/95 backdrop-blur-sm">
+          <CardHeader className="text-center pb-2 pt-6">
+            <CardDescription className="text-muted-foreground">
+              {isLogin
+                ? "Inicia sesión para continuar"
+                : "Crea tu cuenta profesional"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5 pb-6">
+            {/* ── Social Login Buttons ──────────────────────────────── */}
+            <div className="grid gap-2.5">
+              <Button
+                variant="outline"
+                className="w-full h-11 rounded-lg border-border/50 hover:bg-secondary/80 transition-colors"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                type="button"
+              >
+                <GoogleIcon className="mr-2.5" />
+                <span className="text-sm">Continuar con Google</span>
+              </Button>
 
-          {/* ── Divider ──────────────────────────────────────────── */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <Separator className="w-full" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
-                o con correo electrónico
-              </span>
-            </div>
-          </div>
-
-          {/* ── Email/Password Form ──────────────────────────────── */}
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="profesional@ejemplo.cl"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
+              <Button
+                variant="outline"
+                className="w-full h-11 rounded-lg border-border/50 hover:bg-secondary/80 transition-colors"
+                onClick={() => { setView("phone"); setError("") }}
+                disabled={loading}
+                type="button"
+              >
+                <Phone className="mr-2.5 h-4 w-4" />
+                <span className="text-sm">Continuar con teléfono</span>
+              </Button>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete={isLogin ? "current-password" : "new-password"}
-              />
+            {/* ── Divider ──────────────────────────────────────────── */}
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/40" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card px-3 text-xs text-muted-foreground/70 uppercase tracking-wider">
+                  o con correo
+                </span>
+              </div>
             </div>
 
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
+            {/* ── Email/Password Form ──────────────────────────────── */}
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Correo electrónico</Label>
                 <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="profesional@ejemplo.cl"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
-                  minLength={6}
-                  autoComplete="new-password"
+                  autoComplete="email"
+                  className="h-10 rounded-lg border-border/50 focus:border-primary/50"
                 />
               </div>
-            )}
 
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">Contraseña</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  className="h-10 rounded-lg border-border/50 focus:border-primary/50"
+                />
+              </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading
-                ? "Procesando..."
-                : isLogin
-                  ? "Iniciar sesión"
-                  : "Crear cuenta"}
-            </Button>
-          </form>
+              {!isLogin && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword" className="text-xs font-medium text-muted-foreground">Confirmar contraseña</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    className="h-10 rounded-lg border-border/50 focus:border-primary/50"
+                  />
+                </div>
+              )}
 
-          {/* ── Toggle Login/Register ────────────────────────────── */}
-          <div className="text-center text-sm text-muted-foreground">
-            {isLogin ? (
-              <>
-                ¿No tienes cuenta?{" "}
-                <button
-                  type="button"
-                  className="underline hover:text-foreground"
-                  onClick={() => { setView("register"); setError("") }}
-                >
-                  Regístrate
-                </button>
-              </>
-            ) : (
-              <>
-                ¿Ya tienes cuenta?{" "}
-                <button
-                  type="button"
-                  className="underline hover:text-foreground"
-                  onClick={() => { setView("login"); setError("") }}
-                >
-                  Inicia sesión
-                </button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+
+              <Button type="submit" className="w-full h-10 rounded-lg font-medium" disabled={loading}>
+                {loading
+                  ? "Procesando..."
+                  : isLogin
+                    ? "Iniciar sesión"
+                    : "Crear cuenta"}
+              </Button>
+            </form>
+
+            {/* ── Toggle Login/Register ────────────────────────────── */}
+            <div className="text-center text-sm text-muted-foreground pt-1">
+              {isLogin ? (
+                <>
+                  ¿No tienes cuenta?{" "}
+                  <button
+                    type="button"
+                    className="text-foreground/80 hover:text-foreground underline underline-offset-2 decoration-border transition-colors"
+                    onClick={() => { setView("register"); setError("") }}
+                  >
+                    Regístrate
+                  </button>
+                </>
+              ) : (
+                <>
+                  ¿Ya tienes cuenta?{" "}
+                  <button
+                    type="button"
+                    className="text-foreground/80 hover:text-foreground underline underline-offset-2 decoration-border transition-colors"
+                    onClick={() => { setView("login"); setError("") }}
+                  >
+                    Inicia sesión
+                  </button>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Subtle footer */}
+        <p className="text-center text-xs text-muted-foreground/50 mt-8">
+          Plataforma HIPAA-compliant para profesionales de salud mental
+        </p>
+      </div>
     </div>
   )
 }

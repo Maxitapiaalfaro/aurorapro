@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import {
   PlusIcon,
-  ClockIcon,
   ChatsCircleIcon,
   TrashIcon,
   ArrowClockwiseIcon,
@@ -182,23 +181,23 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
     <>
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
           
-          <SheetContent side="left" className="w-[85vw] max-w-[340px] p-0 backdrop-blur-md border-r border-border/30 overflow-hidden bg-background/95 shadow-2xl">
+          <SheetContent side="left" className="w-[85vw] max-w-[320px] p-0 backdrop-blur-md border-r border-border/20 overflow-hidden bg-background/95 shadow-xl">
             <div className="flex flex-col h-full relative">
               
               {/* Navigation Icons - Mobile optimized */}
-              <div className="flex flex-col flex-shrink-0 p-4 py-6 gap-3 overflow-visible border-b border-border/40">
+              <div className="flex flex-col flex-shrink-0 p-4 py-5 gap-2 overflow-visible border-b border-border/20">
                 {/* Nueva consulta button */}
                 <Button
                   onClick={handleNewConversation}
                   disabled={isCreatingSession}
                   className={cn(
-                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium",
-                    "bg-clarity-blue-600 text-white hover:bg-clarity-blue-700",
-                    "shadow-sm active:scale-[0.98] transition-all"
+                    "w-full h-11 px-4 gap-3 justify-start rounded-xl font-medium",
+                    "bg-secondary text-foreground/80 hover:bg-secondary/70 border border-border/30",
+                    "active:scale-[0.98] transition-all"
                   )}
                 >
-                  <PlusIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
-                  <span className="text-sm">
+                  <PlusIcon className="h-4.5 w-4.5 flex-shrink-0" weight="regular" />
+                  <span className="text-[13px]">
                     {isCreatingSession ? 'Creando...' : 'Nueva consulta'}
                   </span>
                 </Button>
@@ -208,19 +207,19 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                   variant="ghost"
                   onClick={() => setActiveTab('conversations')}
                   className={cn(
-                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium relative transition-all duration-200",
+                    "w-full h-10 px-4 gap-3 justify-start rounded-xl font-medium relative transition-all duration-200",
                     "active:scale-[0.98]",
                     activeTab === 'conversations'
-                      ? "bg-clarity-blue-50/80 text-clarity-blue-600 hover:bg-clarity-blue-100/80"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                      ? "bg-secondary/60 text-foreground/80 hover:bg-secondary/50"
+                      : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/30"
                   )}
                 >
                   {/* Active indicator */}
                   {activeTab === 'conversations' && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-foreground/25 rounded-r-full" />
                   )}
-                  <ChatsCircleIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
-                  <span className="text-sm">Consultas</span>
+                  <ChatsCircleIcon className="h-4.5 w-4.5 flex-shrink-0" weight="regular" />
+                  <span className="text-[13px]">Consultas</span>
                 </Button>
 
                 {/* Casos clínicos button */}
@@ -228,25 +227,25 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                   variant="ghost"
                   onClick={() => setActiveTab('patients')}
                   className={cn(
-                    "w-full h-12 px-4 gap-3 justify-start rounded-2xl font-medium relative transition-all duration-200",
+                    "w-full h-10 px-4 gap-3 justify-start rounded-xl font-medium relative transition-all duration-200",
                     "active:scale-[0.98]",
                     activeTab === 'patients'
-                      ? "bg-clarity-blue-50/80 text-clarity-blue-600 hover:bg-clarity-blue-100/80"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                      ? "bg-secondary/60 text-foreground/80 hover:bg-secondary/50"
+                      : "text-muted-foreground/60 hover:text-foreground/70 hover:bg-secondary/30"
                   )}
                 >
                   {/* Active indicator */}
                   {activeTab === 'patients' && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-clarity-blue-600 rounded-r-full" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-foreground/25 rounded-r-full" />
                   )}
-                  <FoldersIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
-                  <span className="text-sm">Casos clínicos</span>
+                  <FoldersIcon className="h-4.5 w-4.5 flex-shrink-0" weight="regular" />
+                  <span className="text-[13px]">Casos clínicos</span>
                 </Button>
               </div>
 
               {/* Section header */}
-              <div className="px-5 py-3.5 flex-shrink-0 border-b border-border/30">
-                <h2 className="text-[11px] text-muted-foreground font-sans font-semibold tracking-widest uppercase whitespace-nowrap">
+              <div className="px-5 py-2.5 flex-shrink-0 border-b border-border/15">
+                <h2 className="text-[10px] text-muted-foreground/40 font-sans font-medium tracking-[0.12em] uppercase whitespace-nowrap">
                   {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
                 </h2>
               </div>
@@ -258,22 +257,20 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                       <div className="px-3 py-4 space-y-1">
                         {isLoading ? (
                           <div className="flex items-center justify-center py-12">
-                            <div className="flex flex-col items-center gap-3">
-                              <ArrowClockwiseIcon className="h-5 w-5 animate-spin text-clarity-blue-600" weight="bold" />
-                              <span className="text-sm text-muted-foreground font-medium">Cargando conversaciones...</span>
+                            <div className="flex flex-col items-center gap-2">
+                              <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-muted-foreground/40" weight="regular" />
+                              <span className="text-[11px] text-muted-foreground/40">Cargando conversaciones...</span>
                             </div>
                           </div>
                         ) : conversations.length === 0 ? (
-                          <div className="text-center py-12 px-4 text-mineral-gray-600">
-                            <div className="bg-ash rounded-xl p-6">
-                              <ChatsCircleIcon className="h-10 w-10 mx-auto mb-3 opacity-40" weight="duotone" />
-                              <p className="text-sm font-medium">
+                          <div className="text-center py-12 px-4">
+                            <ChatsCircleIcon className="h-8 w-8 mx-auto mb-2.5 text-muted-foreground/15" weight="light" />
+                            <p className="text-[13px] text-muted-foreground/50 font-medium">
                                 No hay conversaciones aún
-                              </p>
-                              <p className="text-xs mt-1 opacity-70">
+                            </p>
+                            <p className="text-[11px] mt-1 text-muted-foreground/30">
                                 Inicia una nueva consulta
-                              </p>
-                            </div>
+                            </p>
                           </div>
                         ) : (
                           conversations.map((conversation) => {
@@ -285,23 +282,21 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                   variant="ghost"
                                   className={cn(
                                     "w-full transition-all duration-200 relative overflow-visible",
-                                    "justify-start p-3.5 pr-12 h-auto text-left rounded-xl",
-                                    "hover:bg-secondary/60 active:scale-[0.98]"
+                                    "justify-start p-3 pr-11 h-auto text-left rounded-lg",
+                                    "hover:bg-secondary/40 active:scale-[0.98]"
                                   )}
                                   onClick={() => handleConversationSelect(conversation.sessionId)}
                                 >
-                                  <div className="flex items-start gap-3 w-full pl-2 min-w-0">
+                                  <div className="flex items-start gap-2.5 w-full pl-1.5 min-w-0">
                                     <div className={cn(
-                                      "mt-1 w-2 h-2 rounded-full flex-shrink-0",
+                                      "mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0",
                                       agentConfig.button.bg,
-                                      "ring-2 ring-background"
                                     )} />
                                     <div className="flex-1 min-w-0">
-                                      <div className="font-sans text-sm truncate leading-snug text-foreground font-medium min-w-0">
+                                      <div className="font-sans text-[13px] truncate leading-snug text-foreground/70 font-medium min-w-0">
                                         {conversation.title}
                                       </div>
-                                      <div className="text-xs text-muted-foreground mt-1.5 min-w-0 flex items-center gap-1.5">
-                                        <ClockIcon className="h-3 w-3 opacity-60 flex-shrink-0" weight="bold" />
+                                      <div className="text-[10px] text-muted-foreground/35 mt-1 min-w-0 flex items-center gap-1.5">
                                         <span className="truncate">
                                           {formatDistanceToNow(new Date(conversation.lastUpdated), {
                                             addSuffix: true,
@@ -319,13 +314,13 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                                       variant="ghost"
                                       size="icon"
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 right-2 h-8 w-8 rounded-lg z-10",
+                                        "absolute top-1/2 -translate-y-1/2 right-1.5 h-7 w-7 rounded-md z-10",
                                         "opacity-0 group-hover:opacity-100 transition-all duration-200",
-                                        "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                        "text-muted-foreground/30 hover:text-destructive/60 hover:bg-destructive/5"
                                       )}
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <TrashIcon className="h-4 w-4" weight="bold" />
+                                      <TrashIcon className="h-3.5 w-3.5" weight="regular" />
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
@@ -353,10 +348,10 @@ export function MobileNav({ userId, createSession, onConversationSelect, isOpen:
                         )}
 
                         {isLoadingMore && (
-                          <div className="flex items-center justify-center py-5">
-                            <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/50 px-4 py-2 rounded-full border border-border/30">
-                              <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-primary" weight="bold" />
-                              <span className="font-medium">Cargando más...</span>
+                          <div className="flex items-center justify-center py-4">
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground/35">
+                              <ArrowClockwiseIcon className="h-3 w-3 animate-spin" weight="regular" />
+                              <span>Cargando más...</span>
                             </div>
                           </div>
                         )}
