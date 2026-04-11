@@ -70,6 +70,22 @@
     animation: cursor-blink 1.2s ease-in-out infinite;
   }
 
+  /* Sync status pulse — gentle amber throb for "syncing" state */
+  @keyframes sync-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.3);
+    }
+  }
+
+  .animate-sync-pulse {
+    animation: sync-pulse 1.6s ease-in-out infinite;
+  }
+
   /* Screen reader only - WCAG 2.1 AA accessibility */
   .sr-only {
     position: absolute;

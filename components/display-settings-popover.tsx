@@ -10,6 +10,7 @@ import {
 } from "@/providers/display-preferences-provider"
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
+import { LocalDataControls } from "@/components/local-data-controls"
 
 interface DisplaySettingsPopoverProps {
   className?: string
@@ -230,6 +231,12 @@ export function DisplaySettingsPopover({ className }: DisplaySettingsPopoverProp
                 </div>
               </div>
             </div>
+
+            {/* Divider */}
+            <div className="my-4 border-t border-border/30" />
+
+            {/* Local Data Privacy Controls */}
+            <LocalDataControls />
           </div>
 
           {/* Footer con información - Solo desktop */}

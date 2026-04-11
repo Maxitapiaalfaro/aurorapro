@@ -17,6 +17,7 @@ import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { DisplaySettingsPopover } from "@/components/display-settings-popover"
+import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 
 
 import { createLogger } from '@/lib/logger'
@@ -260,6 +261,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
       </div>
 
       <div className="relative flex items-center gap-1 md:gap-1.5 flex-shrink-0">
+        <SyncStatusIndicator showLabel={false} className="mr-0.5" />
         <DisplaySettingsPopover />
         <Button
           variant="ghost"
