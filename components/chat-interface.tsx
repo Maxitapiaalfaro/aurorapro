@@ -106,10 +106,9 @@ function FichaClinicaDisabledButton({
         size="icon"
         variant="ghost"
         className={cn(
-          "h-10 md:h-12 px-3 w-auto", 
-          config.ghostButton.hoverBg, 
-          config.ghostButton.text,
-          isTouchDevice ? "opacity-100" : "opacity-50 cursor-not-allowed"
+          "h-9 md:h-10 px-3 w-auto", 
+          "hover:bg-secondary/60 text-muted-foreground",
+          isTouchDevice ? "opacity-100" : "opacity-40 cursor-not-allowed"
         )}
         disabled={!isTouchDevice}
         onClick={() => isTouchDevice && setShowTooltip(!showTooltip)}
@@ -119,7 +118,7 @@ function FichaClinicaDisabledButton({
         }}
         title={!isTouchDevice ? "Crea o selecciona un paciente para acceder a la Ficha Clínica" : undefined}
       >
-        <span className="text-sm font-medium">Ficha Clínica</span>
+        <span className="text-xs font-medium">Ficha Clínica</span>
       </Button>
       
       {/* Puente invisible para mantener hover activo en desktop */}
@@ -1019,54 +1018,39 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}>
                 <div
                   className={cn(
-                    "chat-message-bubble relative rounded-lg border ring-1 ring-transparent overflow-hidden w-full min-w-0",
+                    "chat-message-bubble relative rounded-lg overflow-hidden w-full min-w-0",
                     fontSizeClass,
                     message.role === "user"
-                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-[hsl(var(--user-bubble-bg))] shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
-                      : `${messageAgentConfig.bgColor} ${messageAgentConfig.borderColor}`,
+                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border border-border/30"
+                      : "bg-card border border-border/30",
                   )}
                 >
                   {/* Indicador mínimo de archivo adjunto (solo icono) */}
                   {message.role === "user" && (message.fileReferences?.length ?? 0) > 0 && (
                     <div className="absolute top-2 right-2" title="Archivo adjunto">
                       <PaperclipIcon
-                        className="w-3 h-3 text-mineral-gray-600/70 hover:text-mineral-gray-800 transition-colors"
+                        className="w-3 h-3 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                         aria-hidden="true"
                       />
                       <span className="sr-only">Archivo adjunto</span>
                     </div>
                   )}
-                  {/* Agent Context Header - Aurora v2.0 Design */}
+                  {/* Agent Context Header — minimal */}
                   {message.role === "model" && (
-                    <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
-                      <div className="flex items-start gap-3">
-                        {/* Agent Icon - Larger, more prominent */}
+                    <div className="px-4 md:px-5 pt-3.5 pb-2.5 border-b border-border/20">
+                      <div className="flex items-center gap-2.5">
+                        {/* Agent accent dot */}
                         <div className={cn(
-                          "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
-                          messageAgentConfig.bgColor,
-                          "ring-1 ring-inset",
-                          messageAgentConfig.borderColor
-                        )}>
-                          <MessageIconComponent
-                            className={cn("w-5 h-5", messageAgentConfig.textColor)}
-                            weight="duotone"
-                          />
-                        </div>
+                          "flex-shrink-0 w-2 h-2 rounded-full",
+                          messageAgentConfig.typingDotColor
+                        )} />
 
-                        {/* Agent Info */}
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <h3 className={cn(
-                              "text-base font-semibold font-sans tracking-tight",
-                              messageAgentConfig.textColor
-                            )}>
-                              {messageAgentConfig.name}
-                            </h3>
-                          </div>
-                          <p className="text-xs text-muted-foreground/80 font-sans leading-relaxed">
-                            {messageAgentConfig.description}
-                          </p>
-                        </div>
+                        {/* Agent name only */}
+                        <span className={cn(
+                          "text-xs font-medium font-sans tracking-wide text-muted-foreground"
+                        )}>
+                          {messageAgentConfig.name}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1088,7 +1072,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   </div>
                   {/* Mostrar archivos adjuntos si existen */}
                   {messageFiles[message.id] && messageFiles[message.id].length > 0 && (
-                        <div className="p-3 md:p-4 border-t border-border/80">
+                        <div className="p-3 md:p-4 border-t border-border/20">
                           <MessageFileAttachments 
                             files={messageFiles[message.id]} 
                             variant="compact"
@@ -1098,7 +1082,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       )}
                   {/* Mostrar referencias de grounding si existen */}
                   {message.groundingUrls && message.groundingUrls.length > 0 && (
-                    <div className="p-3 md:p-4 border-t border-border/80">
+                    <div className="p-3 md:p-4 border-t border-border/20">
                       <button
                         type="button"
                         onClick={() => setCollapsedReferences(prev => ({ ...prev, [message.id]: !prev[message.id] }))}
@@ -1181,19 +1165,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   )}
                   {/* Copy to clipboard for AI messages */}
                   {message.role === 'model' && (
-                    <div className="p-2 md:p-3 border-t border-border/80">
-                      <div className="flex items-center gap-1.5">
+                    <div className="px-3 md:px-4 py-1.5 border-t border-border/15">
+                      <div className="flex items-center gap-0.5">
                         <button
                           type="button"
                           onClick={() => copyMessageContent(message.content, message.id)}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="Copiar contenido"
                           title="Copiar contenido"
                         >
                           {copiedMessageId === message.id ? (
-                            <CheckIcon className="h-4 w-4 text-green-600 animate-in fade-in zoom-in-50 duration-150" />
+                            <CheckIcon className="h-3.5 w-3.5 text-green-600/70 animate-in fade-in zoom-in-50 duration-150" />
                           ) : (
-                            <CopyIcon className="h-4 w-4" />
+                            <CopyIcon className="h-3.5 w-3.5" />
                           )}
                         </button>
                         <DevMessageMetrics 
@@ -1203,20 +1187,20 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="Me gusta"
                           title="Me gusta"
                         >
-                          <ThumbsUpIcon className="h-4 w-4" />
+                          <ThumbsUpIcon className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-ash text-mineral-gray-600 hover:text-deep-charcoal transition-colors transition-transform active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="No me gusta"
                           title="No me gusta"
                         >
-                          <ThumbsDownIcon className="h-4 w-4" />
+                          <ThumbsDownIcon className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -1246,56 +1230,27 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     backgroundColor: realConfig.bgColor
                   }}
                   transition={{ duration: 0 }}
-                  className={cn("chat-message-bubble relative rounded-lg border w-full min-w-0 overflow-hidden", fontSizeClass, realConfig.bgColor, realConfig.borderColor)}
+                  className={cn("chat-message-bubble relative rounded-lg border border-border/30 w-full min-w-0 overflow-hidden bg-card", fontSizeClass)}
                 >
-                  {/* Agent Context Header - Aurora v2.0 Design with Animation */}
-                  <div className="px-4 md:px-5 pt-4 pb-3 border-b border-border/30">
-                    <div className="flex items-start gap-3">
-                      {/* Agent Icon - Animated */}
-                      <motion.div
-                        key={`agent-icon-${realAgent}`}
-                        initial={false}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 0 }}
-                        className={cn(
-                          "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
-                          realConfig.bgColor,
-                          "ring-1 ring-inset",
-                          realConfig.borderColor
-                        )}
-                      >
-                        <RealIconComponent
-                          className={cn("w-5 h-5", realConfig.textColor)}
-                          weight="duotone"
-                        />
-                      </motion.div>
+                  {/* Agent Context Header — minimal, matching historical messages */}
+                  <div className="px-4 md:px-5 pt-3.5 pb-2.5 border-b border-border/20">
+                    <div className="flex items-center gap-2.5">
+                      {/* Agent accent dot */}
+                      <div className={cn(
+                        "flex-shrink-0 w-2 h-2 rounded-full",
+                        realConfig.typingDotColor
+                      )} />
 
-                      {/* Agent Info */}
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <motion.h3
-                            key={`agent-name-${realAgent}`}
-                            initial={false}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.3, ease: "easeOut" }}
-                            className={cn(
-                              "text-base font-semibold font-sans tracking-tight",
-                              realConfig.textColor
-                            )}
-                          >
-                            {realConfig.name}
-                          </motion.h3>
-                        </div>
-                        <motion.p
-                          key={`agent-desc-${realAgent}`}
-                          initial={{ opacity: 0, y: -5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: 0.1, ease: "easeOut" }}
-                          className="text-xs text-muted-foreground/80 font-sans leading-relaxed"
-                        >
-                          {realConfig.description}
-                        </motion.p>
-                      </div>
+                      {/* Agent name only */}
+                      <motion.span
+                        key={`agent-name-${realAgent}`}
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-xs font-medium font-sans tracking-wide text-muted-foreground"
+                      >
+                        {realConfig.name}
+                      </motion.span>
                     </div>
                   </div>
                 {/* Sequential action timeline — single source of truth for processing transparency */}
@@ -1348,7 +1303,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     />
                     {/* 📚 Referencias académicas de ParallelAI */}
                     {streamingAcademicReferences.length > 0 && (
-                      <div className="mt-6 pt-4 border-t border-border/60">
+                      <div className="mt-6 pt-4 border-t border-border/20">
                         <button
                           type="button"
                           onClick={() => setCollapsedReferences(prev => ({ ...prev, 'streaming': !prev['streaming'] }))}
@@ -1538,7 +1493,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 )}
 
                 {streamingGroundingUrls && streamingGroundingUrls.length > 0 && (
-                  <div className="mx-4 mb-4 pt-3 border-t border-border/80 animate-in fade-in duration-300 ease-out">
+                  <div className="mx-4 mb-4 pt-3 border-t border-border/20 animate-in fade-in duration-300 ease-out">
                     <div className="text-xs font-sans font-medium text-muted-foreground mb-2">Referencias:</div>
                     <div className="space-y-1">
                       {streamingGroundingUrls.map((ref, index) => (
@@ -1576,9 +1531,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             <Button
               onClick={scrollToBottom}
               className={cn(
-                "pointer-events-auto rounded-full w-10 h-10 shadow-md transition-all duration-300 hover:scale-110 active:scale-95",
-                "bg-card/90 backdrop-blur-md border border-border/40 hover:border-border/60",
-                "text-foreground hover:bg-card"
+                "pointer-events-auto rounded-full w-8 h-8 shadow-sm transition-all duration-200 hover:scale-105 active:scale-95",
+                "bg-card/90 backdrop-blur-md border border-border/30 hover:border-border/50",
+                "text-muted-foreground hover:text-foreground hover:bg-card"
               )}
               size="icon"
               variant="ghost"
@@ -1646,9 +1601,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}
             </AnimatePresence>
             <div className={cn(
-                "rounded-[28px] border bg-card/95 dark:bg-card/95 backdrop-blur-md transition-all shadow-lg shadow-black/[0.04] dark:shadow-black/[0.15] p-1",
-                "border-border/40",
-                config.focusWithinBorderColor
+                "rounded-2xl border bg-card/95 dark:bg-card/95 backdrop-blur-md transition-all shadow-sm p-1",
+                "border-border/30",
+                "focus-within:border-border/50"
               )}>
               {/* Text Input Section */}
               <div className="relative">
@@ -1684,7 +1639,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     disabled={isProcessing || isUploading || isTranscribing}
                     pendingFiles={pendingFiles}
                     onRemoveFile={onRemoveFile}
-                    buttonClassName={cn(config.ghostButton.hoverBg, config.ghostButton.text)}
+                    buttonClassName="hover:bg-secondary/60 text-muted-foreground hover:text-foreground"
                   />
 
                   {(onOpenFichaClinica || onGenerateFichaClinica) ? (
@@ -1694,17 +1649,16 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           size="icon"
                           variant="ghost"
                           className={cn(
-                            "h-10 md:h-12 px-3 w-auto", 
-                            config.ghostButton.hoverBg, 
-                            config.ghostButton.text
+                            "h-9 md:h-10 px-3 w-auto", 
+                            "hover:bg-secondary/60 text-muted-foreground hover:text-foreground"
                           )}
                           title="Ficha Clínica"
                         >
-                          <span className="text-sm font-medium">Ficha Clínica</span>
+                          <span className="text-xs font-medium">Ficha Clínica</span>
                           {(fichaLoading || generateLoading) && (
-                            <span className="absolute -top-1 -right-1 inline-flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-clarity-blue-600 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-clarity-blue-600"></span>
+                            <span className="absolute -top-1 -right-1 inline-flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground opacity-50"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-muted-foreground/70"></span>
                             </span>
                           )}
                         </Button>
@@ -1772,7 +1726,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     cancelRecordingRef={voiceCancelRecordingRef}
                     cancelTranscriptionRef={voiceCancelTranscriptionRef}
                     disabled={isProcessing || isStreaming || isUploading || isTranscribing || isRecordingVoice}
-                    className={cn("h-10 w-10 md:h-12 md:w-12", config.ghostButton.hoverBg, config.ghostButton.text)}
+                    className={cn("h-9 w-9 md:h-10 md:w-10", "hover:bg-secondary/60 text-muted-foreground hover:text-foreground")}
                   />
                   <Button
                     onClick={() => handleSendMessage()}
@@ -1788,10 +1742,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       )
                     }
                     size="icon"
-                    className={cn("h-10 w-10 md:h-12 md:w-12", config.button.bg, config.button.hoverBg, config.button.text)}
+                    className={cn("h-9 w-9 md:h-10 md:w-10 rounded-xl", "bg-foreground/85 hover:bg-foreground/75 text-background")}
                     aria-label="Enviar mensaje"
                   >
-                    <PaperPlaneRightIcon className="h-5 w-5" />
+                    <PaperPlaneRightIcon className="h-4 w-4" />
                   </Button>
                 </div>
               </div>

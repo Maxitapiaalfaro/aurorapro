@@ -110,9 +110,9 @@
     --sidebar-accent-foreground: 210 11% 25%;
     --sidebar-border: 210 14% 93%;
     --sidebar-ring: 211 100% 50%;
-    /* User message bubble colors */
-    --user-bubble-bg: 211 100% 50%; /* Clarity Blue */
-    --user-bubble-text: 0 0% 100%; /* White */
+    /* User message bubble colors — muted neutral for minimal aesthetic */
+    --user-bubble-bg: 210 14% 95%; /* Soft ash — nearly matching secondary */
+    --user-bubble-text: 210 11% 25%; /* Deep Charcoal for readability */
   }
   .dark {
     /* Aurora Palette - Dark Mode */
@@ -148,9 +148,9 @@
     --sidebar-accent-foreground: 210 17% 95%;
     --sidebar-border: 210 11% 22%;
     --sidebar-ring: 211 100% 65%;
-    /* User message bubble colors - Dark Mode */
-    --user-bubble-bg: 211 100% 50%; /* Clarity Blue for dark mode - slightly darker for better contrast */
-    --user-bubble-text: 0 0% 100%; /* White */
+    /* User message bubble colors - Dark Mode — subtle elevation */
+    --user-bubble-bg: 210 11% 20%; /* Slightly lighter than card */
+    --user-bubble-text: 210 17% 95%; /* Light text */
   }
 }
 
