@@ -43,6 +43,16 @@
     background: hsl(var(--muted-foreground) / 0.3);
   }
 
+  /*
+   * Mobile swipe fix — Radix ScrollArea viewports inside a touch-pan-y
+   * container (e.g. workspace sliding panels) must also declare pan-y so the
+   * browser hands horizontal gestures to framer-motion's drag handler instead
+   * of capturing them for potential native horizontal scrolling.
+   */
+  .touch-pan-y [data-radix-scroll-area-viewport] {
+    touch-action: pan-y;
+  }
+
   /* Animación de cursor tipo teclado - natural, lenta y pausada */
   @keyframes cursor-blink {
     0%, 45% {
