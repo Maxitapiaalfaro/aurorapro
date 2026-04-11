@@ -13,6 +13,9 @@ import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, Academi
 /** Maximum character length for inline detail display; longer details go into the expandable section. */
 const INLINE_DETAIL_MAX_LENGTH = 40
 
+/** Maximum height in pixels for the scrollable step list area to prevent infinite growth. */
+const STEP_LIST_MAX_HEIGHT = 250
+
 /** Format milliseconds as a readable seconds string (e.g. "1.2s"). */
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
@@ -56,13 +59,26 @@ export function AgenticTransparencyFlow({
 }: AgenticTransparencyFlowProps) {
   const agentConfig = getAgentVisualConfig(timeline.agentType)
   const [isExpanded, setIsExpanded] = useState(!defaultCollapsed)
+  const stepListRef = useRef<HTMLUListElement>(null)
+
+  const stepsLength = timeline.steps?.length ?? 0
+  const hasActiveStep = timeline.steps?.some(s => s.status === 'active') ?? false
+  const isLive = !defaultCollapsed || hasActiveStep
+
+  // Auto-scroll step list to bottom when new steps arrive in live mode
+  useEffect(() => {
+    if (isLive && stepListRef.current) {
+      stepListRef.current.scrollTo({
+        top: stepListRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }, [isLive, stepsLength])
 
   if (!timeline.steps || timeline.steps.length === 0) return null
 
   const progress = calculateProgress(timeline.steps)
   const completedCount = timeline.steps.filter(s => s.status === 'completed').length
-  const hasActiveStep = timeline.steps.some(s => s.status === 'active')
-  const isLive = !defaultCollapsed || hasActiveStep
 
   // Summary text for collapsed view
   const summaryParts: string[] = []
@@ -136,17 +152,21 @@ export function AgenticTransparencyFlow({
         </div>
       )}
 
-      {/* ── Step list ──────────────────────────────────────────── */}
+      {/* ── Step list with smooth height transition ────────────── */}
       <AnimatePresence initial={false}>
         {(isLive || isExpanded) && (
           <motion.div
             initial={defaultCollapsed ? { height: 0, opacity: 0 } : false}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="overflow-hidden"
           >
-            <ul className="px-2 pb-2 space-y-0.5">
+            <ul
+              ref={stepListRef}
+              className="px-2 pb-2 space-y-0.5 overflow-y-auto scrollbar-thin"
+              style={{ maxHeight: STEP_LIST_MAX_HEIGHT }}
+            >
               {timeline.steps.map((step, idx) => (
                 <TransparencyStepItem
                   key={step.id}
@@ -217,10 +237,18 @@ function TransparencyStepItem({
     prevStatusRef.current = step.status
   }, [step.status])
 
+  const isActive = step.status === 'active'
+  const isCompleted = step.status === 'completed'
+  const isError = step.status === 'error'
+
   const icon =
-    step.status === 'active' ? (
-      <Loader2 className="w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
-    ) : step.status === 'error' ? (
+    isActive ? (
+      <div className="relative flex items-center justify-center">
+        {/* Subtle glow behind active spinner */}
+        <div className="absolute inset-0 bg-clarity-blue-500/20 rounded-full blur-[3px]" />
+        <Loader2 className="relative w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
+      </div>
+    ) : isError ? (
       <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
     ) : (
       <motion.div
@@ -235,19 +263,24 @@ function TransparencyStepItem({
   return (
     <motion.li
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{
+        opacity: isCompleted ? 0.6 : 1,
+        y: 0,
+      }}
       transition={{
-        duration: 0.25,
+        duration: 0.3,
         delay: isLive ? index * 0.04 : 0,
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
+      layout
       className="group"
     >
       {/* ── Main row ──────────────────────────────────────────── */}
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-colors",
-          step.status === 'active' && 'bg-secondary/40',
+          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-all duration-300",
+          isActive && 'bg-clarity-blue-500/[0.08]',
+          isCompleted && 'bg-transparent',
           hasExpandableContent && 'cursor-pointer hover:bg-secondary/30',
         )}
         onClick={hasExpandableContent ? () => setIsOpen(prev => !prev) : undefined}
@@ -261,24 +294,26 @@ function TransparencyStepItem({
 
         <span
           className={cn(
-            'flex-1 min-w-0 truncate',
-            step.status === 'active'
-              ? 'text-foreground/90 font-medium'
-              : 'text-muted-foreground/70',
+            'flex-1 min-w-0 truncate transition-colors duration-300',
+            isActive
+              ? 'text-foreground font-medium'
+              : isError
+                ? 'text-red-400/70'
+                : 'text-muted-foreground/50',
           )}
         >
           {humanLabel}
           {/* Short inline detail */}
-          {step.detail && step.status === 'completed' && step.detail.length <= INLINE_DETAIL_MAX_LENGTH && (
-            <span className="text-[10px] text-muted-foreground/40 ml-1.5">
+          {step.detail && isCompleted && step.detail.length <= INLINE_DETAIL_MAX_LENGTH && (
+            <span className="text-[10px] text-muted-foreground/30 ml-1.5">
               — {step.detail}
             </span>
           )}
         </span>
 
-        {step.status === 'active' && <ElapsedTimer />}
-        {step.status === 'completed' && step.durationMs != null && step.durationMs > 0 && (
-          <span className="text-[10px] text-muted-foreground/30 tabular-nums flex-shrink-0">
+        {isActive && <ElapsedTimer />}
+        {isCompleted && step.durationMs != null && step.durationMs > 0 && (
+          <span className="text-[10px] text-muted-foreground/25 tabular-nums flex-shrink-0">
             {formatDuration(step.durationMs)}
           </span>
         )}
@@ -290,9 +325,9 @@ function TransparencyStepItem({
         )}
       </div>
 
-      {/* ── Progress sub-steps (visible while active) ─────────── */}
-      {hasProgressSteps && step.status === 'active' && (
-        <ProgressSubSteps steps={step.progressSteps!} />
+      {/* ── Progress sub-steps: single crossfading line instead of stacking list ── */}
+      {hasProgressSteps && isActive && (
+        <CurrentSubStepLine steps={step.progressSteps!} />
       )}
 
       {/* ── Expandable detail ──────────────────────────────────── */}
@@ -302,7 +337,7 @@ function TransparencyStepItem({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
             className="overflow-hidden"
           >
             <div className="px-2 pb-1 pl-7 space-y-1">
@@ -311,7 +346,7 @@ function TransparencyStepItem({
                   {step.detail}
                 </p>
               )}
-              {hasProgressSteps && step.status === 'completed' && (
+              {hasProgressSteps && isCompleted && (
                 <ProgressSubSteps steps={step.progressSteps!} allCompleted />
               )}
               {hasSources && <SourcesList sources={step.sources!} />}
@@ -323,7 +358,38 @@ function TransparencyStepItem({
   )
 }
 
-// ─── Progress Sub-Steps ────────────────────────────────────────────────────
+// ─── Current Sub-Step Line (Crossfade) ─────────────────────────────────────
+/**
+ * Instead of stacking every sub-step as a new row, this component shows only
+ * the *current* sub-step text in a single line with a crossfade animation.
+ * This avoids infinite vertical growth from low-level technical sub-steps
+ * like "Conectando con Firestore", "Procesando embeddings", etc.
+ */
+function CurrentSubStepLine({ steps }: { steps: string[] }) {
+  const current = steps[steps.length - 1] || ''
+
+  return (
+    <div className="px-2 pl-7 min-h-5 flex items-center overflow-hidden">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={current}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.2, ease: 'easeInOut' }}
+          className="flex items-center gap-1.5"
+        >
+          <Loader2 className="w-2 h-2 animate-spin text-clarity-blue-500/60 flex-shrink-0" />
+          <span className="text-[9px] text-muted-foreground/60 truncate leading-relaxed">
+            {current}
+          </span>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Progress Sub-Steps (full list, used in expandable detail for completed steps) ──
 
 function ProgressSubSteps({
   steps,
