@@ -185,6 +185,12 @@ export class ClinicalAgentRouter {
 
                   parts.push(filePart)
                   logger.debug(`Successfully added file part for: ${fileRef.name}`)
+
+                  // Track in filesFullySentMap so sendMessage() won't re-attach this file
+                  const sentSet = this.filesFullySentMap.get(sessionId) || new Set<string>()
+                  this.filesFullySentMap.set(sessionId, sentSet)
+                  const sentId = fileRef.id || fileRef.geminiFileId || fileUri
+                  if (sentId) sentSet.add(sentId)
                 } catch (error) {
                   logger.error(`Error processing file reference ${fileRef.name}`, { error: error instanceof Error ? error.message : String(error) })
                   // Continuar con el siguiente archivo en lugar de fallar completamente
@@ -281,18 +287,22 @@ export class ClinicalAgentRouter {
         })
 
         if (hasUnsentFiles) {
-          // ✅ PRIMER TURNO: Adjuntar archivo completo vía URI
-          logger.info(`🔵 First turn detected: Attaching FULL files (${files.length}) via URI`);
+          // ✅ Adjuntar solo archivos que NO se han enviado previamente en esta sesión
+          const unsentFiles = files.filter(f => {
+            const id = f.id || f.geminiFileId || f.geminiFileUri;
+            return !id || !fullySentFiles.has(id);
+          });
+          logger.info(`🔵 Attaching ${unsentFiles.length} NEW files via URI (${files.length - unsentFiles.length} already in context)`);
 
-          // Prepend textual file annotation so the agent knows files are attached
-          const fileDescriptions = files
+          // Prepend textual file annotation only for the new files being attached
+          const fileDescriptions = unsentFiles
             .filter(f => f.geminiFileUri || f.geminiFileId)
             .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
           if (fileDescriptions.length > 0) {
             messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
           }
 
-          for (const fileRef of files) {
+          for (const fileRef of unsentFiles) {
             try {
               // Cache session-level
               const cache = this.sessionFileCache.get(sessionId) || new Map<string, any>()
@@ -321,7 +331,7 @@ export class ClinicalAgentRouter {
               const filePart = createPartFromUri(fileUri, fileRef.type)
               messageParts.push(filePart)
 
-              // 🔧 FIX: Marcar archivo como "enviado completo" para que próximos turnos usen referencia ligera
+              // Marcar archivo como "enviado completo" para que próximos turnos usen referencia ligera
               const fileIdentifier = fileRef.id || fileRef.geminiFileId || fileRef.geminiFileUri;
               if (fileIdentifier) {
                 fullySentFiles.add(fileIdentifier);
