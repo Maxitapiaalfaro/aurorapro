@@ -9,8 +9,11 @@ export default function HopeAIPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Cargando...</div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center animate-in fade-in duration-500">
+          <div className="w-6 h-6 border-2 border-border border-t-foreground/30 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-xs text-muted-foreground/50">Cargando</p>
+        </div>
       </div>
     )
   }

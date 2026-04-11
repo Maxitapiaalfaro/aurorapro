@@ -103,32 +103,25 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId, psychologistId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3.5 md:py-4 flex items-center justify-between z-50 border-b border-border/60 backdrop-blur-md bg-background/90" role="banner">
-      {/* Subtle gradient separator */}
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-border/80 to-transparent" aria-hidden="true" />
-
+    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-3.5 flex items-center justify-between z-50 border-b border-border/40 backdrop-blur-md bg-background/95" role="banner">
       <div className="relative flex items-center gap-3 md:gap-4 flex-1 min-w-0">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-10 w-10 flex-shrink-0 rounded-xl text-muted-foreground hover:text-clarity-blue-600 dark:hover:text-clarity-blue-400 hover:bg-clarity-blue-50/80 dark:hover:bg-clarity-blue-900/30 transition-colors"
+          className="md:hidden h-9 w-9 flex-shrink-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
           onClick={onHistoryToggle}
           aria-label="Abrir menú de navegación"
         >
-          <ListIcon className="h-5 w-5" weight="bold" />
+          <ListIcon className="h-4.5 w-4.5" weight="bold" />
         </Button>
         
-        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight bg-gradient-to-r from-clarity-blue-600 via-serene-teal-600 to-academic-plum-600 dark:from-clarity-blue-400 dark:via-serene-teal-400 dark:to-academic-plum-400 bg-clip-text text-transparent">
-              Aurora
-            </h1>
-          </div>
-        </div>
+        <h1 className="font-serif text-lg md:text-xl tracking-tight text-foreground/85 flex-shrink-0">
+          Aurora
+        </h1>
         
         {isPatientSession && (
-          <div className="flex items-center gap-1.5 md:gap-2 ml-2 md:ml-4 min-w-0 flex-1">
-            <div className="hidden md:block h-4 w-px bg-border flex-shrink-0"></div>
+          <div className="flex items-center gap-1.5 md:gap-2 ml-2 md:ml-3 min-w-0 flex-1">
+            <div className="hidden md:block h-3.5 w-px bg-border/50 flex-shrink-0"></div>
             <div 
               className="relative flex items-center gap-1 md:gap-1.5 min-w-0"
               onMouseEnter={() => !isTouchDevice && canShowPreview && setShowFichaPreview(true)}
@@ -137,9 +130,9 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
               <Badge
                 variant="outline"
                 className={cn(
-                  "flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 cursor-help transition-all min-w-0",
-                  "bg-serene-teal-50 dark:bg-serene-teal-900/40 border-serene-teal-200 dark:border-serene-teal-700 hover:bg-serene-teal-100 dark:hover:bg-serene-teal-800/50",
-                  showFichaPreview && "bg-serene-teal-100 dark:bg-serene-teal-800/50"
+                  "flex items-center gap-1 md:gap-1.5 px-2 md:px-2.5 py-0.5 md:py-1 cursor-help transition-all min-w-0",
+                  "bg-secondary/60 dark:bg-secondary/40 border-border/40 dark:border-border/30 hover:bg-secondary/80 dark:hover:bg-secondary/60",
+                  showFichaPreview && "bg-secondary/80 dark:bg-secondary/60"
                 )}
                 onClick={(e) => {
                   if (isTouchDevice) {
@@ -154,10 +147,10 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
                   setShowFichaPreview(!showFichaPreview)
                 }}
               >
-                <UserCircleIcon className="h-3 w-3 md:h-3.5 md:w-3.5 text-serene-teal-600 dark:text-serene-teal-400 flex-shrink-0" />
-                <span className="text-xs font-semibold text-serene-teal-900 dark:text-serene-teal-100 truncate max-w-[100px] md:max-w-none">{patientName}</span>
+                <UserCircleIcon className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs font-medium text-foreground/80 truncate max-w-[100px] md:max-w-none">{patientName}</span>
                 {ultimaFicha && (
-                  <FileIcon className="hidden md:block h-3.5 w-3.5 text-serene-teal-500 dark:text-serene-teal-400 flex-shrink-0" />
+                  <FileIcon className="hidden md:block h-3 w-3 text-muted-foreground/60 flex-shrink-0" />
                 )}
               </Badge>
               
@@ -266,31 +259,31 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
         )}
       </div>
 
-      <div className="relative flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+      <div className="relative flex items-center gap-1 md:gap-1.5 flex-shrink-0">
         <DisplaySettingsPopover />
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-xl text-mineral-gray hover:text-clarity-blue-600 hover:bg-clarity-blue-50/80 dark:text-mineral-gray dark:hover:text-clarity-blue-400 dark:hover:bg-clarity-blue-900/30 transition-colors"
+          className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
           onClick={() => setTheme((resolvedTheme === 'dark' || theme === 'dark') ? 'light' : 'dark')}
           title={(resolvedTheme === 'dark' || theme === 'dark') ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           aria-label={(resolvedTheme === 'dark' || theme === 'dark') ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         >
           {(resolvedTheme === 'dark' || theme === 'dark') ? (
-            <SunIcon className="h-5 w-5" weight="duotone" />
+            <SunIcon className="h-4 w-4" weight="duotone" />
           ) : (
-            <MoonIcon className="h-5 w-5" weight="duotone" />
+            <MoonIcon className="h-4 w-4" weight="duotone" />
           )}
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 rounded-xl text-mineral-gray hover:text-destructive hover:bg-destructive/10 transition-colors"
+          className="h-9 w-9 rounded-lg text-muted-foreground hover:text-destructive/70 hover:bg-destructive/5 transition-colors"
           onClick={() => signOut(auth)}
           title="Cerrar sesión"
           aria-label="Cerrar sesión"
         >
-          <SignOutIcon className="h-5 w-5" weight="duotone" />
+          <SignOutIcon className="h-4 w-4" weight="duotone" />
         </Button>
       </div>
     </header>

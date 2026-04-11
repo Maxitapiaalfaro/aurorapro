@@ -931,39 +931,39 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
-              <div className="text-sm text-mineral-gray-600 bg-ash rounded-lg p-2">
+              <div className="text-xs text-muted-foreground bg-secondary/60 rounded-lg px-3 py-1.5 inline-block">
                 Mostrando {visibleMessageCount} de {currentSession.history.length} mensajes
-                <br />
-                <span className="text-xs">Desplázate hacia arriba para cargar más</span>
+                <span className="mx-1">·</span>
+                <span>Desplázate para más</span>
               </div>
             </div>
           )}
 
-          {/* Welcome greeting with minimal rotating capability hint */}
+          {/* Welcome greeting — serene, minimal */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
-            <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center color-fragment px-4">
-              <h1 className="font-sans text-3xl md:text-5xl tracking-tight text-foreground/90 mb-4 font-medium">
+            <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center px-4">
+              <h1 className="font-serif text-2xl md:text-4xl tracking-tight text-foreground/80 mb-3 font-normal">
                 ¿En qué piensas?
               </h1>
               {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
-                <div className="mt-8 md:mt-12 w-full max-w-3xl mx-auto px-2">
+                <div className="mt-6 md:mt-10 w-full max-w-2xl mx-auto px-2">
                   <div
-                    className="group relative bg-card/80 border border-border/50 rounded-2xl overflow-hidden cursor-pointer hover:border-clarity-blue-200/60 dark:hover:border-clarity-blue-700/40 hover:shadow-sm transition-all duration-300 flex items-stretch"
+                    className="group relative bg-card/60 border border-border/30 rounded-xl overflow-hidden cursor-pointer hover:border-border/50 hover:bg-card/80 transition-all duration-300 flex items-stretch"
                     onClick={handleSelectHint}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectHint() } }}
                   >
                     <div className="flex-1 p-4 md:p-5">
-                      <p className="text-base md:text-lg text-foreground font-sans leading-relaxed text-left">
+                      <p className="text-sm md:text-base text-foreground/70 font-sans leading-relaxed text-left">
                         {typedHint || '\u00A0'}
-                        <span className="inline-block w-0.5 h-[1.2em] bg-clarity-blue-600 dark:bg-clarity-blue-400 ml-0.5 align-text-bottom animate-cursor-blink" style={{ verticalAlign: '-0.1em' }} />
+                        <span className="inline-block w-px h-[1.1em] bg-muted-foreground/40 ml-0.5 align-text-bottom animate-cursor-blink" style={{ verticalAlign: '-0.1em' }} />
                       </p>
                     </div>
                     {typedHint && (
-                      <div className="flex items-center justify-center px-4 border-l border-transparent group-hover:border-border transition-all duration-200">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                          <CopyIcon className="h-3.5 w-3.5" />
+                      <div className="flex items-center justify-center px-3 border-l border-transparent group-hover:border-border/30 transition-all duration-200">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 group-hover:text-muted-foreground transition-colors">
+                          <CopyIcon className="h-3 w-3" />
                           <span className="font-medium">Usar</span>
                         </div>
                       </div>
@@ -971,7 +971,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   </div>
 
                   {/* Checkbox "No mostrar de nuevo" */}
-                  <div className="mt-4 flex items-center justify-center">
+                  <div className="mt-3 flex items-center justify-center">
                     <label
                       className="flex items-center gap-2 cursor-pointer group/checkbox"
                       onClick={(e) => {
@@ -980,14 +980,14 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     >
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-ash text-clarity-blue-600 focus:ring-2 focus:ring-clarity-blue-500 focus:ring-offset-0 cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-border/50 text-muted-foreground focus:ring-1 focus:ring-ring focus:ring-offset-0 cursor-pointer"
                         onChange={(e) => {
                           if (e.target.checked) {
                             hideDynamicSuggestions()
                           }
                         }}
                       />
-                      <span className="text-sm text-muted-foreground group-hover/checkbox:text-foreground transition-colors select-none">
+                      <span className="text-xs text-muted-foreground/50 group-hover/checkbox:text-muted-foreground transition-colors select-none">
                         No mostrar sugerencias de nuevo
                       </span>
                     </label>

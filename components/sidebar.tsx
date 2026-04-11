@@ -199,12 +199,12 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
     <div
       className={cn(
         "flex flex-col relative backdrop-blur-md overflow-hidden",
-        "bg-sidebar/80 border-r border-sidebar-border/50",
+        "bg-sidebar/90 border-r border-border/30",
         "h-full",
-        isOpen ? "w-80" : "w-16",
+        isOpen ? "w-72" : "w-14",
       )}
       style={{
-        transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+        transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
       }}
       onMouseEnter={() => !isOpen && onToggle()}
       onMouseLeave={() => isOpen && !shouldPreventAutoClose && onToggle()}
@@ -212,7 +212,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       aria-label="Navegación principal y biblioteca de casos"
     >
       {/* Navigation Icons - Always visible */}
-      <div className="flex flex-col flex-shrink-0 p-3 py-5 gap-2.5 overflow-visible border-b border-border/40">
+      <div className="flex flex-col flex-shrink-0 p-2.5 py-4 gap-1.5 overflow-visible border-b border-border/30">
         {/* Nueva consulta button */}
         <TooltipProvider delayDuration={300}>
           <Tooltip open={isOpen ? false : undefined}>
@@ -221,29 +221,27 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 onClick={isOpen ? handleNewConversation : onToggle}
                 disabled={isOpen && isCreatingSession}
                 onMouseEnter={(e) => {
-                  // Prevenir tooltip si está expandido
                   if (isOpen) {
                     e.preventDefault()
                   }
                 }}
                 className={cn(
-                  "h-11 rounded-xl font-medium relative",
-                  "bg-clarity-blue-600 text-white hover:bg-clarity-blue-700",
-                  "shadow-sm",
+                  "h-9 rounded-lg font-medium relative",
+                  "bg-foreground/90 text-background hover:bg-foreground/80",
                   isOpen
-                    ? "w-full px-4 gap-3 justify-start"
-                    : "w-10 px-0 justify-center"
+                    ? "w-full px-3 gap-2.5 justify-start"
+                    : "w-9 px-0 justify-center"
                 )}
                 style={{
-                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                  transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
                 }}
               >
-                <PlusIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                <PlusIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
                 {isOpen && (
                   <span
-                    className="text-sm whitespace-nowrap overflow-hidden"
+                    className="text-xs whitespace-nowrap overflow-hidden"
                     style={{
-                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                      transition: 'opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1) 120ms'
                     }}
                     aria-hidden={!isOpen}
                   >
@@ -253,7 +251,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               </Button>
             </TooltipTrigger>
             {!isOpen && (
-              <TooltipContent side="right" className="font-sans">
+              <TooltipContent side="right" className="font-sans text-xs">
                 Nueva consulta
               </TooltipContent>
             )}
@@ -271,34 +269,33 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                   if (!isOpen) onToggle()
                 }}
                 onMouseEnter={(e) => {
-                  // Prevenir tooltip si está expandido
                   if (isOpen) {
                     e.preventDefault()
                   }
                 }}
                 className={cn(
-                  "h-11 rounded-xl font-medium relative transition-all duration-200",
+                  "h-9 rounded-lg font-medium relative transition-colors duration-150",
                   isOpen
-                    ? "w-full px-4 gap-3 justify-start"
-                    : "w-10 px-0 justify-center",
+                    ? "w-full px-3 gap-2.5 justify-start"
+                    : "w-9 px-0 justify-center",
                   activeTab === 'conversations'
-                    ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
-                    : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                    ? "bg-secondary text-foreground/90 hover:bg-secondary/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 )}
                 style={{
-                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                  transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
                 }}
               >
                 {/* Active indicator */}
                 {activeTab === 'conversations' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/60 rounded-r-full" />
                 )}
-                <ChatsCircleIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                <ChatsCircleIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
                 {isOpen && (
                   <span
-                    className="text-sm whitespace-nowrap overflow-hidden"
+                    className="text-xs whitespace-nowrap overflow-hidden"
                     style={{
-                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                      transition: 'opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1) 120ms'
                     }}
                   >
                     Consultas
@@ -307,7 +304,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               </Button>
             </TooltipTrigger>
             {!isOpen && (
-              <TooltipContent side="right" className="font-sans">
+              <TooltipContent side="right" className="font-sans text-xs">
                 Historial de consultas
               </TooltipContent>
             )}
@@ -325,34 +322,33 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                   if (!isOpen) onToggle()
                 }}
                 onMouseEnter={(e) => {
-                  // Prevenir tooltip si está expandido
                   if (isOpen) {
                     e.preventDefault()
                   }
                 }}
                 className={cn(
-                  "h-11 rounded-xl font-medium relative transition-all duration-200",
+                  "h-9 rounded-lg font-medium relative transition-colors duration-150",
                   isOpen
-                    ? "w-full px-4 gap-3 justify-start"
-                    : "w-10 px-0 justify-center",
+                    ? "w-full px-3 gap-2.5 justify-start"
+                    : "w-9 px-0 justify-center",
                   activeTab === 'patients'
-                    ? "bg-clarity-blue-50 text-clarity-blue-600 hover:bg-clarity-blue-100"
-                    : "text-mineral-gray-600 hover:text-deep-charcoal hover:bg-ash"
+                    ? "bg-secondary text-foreground/90 hover:bg-secondary/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 )}
                 style={{
-                  transition: 'width 400ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 400ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+                  transition: 'width 350ms cubic-bezier(0.25, 0.1, 0.25, 1), padding 350ms cubic-bezier(0.25, 0.1, 0.25, 1), gap 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
                 }}
               >
                 {/* Active indicator */}
                 {activeTab === 'patients' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-clarity-blue-600 rounded-r-full" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-foreground/60 rounded-r-full" />
                 )}
-                <FoldersIcon className="h-5 w-5 flex-shrink-0" weight="bold" />
+                <FoldersIcon className="h-4 w-4 flex-shrink-0" weight="bold" />
                 {isOpen && (
                   <span
-                    className="text-sm whitespace-nowrap overflow-hidden"
+                    className="text-xs whitespace-nowrap overflow-hidden"
                     style={{
-                      transition: 'opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1) 150ms'
+                      transition: 'opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1) 120ms'
                     }}
                   >
                     Casos clínicos
@@ -361,7 +357,7 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               </Button>
             </TooltipTrigger>
             {!isOpen && (
-              <TooltipContent side="right" className="font-sans">
+              <TooltipContent side="right" className="font-sans text-xs">
                 Casos clínicos
               </TooltipContent>
             )}
@@ -372,15 +368,15 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
       {/* Section header - always rendered, visible only when expanded */}
       <div
         className={cn(
-          "px-5 py-3.5 flex-shrink-0 border-b border-border/30 overflow-hidden",
+          "px-4 py-3 flex-shrink-0 border-b border-border/20 overflow-hidden",
           isOpen ? "h-auto opacity-100" : "h-0 opacity-0"
         )}
         style={{
-          transition: 'height 400ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 300ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+          transition: 'height 350ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 250ms cubic-bezier(0.25, 0.1, 0.25, 1)'
         }}
       >
-        <h2 className="text-[11px] text-muted-foreground font-sans font-semibold tracking-widest uppercase whitespace-nowrap">
-          {activeTab === 'conversations' ? 'Conversaciones recientes' : 'Casos clínicos'}
+        <h2 className="text-[10px] text-muted-foreground/60 font-sans font-medium tracking-widest uppercase whitespace-nowrap">
+          {activeTab === 'conversations' ? 'Recientes' : 'Casos clínicos'}
         </h2>
       </div>
 
@@ -389,32 +385,27 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
         className="flex-1 overflow-hidden relative"
         style={{
           clipPath: isOpen ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
-          transition: 'clip-path 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
+          transition: 'clip-path 350ms cubic-bezier(0.25, 0.1, 0.25, 1)'
         }}
       >
           {activeTab === 'conversations' ? (
             <div className="h-full overflow-hidden relative">
               <div onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide">
-              <div className="px-3 py-4 space-y-1">
+              <div className="px-2.5 py-3 space-y-0.5">
                 {isLoading && isOpen ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="flex flex-col items-center gap-3">
-                      <ArrowClockwiseIcon className="h-5 w-5 animate-spin text-clarity-blue-600" weight="bold" />
-                      <span className="text-sm text-muted-foreground font-medium">Cargando conversaciones...</span>
+                    <div className="flex flex-col items-center gap-2">
+                      <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-muted-foreground" weight="bold" />
+                      <span className="text-xs text-muted-foreground/60">Cargando...</span>
                     </div>
                   </div>
                 ) : filteredConversations.length === 0 ? (
                   isOpen && (
-                    <div className="text-center py-12 px-4 text-mineral-gray-600">
-                      <div className="bg-ash rounded-xl p-6">
-                        <ChatsCircleIcon className="h-10 w-10 mx-auto mb-3 opacity-40" weight="duotone" />
-                        <p className="text-sm font-medium">
-                          No hay conversaciones aún
-                        </p>
-                        <p className="text-xs mt-1 opacity-70">
-                          Inicia una nueva consulta
-                        </p>
-                      </div>
+                    <div className="text-center py-12 px-4">
+                      <ChatsCircleIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" weight="duotone" />
+                      <p className="text-xs text-muted-foreground/60">
+                        Sin conversaciones
+                      </p>
                     </div>
                   )
                 ) : (
@@ -426,43 +417,39 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                         <Button
                           variant="ghost"
                           className={cn(
-                            "w-full transition-all duration-200 relative overflow-visible",
-                            isOpen ? "justify-start p-3.5 pr-12 h-auto text-left rounded-xl" : "justify-center p-2 h-10 rounded-lg",
+                            "w-full transition-colors duration-150 relative overflow-visible",
+                            isOpen ? "justify-start p-2.5 pr-10 h-auto text-left rounded-lg" : "justify-center p-2 h-9 rounded-lg",
                             selectedConversation === conversation.sessionId
-                              ? "bg-clarity-blue-50/80 dark:bg-clarity-blue-900/30 hover:bg-clarity-blue-100/80 dark:hover:bg-clarity-blue-800/40"
-                              : "hover:bg-secondary/80",
+                              ? "bg-secondary hover:bg-secondary/80"
+                              : "hover:bg-secondary/50",
                           )}
                           onClick={() => handleConversationSelect(conversation.sessionId)}
                           title={!isOpen ? conversation.title : undefined}
                         >
                           {/* Accent border on active */}
                           {selectedConversation === conversation.sessionId && isOpen && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-7 bg-clarity-blue-600 dark:bg-clarity-blue-400 rounded-r-full" />
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-foreground/50 rounded-r-full" />
                           )}
                           {isOpen ? (
-                            <div className="flex items-start gap-3 w-full pl-2 min-w-0">
+                            <div className="flex items-start gap-2.5 w-full pl-1.5 min-w-0">
                               <div className={cn(
-                                "mt-1 w-2 h-2 rounded-full flex-shrink-0",
-                                agentConfig.button.bg,
-                                "ring-2 ring-background"
+                                "mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                agentConfig.button.bg
                               )} />
                               <div className="flex-1 min-w-0">
-                                <div className="font-sans text-sm truncate leading-snug text-foreground font-medium min-w-0">
+                                <div className="font-sans text-[13px] truncate leading-snug text-foreground/80 min-w-0">
                                   {conversation.title}
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-1.5 min-w-0 flex items-center gap-1.5">
-                                  <ClockIcon className="h-3 w-3 opacity-60 flex-shrink-0" weight="bold" />
-                                  <span className="truncate">
-                                    {formatDistanceToNow(new Date(conversation.lastUpdated), {
-                                      addSuffix: true,
-                                      locale: es
-                                    })}
-                                  </span>
+                                <div className="text-[11px] text-muted-foreground/50 mt-0.5 min-w-0 truncate">
+                                  {formatDistanceToNow(new Date(conversation.lastUpdated), {
+                                    addSuffix: true,
+                                    locale: es
+                                  })}
                                 </div>
                               </div>
                             </div>
                           ) : (
-                            <div className={cn("w-2 h-2 rounded-full", agentConfig.button.bg)} />
+                            <div className={cn("w-1.5 h-1.5 rounded-full", agentConfig.button.bg)} />
                           )}
                         </Button>
                         
@@ -473,13 +460,13 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                                 variant="ghost" 
                                 size="icon"
                                 className={cn(
-                                  "absolute top-1/2 -translate-y-1/2 right-2 h-8 w-8 rounded-lg z-10",
-                                  "opacity-0 group-hover:opacity-100 transition-all duration-200",
-                                  "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  "absolute top-1/2 -translate-y-1/2 right-1 h-7 w-7 rounded-md z-10",
+                                  "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+                                  "text-muted-foreground/40 hover:text-destructive/70 hover:bg-destructive/5"
                                 )}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <TrashIcon className="h-4 w-4" weight="bold" />
+                                <TrashIcon className="h-3.5 w-3.5" weight="bold" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -508,10 +495,10 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
                 )}
                 
                 {isLoadingMore && (
-                  <div className="flex items-center justify-center py-5">
-                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground bg-secondary/60 px-4 py-2 rounded-full border border-border/40">
-                      <ArrowClockwiseIcon className="h-4 w-4 animate-spin text-clarity-blue-600" weight="bold" />
-                      <span className="font-medium">Cargando más...</span>
+                  <div className="flex items-center justify-center py-4">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
+                      <ArrowClockwiseIcon className="h-3 w-3 animate-spin" weight="bold" />
+                      <span>Cargando...</span>
                     </div>
                   </div>
                 )}

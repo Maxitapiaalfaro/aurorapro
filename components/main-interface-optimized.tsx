@@ -643,11 +643,11 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
   // Estados de carga y error
   if (!systemState.isInitialized) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background animate-in fade-in duration-300">
+      <div className="flex h-screen w-full items-center justify-center bg-background animate-in fade-in duration-500">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-foreground/80">Inicializando HopeAI System...</p>
-          <p className="text-sm text-foreground/60 mt-2">Cargando contexto y configuraciones avanzadas</p>
+          <div className="w-8 h-8 border-2 border-border border-t-foreground/40 rounded-full animate-spin mx-auto mb-6"></div>
+          <p className="font-serif text-lg text-foreground/70">Aurora</p>
+          <p className="text-xs text-muted-foreground/50 mt-1.5">Preparando tu espacio clínico</p>
         </div>
       </div>
     )
@@ -794,18 +794,26 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
 
   if (systemState.error) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="text-destructive mb-4">Error: {systemState.error}</div>
-          <div className="space-x-2">
+      <div className="flex h-screen w-full items-center justify-center bg-background p-4">
+        <div className="text-center max-w-sm">
+          <div className="w-10 h-10 rounded-full border border-destructive/20 bg-destructive/5 flex items-center justify-center mx-auto mb-4">
+            <span className="text-destructive text-lg">!</span>
+          </div>
+          <p className="text-sm text-foreground/80 mb-1">Algo salió mal</p>
+          <p className="text-xs text-muted-foreground mb-6">{systemState.error}</p>
+          <div className="flex items-center justify-center gap-2">
             <Button
               onClick={clearError}
               variant="outline"
+              size="sm"
+              className="rounded-lg border-border/40 text-xs"
             >
-              Limpiar Error
+              Descartar
             </Button>
             <Button
               onClick={() => window.location.reload()}
+              size="sm"
+              className="rounded-lg text-xs"
             >
               Reiniciar
             </Button>
