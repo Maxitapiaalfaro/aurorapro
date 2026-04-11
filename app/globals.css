@@ -70,6 +70,20 @@
     animation: cursor-blink 1.2s ease-in-out infinite;
   }
 
+  /* Sync status pulse — gentle throb on the cloud icon for "syncing" state */
+  @keyframes sync-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  .animate-sync-pulse {
+    animation: sync-pulse 1.8s ease-in-out infinite;
+  }
+
   /* Screen reader only - WCAG 2.1 AA accessibility */
   .sr-only {
     position: absolute;
