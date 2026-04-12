@@ -12,7 +12,7 @@
 | Modalidades de entrada | Texto, imagen, video (hasta 60s a 1 FPS), audio nativo (ASR) |
 | Licencia | Apache 2.0 |
 | Fecha de publicación | 31 de marzo de 2026 |
-| Soporte nativo de function calling | Sí — protocolo de tokens especiales `<\|tool>`, `<\|tool_call>`, `<\|tool_result>` |
+| Soporte nativo de function calling | Sí — protocolo de tokens especiales `<\|tool\|>`, `<\|tool_call\|>`, `<\|tool_result\|>` |
 | Arquitectura de atención | Híbrida: sliding-window local + full-context global alterno |
 | Técnica de eficiencia | Per-Layer Embeddings (PLE) |
 
@@ -248,7 +248,7 @@ val fullPrompt = systemPrompt + "\n<start_of_turn>user\nBusca al paciente P-1234
 val modelOutput = llmInference.generateResponse(fullPrompt)
 
 // Parser: detectar <|tool_call> en la respuesta
-val toolCallRegex = Regex("<\\|tool_call>\\s*(\\{.*?\\})\\s*<tool_call\\|>", RegexOption.DOT_MATCHES_ALL)
+val toolCallRegex = Regex("<\\|tool_call>\\s*(\\{.*?\\})\\s*<\\|tool_call\\|>", RegexOption.DOT_MATCHES_ALL)
 val match = toolCallRegex.find(modelOutput)
 if (match != null) {
     val toolCallJson = JSONObject(match.groupValues[1])
