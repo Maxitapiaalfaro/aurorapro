@@ -169,6 +169,50 @@ export function humanizeStepLabel(step: ExecutionStep): string {
   return step.label
 }
 
+/**
+ * Generates a human-readable group label for a parallel tool cluster.
+ *
+ * Used by `ParallelToolLanes` to summarize the swarm activity as a single
+ * status line instead of repeating tool-by-tool descriptions.
+ *
+ * Examples:
+ * - 2 active → "Realizando 2 comprobaciones en paralelo…"
+ * - 3 completed, 1 active → "3 de 4 comprobaciones completadas…"
+ * - all completed → "4 comprobaciones completadas"
+ */
+export function humanizeParallelGroup(steps: ExecutionStep[]): string {
+  const activeCount = steps.filter(s => s.status === 'active').length
+  const completedCount = steps.filter(s => s.status === 'completed').length
+  const errorCount = steps.filter(s => s.status === 'error').length
+  const total = steps.length
+
+  if (activeCount === 0 && errorCount === 0) {
+    // All completed
+    return `${completedCount} comprobación${completedCount !== 1 ? 'es' : ''} completada${completedCount !== 1 ? 's' : ''}`
+  }
+
+  if (activeCount === total) {
+    // All running
+    return `Realizando ${total} comprobaciones en paralelo…`
+  }
+
+  // Mixed state
+  if (completedCount > 0 && activeCount > 0) {
+    return `${completedCount} de ${total} comprobaciones completadas…`
+  }
+
+  if (errorCount > 0 && activeCount > 0) {
+    return `${activeCount} comprobación${activeCount !== 1 ? 'es' : ''} en curso, ${errorCount} con error`
+  }
+
+  if (activeCount > 0) {
+    return `Ejecutando ${activeCount} comprobación${activeCount !== 1 ? 'es' : ''} clínica${activeCount !== 1 ? 's' : ''}…`
+  }
+
+  // All errored
+  return `${total} comprobación${total !== 1 ? 'es' : ''} con error`
+}
+
 /** Truncates text for inline display in humanized labels. */
 function truncateLabel(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text
@@ -179,10 +223,41 @@ function truncateLabel(text: string, maxLen: number): string {
  * Calculates overall progress as a percentage (0–100).
  *
  * Active steps count as 50% progress so the bar advances smoothly.
+ * Parallel groups are weighted as a single unit to prevent jumpy progress
+ * when many concurrent tools complete simultaneously.
  */
 export function calculateProgress(steps: ExecutionStep[]): number {
   if (steps.length === 0) return 0
-  const completed = steps.filter(s => s.status === 'completed').length
-  const active = steps.filter(s => s.status === 'active').length
-  return Math.round(((completed + active * 0.5) / steps.length) * 100)
+
+  // Identify parallel groups vs. sequential steps
+  let totalWeight = 0
+  let completedWeight = 0
+  let i = 0
+
+  while (i < steps.length) {
+    const step = steps[i]
+
+    if (step.parallelGroup) {
+      // Collect the entire parallel group
+      const groupStart = i
+      while (i < steps.length && steps[i].parallelGroup) i++
+      const groupSteps = steps.slice(groupStart, i)
+      const groupTotal = groupSteps.length
+      const groupCompleted = groupSteps.filter(s => s.status === 'completed').length
+      const groupActive = groupSteps.filter(s => s.status === 'active').length
+
+      // Parallel group counts as 1 weighted unit for overall progress,
+      // with internal fractional progress based on lane completion
+      totalWeight += 1
+      completedWeight += (groupCompleted + groupActive * 0.5) / groupTotal
+    } else {
+      // Sequential step: 1 unit each
+      totalWeight += 1
+      if (step.status === 'completed') completedWeight += 1
+      else if (step.status === 'active') completedWeight += 0.5
+      i++
+    }
+  }
+
+  return totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0
 }
