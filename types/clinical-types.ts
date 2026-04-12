@@ -58,6 +58,8 @@ export interface ExecutionStep {
   completionDetail?: string
   /** Accumulated progress steps from sub-agent execution (rendered as sub-items in accordion) */
   progressSteps?: string[]
+  /** When true, this step is part of a parallel tool group and should be rendered in lane layout */
+  parallelGroup?: boolean
 }
 export interface AcademicSourceReference {
   title: string
@@ -132,6 +134,47 @@ export interface ToolExecutionEvent {
   /** Human-readable summary of what the tool/sub-agent did (e.g. "12 fuentes, 8.2s") */
   completionDetail?: string
 }
+
+// ---------------------------------------------------------------------------
+// Checkpoint Request — Destructive action confirmation protocol
+// ---------------------------------------------------------------------------
+
+/** Checkpoint states for destructive tool actions requiring human confirmation */
+export type CheckpointStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired'
+
+/**
+ * A checkpoint request is emitted when a destructive tool call is intercepted.
+ * The execution pauses until the user confirms or cancels via the CheckpointCard UI.
+ */
+export interface CheckpointRequest {
+  /** Unique checkpoint ID */
+  checkpointId: string
+  /** The tool that triggered the checkpoint */
+  toolName: string
+  /** Human-readable description of the tool action */
+  toolDisplayName: string
+  /** Semantic description of what will happen (e.g. "Guardar observación clínica sobre…") */
+  humanDescription: string
+  /** Current status of this checkpoint */
+  status: CheckpointStatus
+  /** Timestamp when the checkpoint was created */
+  createdAt: Date
+  /** Sanitized args preview (no internal IDs) */
+  preview: {
+    /** State before the mutation (for updates) */
+    before?: string
+    /** Proposed new state */
+    after: string
+  }
+}
+
+/** Tools that mutate or delete data and require human confirmation */
+export const DESTRUCTIVE_TOOLS = new Set([
+  'save_clinical_memory',
+  'create_patient',
+  'update_clinical_document',
+  'generate_clinical_document',
+])
 
 // ---------------------------------------------------------------------------
 // Document Preview Types — Real-time document generation with live preview

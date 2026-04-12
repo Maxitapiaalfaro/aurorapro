@@ -343,8 +343,12 @@ export function buildLiveTimeline(
     })
   }
 
-  // 3. Tool executions – each gets its own step
-  for (const tool of processingStatus.toolExecutions) {
+  // 3. Tool executions – detect parallelism and mark groups
+  const tools = processingStatus.toolExecutions
+  const activeToolCount = tools.filter(t => t.status === 'started' || t.status === 'in_progress').length
+  const isParallel = activeToolCount >= 2
+
+  for (const tool of tools) {
     const isToolActive = tool.status === 'started' || tool.status === 'in_progress'
     // Keep the tool label stable — don't replace it with the progress message
     const toolLabel = tool.query
@@ -363,6 +367,7 @@ export function buildLiveTimeline(
       result: tool.result,
       sources: tool.academicSources,
       progressSteps: tool.progressSteps,
+      parallelGroup: isParallel && isToolActive ? true : undefined,
     })
   }
 

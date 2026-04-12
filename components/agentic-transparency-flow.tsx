@@ -1,11 +1,11 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { Check, Loader2, AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
-import { humanizeStepLabel, calculateProgress } from '@/lib/humanized-steps'
+import { humanizeStepLabel, humanizeParallelGroup, calculateProgress } from '@/lib/humanized-steps'
 import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, AcademicSourceReference } from '@/types/clinical-types'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -15,6 +15,15 @@ const INLINE_DETAIL_MAX_LENGTH = 40
 
 /** Maximum height in pixels for the scrollable step list area to prevent infinite growth. */
 const STEP_LIST_MAX_HEIGHT = 250
+
+/** Maximum number of parallel lanes shown before batching into a summary. */
+const PARALLEL_BATCH_THRESHOLD = 4
+
+/** Shared spring config for layout animations — avoids abrupt DOM jumps */
+const LAYOUT_SPRING = { type: 'spring' as const, stiffness: 350, damping: 30, mass: 0.8 }
+
+/** Shared ease curve for opacity/transform transitions */
+const EASE_OUT_QUAD: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94]
 
 /** Format milliseconds as a readable seconds string (e.g. "1.2s"). */
 function formatDuration(ms: number): string {
@@ -49,6 +58,11 @@ interface AgenticTransparencyFlowProps {
  * Elegant, progressive disclosure component that visualizes the AI agent's
  * execution pipeline with human-readable labels and smooth transitions.
  *
+ * Architecture:
+ * - **LayoutGroup** wraps the step list so every `motion.li` with `layout`
+ *   animates position when siblings enter/exit (no abrupt DOM jumps).
+ * - **ParallelToolLanes** renders concurrent tools as a swarm cluster
+ *   instead of a plain vertical list.
  * - **Live mode** (`defaultCollapsed=false`): progress bar + expanding step list.
  * - **Historical mode** (`defaultCollapsed=true`): compact summary, expandable.
  */
@@ -97,7 +111,7 @@ export function AgenticTransparencyFlow({
   return (
     <div className={cn("overflow-hidden rounded-md", className)}>
       {/* ── Progress bar ────────────────────────────────────────── */}
-      <ProgressBar progress={progress} isLive={isLive} agentType={timeline.agentType} />
+      <ProgressBar progress={progress} agentType={timeline.agentType} />
 
       {/* ── Historical collapsed header ────────────────────────── */}
       {defaultCollapsed && !hasActiveStep && (
@@ -152,30 +166,25 @@ export function AgenticTransparencyFlow({
         </div>
       )}
 
-      {/* ── Step list with smooth height transition ────────────── */}
+      {/* ── Step list with LayoutGroup for smooth reflow ────────── */}
       <AnimatePresence initial={false}>
         {(isLive || isExpanded) && (
           <motion.div
             initial={defaultCollapsed ? { height: 0, opacity: 0 } : false}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.3, ease: EASE_OUT_QUAD }}
             className="overflow-hidden"
           >
-            <ul
-              ref={stepListRef}
-              className="px-2 pb-2 space-y-0.5 overflow-y-auto scrollbar-thin"
-              style={{ maxHeight: STEP_LIST_MAX_HEIGHT }}
-            >
-              {timeline.steps.map((step, idx) => (
-                <TransparencyStepItem
-                  key={step.id}
-                  step={step}
-                  index={idx}
-                  isLive={isLive}
-                />
-              ))}
-            </ul>
+            <LayoutGroup id={`timeline-${timeline.agentType}`}>
+              <ul
+                ref={stepListRef}
+                className="px-2 pb-2 space-y-0.5 overflow-y-auto scrollbar-thin"
+                style={{ maxHeight: STEP_LIST_MAX_HEIGHT }}
+              >
+                {renderStepsWithParallelGroups(timeline.steps, isLive)}
+              </ul>
+            </LayoutGroup>
           </motion.div>
         )}
       </AnimatePresence>
@@ -187,11 +196,9 @@ export function AgenticTransparencyFlow({
 
 function ProgressBar({
   progress,
-  isLive,
   agentType,
 }: {
   progress: number
-  isLive: boolean
   agentType: string
 }) {
   const agentConfig = getAgentVisualConfig(agentType as import('@/types/clinical-types').AgentType)
@@ -203,11 +210,280 @@ function ProgressBar({
         initial={{ width: '0%' }}
         animate={{ width: `${progress}%` }}
         transition={{
-          duration: 0.8,
-          ease: [0.25, 0.46, 0.45, 0.94], // ease-out-quad
+          ...LAYOUT_SPRING,
+          stiffness: 200, // softer for the progress bar
         }}
       />
     </div>
+  )
+}
+
+// ─── Step Grouping Logic ───────────────────────────────────────────────────
+
+/**
+ * Renders timeline steps, grouping parallel tool executions into
+ * a `ParallelToolLanes` component instead of rendering them sequentially.
+ * Implements the batching protocol: >4 concurrent tools collapse into a summary.
+ */
+function renderStepsWithParallelGroups(steps: ExecutionStep[], isLive: boolean): React.ReactNode[] {
+  const result: React.ReactNode[] = []
+  let i = 0
+
+  while (i < steps.length) {
+    const step = steps[i]
+
+    // Check if this starts a parallel group
+    if (step.parallelGroup) {
+      const parallelSteps: ExecutionStep[] = [step]
+      let j = i + 1
+      while (j < steps.length && steps[j].parallelGroup) {
+        parallelSteps.push(steps[j])
+        j++
+      }
+      result.push(
+        <ParallelToolLanes
+          key={`parallel-${step.id}`}
+          steps={parallelSteps}
+          isLive={isLive}
+          startIndex={i}
+        />
+      )
+      i = j
+    } else {
+      result.push(
+        <TransparencyStepItem
+          key={step.id}
+          step={step}
+          index={i}
+          isLive={isLive}
+        />
+      )
+      i++
+    }
+  }
+
+  return result
+}
+
+// ─── Parallel Tool Lanes (Swarm Visualization) ─────────────────────────────
+
+/**
+ * Renders concurrent tool executions as a swarm cluster with shared header.
+ * When >4 tools are active, collapses into a batched summary expandable on demand.
+ *
+ * Layout: All lanes share a single `<li>` wrapper with `layout` so the entire
+ * parallel group animates as one unit when it enters/exits the timeline.
+ */
+function ParallelToolLanes({
+  steps,
+  isLive,
+  startIndex,
+}: {
+  steps: ExecutionStep[]
+  isLive: boolean
+  startIndex: number
+}) {
+  const [isBatchExpanded, setIsBatchExpanded] = useState(false)
+  const shouldBatch = steps.length > PARALLEL_BATCH_THRESHOLD
+  const activeCount = steps.filter(s => s.status === 'active').length
+  const completedCount = steps.filter(s => s.status === 'completed').length
+  const allCompleted = activeCount === 0 && completedCount === steps.length
+
+  // Humanized group header
+  const groupLabel = humanizeParallelGroup(steps)
+
+  // Batching protocol: collapse into summary
+  if (shouldBatch && !isBatchExpanded) {
+    return (
+      <motion.li
+        layout
+        layoutId={`parallel-batch-${steps[0].id}`}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: allCompleted ? 0.6 : 1, y: 0 }}
+        transition={{ layout: LAYOUT_SPRING, duration: 0.3, ease: EASE_OUT_QUAD }}
+        className="group"
+      >
+        <button
+          type="button"
+          onClick={() => setIsBatchExpanded(true)}
+          className="w-full flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed hover:bg-secondary/30 transition-colors"
+          aria-label={groupLabel}
+        >
+          <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
+            {activeCount > 0 ? (
+              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+            ) : (
+              <Check className="w-3 h-3 text-serene-teal-500/50 flex-shrink-0" />
+            )}
+          </div>
+          <span className="flex-1 min-w-0 truncate text-foreground/80 font-medium">
+            {groupLabel}
+          </span>
+          {/* Mini progress: dots for each lane */}
+          <div className="flex items-center gap-[3px] mr-1">
+            {steps.map(s => (
+              <div
+                key={s.id}
+                className={cn(
+                  "w-[4px] h-[4px] rounded-full transition-colors duration-300",
+                  s.status === 'active' ? 'bg-clarity-blue-500/60 animate-pulse' :
+                  s.status === 'completed' ? 'bg-serene-teal-500/50' :
+                  'bg-red-400/50'
+                )}
+              />
+            ))}
+          </div>
+          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0" />
+        </button>
+      </motion.li>
+    )
+  }
+
+  return (
+    <motion.li
+      layout
+      layoutId={`parallel-group-${steps[0].id}`}
+      transition={{ layout: LAYOUT_SPRING }}
+      className="space-y-0.5"
+    >
+      {/* Swarm header — shows count and group status */}
+      <motion.div
+        layout="position"
+        className="flex items-center gap-2 px-2 py-[2px]"
+      >
+        <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
+          {activeCount > 0 ? (
+            <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50 flex-shrink-0" />
+          ) : (
+            <Check className="w-2.5 h-2.5 text-serene-teal-500/50 flex-shrink-0" />
+          )}
+        </div>
+        <span className="text-[10px] text-muted-foreground/45 font-medium">
+          {groupLabel}
+        </span>
+      </motion.div>
+
+      {/* Lane cluster — indented, each with its own layoutId */}
+      <div className="pl-5 space-y-0.5">
+        <AnimatePresence initial={false}>
+          {steps.map((step, idx) => (
+            <ParallelLane
+              key={step.id}
+              step={step}
+              index={startIndex + idx}
+              isLive={isLive}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+    </motion.li>
+  )
+}
+
+/**
+ * A single parallel lane: horizontal indeterminate progress bar + label.
+ * Uses `layoutId` so that when a lane transitions active → completed,
+ * it smoothly slides into its new visual state instead of jumping.
+ */
+function ParallelLane({
+  step,
+  index,
+  isLive,
+}: {
+  step: ExecutionStep
+  index: number
+  isLive: boolean
+}) {
+  const humanLabel = humanizeStepLabel(step)
+  const isActive = step.status === 'active'
+  const isCompleted = step.status === 'completed'
+  const isError = step.status === 'error'
+
+  return (
+    <motion.div
+      layout
+      layoutId={`lane-${step.id}`}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{
+        opacity: isCompleted ? 0.45 : 1,
+        x: 0,
+      }}
+      exit={{ opacity: 0, x: -8 }}
+      transition={{
+        layout: LAYOUT_SPRING,
+        opacity: { duration: 0.3 },
+        x: { duration: 0.25, delay: isLive ? index * 0.03 : 0, ease: EASE_OUT_QUAD },
+      }}
+      className="space-y-0.5"
+    >
+      <div className="flex items-center gap-2 rounded-md px-2 py-[2px] text-[11px] leading-relaxed">
+        {/* Status icon with smooth transition */}
+        <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
+          <AnimatePresence mode="wait" initial={false}>
+            {isActive ? (
+              <motion.div
+                key="active"
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+              </motion.div>
+            ) : isError ? (
+              <motion.div
+                key="error"
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="done"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+              >
+                <Check className="w-3 h-3 text-serene-teal-500/50 flex-shrink-0" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Label */}
+        <span className={cn(
+          'flex-1 min-w-0 truncate transition-colors duration-300',
+          isActive ? 'text-foreground/80' : 'text-muted-foreground/40',
+        )}>
+          {humanLabel}
+        </span>
+
+        {/* Duration badge */}
+        {isCompleted && step.durationMs != null && step.durationMs > 0 && (
+          <span className="text-[10px] text-muted-foreground/25 tabular-nums flex-shrink-0">
+            {formatDuration(step.durationMs)}
+          </span>
+        )}
+      </div>
+
+      {/* Indeterminate progress bar for active lanes */}
+      <AnimatePresence>
+        {isActive && (
+          <motion.div
+            initial={{ opacity: 0, scaleY: 0 }}
+            animate={{ opacity: 1, scaleY: 1 }}
+            exit={{ opacity: 0, scaleY: 0 }}
+            transition={{ duration: 0.2, ease: EASE_OUT_QUAD }}
+            className="mx-2 ml-7 h-[2px] bg-muted-foreground/10 rounded-full overflow-hidden origin-top"
+          >
+            <div className="h-full w-[25%] bg-muted-foreground/30 rounded-full animate-slide-right" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
@@ -241,38 +517,20 @@ function TransparencyStepItem({
   const isCompleted = step.status === 'completed'
   const isError = step.status === 'error'
 
-  const icon =
-    isActive ? (
-      <div className="relative flex items-center justify-center">
-        {/* Subtle glow behind active spinner */}
-        <div className="absolute inset-0 bg-clarity-blue-500/20 rounded-full blur-[3px]" />
-        <Loader2 className="relative w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
-      </div>
-    ) : isError ? (
-      <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
-    ) : (
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-      >
-        <Check className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
-      </motion.div>
-    )
-
   return (
     <motion.li
+      layout
+      layoutId={`step-${step.id}`}
       initial={{ opacity: 0, y: 6 }}
       animate={{
         opacity: isCompleted ? 0.6 : 1,
         y: 0,
       }}
       transition={{
-        duration: 0.3,
-        delay: isLive ? index * 0.04 : 0,
-        ease: [0.25, 0.46, 0.45, 0.94],
+        layout: LAYOUT_SPRING,
+        opacity: { duration: 0.3 },
+        y: { duration: 0.3, delay: isLive ? index * 0.04 : 0, ease: EASE_OUT_QUAD },
       }}
-      layout
       className="group"
     >
       {/* ── Main row ──────────────────────────────────────────── */}
@@ -288,8 +546,42 @@ function TransparencyStepItem({
         aria-expanded={hasExpandableContent ? isOpen : undefined}
         aria-label={hasExpandableContent ? `${humanLabel} - ${isOpen ? 'Expandido' : 'Contraído'}` : humanLabel}
       >
+        {/* Icon with crossfade between states */}
         <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
-          {icon}
+          <AnimatePresence mode="wait" initial={false}>
+            {isActive ? (
+              <motion.div
+                key="spinner"
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="relative flex items-center justify-center"
+              >
+                <div className="absolute inset-0 bg-clarity-blue-500/20 rounded-full blur-[3px]" />
+                <Loader2 className="relative w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
+              </motion.div>
+            ) : isError ? (
+              <motion.div
+                key="error"
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="check"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+              >
+                <Check className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <span
@@ -337,7 +629,7 @@ function TransparencyStepItem({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.2, ease: EASE_OUT_QUAD }}
             className="overflow-hidden"
           >
             <div className="px-2 pb-1 pl-7 space-y-1">
