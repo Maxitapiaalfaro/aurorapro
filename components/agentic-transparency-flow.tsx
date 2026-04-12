@@ -16,6 +16,9 @@ const INLINE_DETAIL_MAX_LENGTH = 40
 /** Maximum height in pixels for the scrollable step list area to prevent infinite growth. */
 const STEP_LIST_MAX_HEIGHT = 250
 
+/** Maximum number of parallel lanes shown before batching into a summary. */
+const PARALLEL_BATCH_THRESHOLD = 4
+
 /** Format milliseconds as a readable seconds string (e.g. "1.2s"). */
 function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
@@ -167,14 +170,7 @@ export function AgenticTransparencyFlow({
               className="px-2 pb-2 space-y-0.5 overflow-y-auto scrollbar-thin"
               style={{ maxHeight: STEP_LIST_MAX_HEIGHT }}
             >
-              {timeline.steps.map((step, idx) => (
-                <TransparencyStepItem
-                  key={step.id}
-                  step={step}
-                  index={idx}
-                  isLive={isLive}
-                />
-              ))}
+              {renderStepsWithParallelGroups(timeline.steps, isLive)}
             </ul>
           </motion.div>
         )}
@@ -208,6 +204,192 @@ function ProgressBar({
         }}
       />
     </div>
+  )
+}
+
+// ─── Step Grouping Logic ───────────────────────────────────────────────────
+
+/**
+ * Renders timeline steps, grouping parallel tool executions into
+ * a `ParallelToolLanes` component instead of rendering them sequentially.
+ * Implements the batching protocol: >4 concurrent tools collapse into a summary.
+ */
+function renderStepsWithParallelGroups(steps: ExecutionStep[], isLive: boolean): React.ReactNode[] {
+  const result: React.ReactNode[] = []
+  let i = 0
+
+  while (i < steps.length) {
+    const step = steps[i]
+
+    // Check if this starts a parallel group
+    if (step.parallelGroup) {
+      const parallelSteps: ExecutionStep[] = [step]
+      let j = i + 1
+      while (j < steps.length && steps[j].parallelGroup) {
+        parallelSteps.push(steps[j])
+        j++
+      }
+      result.push(
+        <ParallelToolLanes
+          key={`parallel-${step.id}`}
+          steps={parallelSteps}
+          isLive={isLive}
+          startIndex={i}
+        />
+      )
+      i = j
+    } else {
+      result.push(
+        <TransparencyStepItem
+          key={step.id}
+          step={step}
+          index={i}
+          isLive={isLive}
+        />
+      )
+      i++
+    }
+  }
+
+  return result
+}
+
+// ─── Parallel Tool Lanes ──────────────────────────────────────────────────
+
+/**
+ * Renders multiple concurrent tool executions as horizontal progress lanes.
+ * When >4 tools are active, collapses into a batched summary expandable on demand.
+ */
+function ParallelToolLanes({
+  steps,
+  isLive,
+  startIndex,
+}: {
+  steps: ExecutionStep[]
+  isLive: boolean
+  startIndex: number
+}) {
+  const [isBatchExpanded, setIsBatchExpanded] = useState(false)
+  const shouldBatch = steps.length > PARALLEL_BATCH_THRESHOLD
+
+  // Batching protocol: collapse into summary
+  if (shouldBatch && !isBatchExpanded) {
+    const activeCount = steps.filter(s => s.status === 'active').length
+    const completedCount = steps.filter(s => s.status === 'completed').length
+    return (
+      <motion.li
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="group"
+      >
+        <button
+          type="button"
+          onClick={() => setIsBatchExpanded(true)}
+          className="w-full flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed hover:bg-secondary/30 transition-colors"
+          aria-label={`${steps.length} comprobaciones en paralelo`}
+        >
+          <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
+            {activeCount > 0 ? (
+              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+            ) : (
+              <Check className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
+            )}
+          </div>
+          <span className="flex-1 min-w-0 truncate text-foreground/80 font-medium">
+            {activeCount > 0
+              ? `Ejecutando ${activeCount} comprobaciones clínicas…`
+              : `${completedCount} comprobaciones completadas`
+            }
+          </span>
+          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0" />
+        </button>
+      </motion.li>
+    )
+  }
+
+  return (
+    <>
+      {steps.map((step, idx) => (
+        <ParallelLane
+          key={step.id}
+          step={step}
+          index={startIndex + idx}
+          isLive={isLive}
+        />
+      ))}
+    </>
+  )
+}
+
+/**
+ * A single parallel lane: horizontal indeterminate progress bar + label.
+ * Active lanes show an animated bar; completed lanes fade to muted state.
+ */
+function ParallelLane({
+  step,
+  index,
+  isLive,
+}: {
+  step: ExecutionStep
+  index: number
+  isLive: boolean
+}) {
+  const humanLabel = humanizeStepLabel(step)
+  const isActive = step.status === 'active'
+  const isCompleted = step.status === 'completed'
+  const isError = step.status === 'error'
+
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 4 }}
+      animate={{
+        opacity: isCompleted ? 0.5 : 1,
+        y: 0,
+      }}
+      transition={{
+        duration: 0.28,
+        delay: isLive ? index * 0.03 : 0,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
+      layout
+      className="space-y-1"
+    >
+      <div className="flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed">
+        {/* Status icon */}
+        <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
+          {isActive ? (
+            <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+          ) : isError ? (
+            <AlertCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+          ) : (
+            <Check className="w-3 h-3 text-muted-foreground/35 flex-shrink-0" />
+          )}
+        </div>
+
+        {/* Label */}
+        <span className={cn(
+          'flex-1 min-w-0 truncate transition-colors duration-280',
+          isActive ? 'text-foreground/80' : 'text-muted-foreground/45',
+        )}>
+          {humanLabel}
+        </span>
+
+        {/* Duration badge */}
+        {isCompleted && step.durationMs != null && step.durationMs > 0 && (
+          <span className="text-[10px] text-muted-foreground/25 tabular-nums flex-shrink-0">
+            {formatDuration(step.durationMs)}
+          </span>
+        )}
+      </div>
+
+      {/* Indeterminate progress bar for active lanes */}
+      {isActive && (
+        <div className="mx-2 ml-7 h-[2px] bg-muted-foreground/10 rounded-full overflow-hidden">
+          <div className="h-full w-[25%] bg-muted-foreground/30 rounded-full animate-slide-right" />
+        </div>
+      )}
+    </motion.li>
   )
 }
 

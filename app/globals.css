@@ -84,6 +84,20 @@
     animation: sync-pulse 1.8s ease-in-out infinite;
   }
 
+  /* Parallel tool lane — indeterminate progress bar sliding right */
+  @keyframes slide-right {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  .animate-slide-right {
+    animation: slide-right 1.5s ease-in-out infinite;
+  }
+
   /* Screen reader only - WCAG 2.1 AA accessibility */
   .sr-only {
     position: absolute;
