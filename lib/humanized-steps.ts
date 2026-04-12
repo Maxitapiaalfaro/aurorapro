@@ -169,6 +169,11 @@ export function humanizeStepLabel(step: ExecutionStep): string {
   return step.label
 }
 
+/** Simple Spanish pluralization helper. */
+function pluralize(count: number, singular: string, plural: string): string {
+  return count === 1 ? singular : plural
+}
+
 /**
  * Generates a human-readable group label for a parallel tool cluster.
  *
@@ -188,7 +193,7 @@ export function humanizeParallelGroup(steps: ExecutionStep[]): string {
 
   if (activeCount === 0 && errorCount === 0) {
     // All completed
-    return `${completedCount} comprobación${completedCount !== 1 ? 'es' : ''} completada${completedCount !== 1 ? 's' : ''}`
+    return `${completedCount} ${pluralize(completedCount, 'comprobación completada', 'comprobaciones completadas')}`
   }
 
   if (activeCount === total) {
@@ -202,15 +207,15 @@ export function humanizeParallelGroup(steps: ExecutionStep[]): string {
   }
 
   if (errorCount > 0 && activeCount > 0) {
-    return `${activeCount} comprobación${activeCount !== 1 ? 'es' : ''} en curso, ${errorCount} con error`
+    return `${activeCount} ${pluralize(activeCount, 'comprobación', 'comprobaciones')} en curso, ${errorCount} con error`
   }
 
   if (activeCount > 0) {
-    return `Ejecutando ${activeCount} comprobación${activeCount !== 1 ? 'es' : ''} clínica${activeCount !== 1 ? 's' : ''}…`
+    return `Ejecutando ${activeCount} ${pluralize(activeCount, 'comprobación clínica', 'comprobaciones clínicas')}…`
   }
 
   // All errored
-  return `${total} comprobación${total !== 1 ? 'es' : ''} con error`
+  return `${total} ${pluralize(total, 'comprobación', 'comprobaciones')} con error`
 }
 
 /** Truncates text for inline display in humanized labels. */

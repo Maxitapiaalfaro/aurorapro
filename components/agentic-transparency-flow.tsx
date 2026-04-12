@@ -307,7 +307,7 @@ function ParallelToolLanes({
           type="button"
           onClick={() => setIsBatchExpanded(true)}
           className="w-full flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed hover:bg-secondary/30 transition-colors"
-          aria-label={`${steps.length} comprobaciones en paralelo`}
+          aria-label={groupLabel}
         >
           <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
             {activeCount > 0 ? (

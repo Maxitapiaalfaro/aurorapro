@@ -11,6 +11,9 @@ import type { CheckpointRequest, CheckpointStatus } from '@/types/clinical-types
 /** Auto-cancel timeout in milliseconds (120 seconds) */
 const CHECKPOINT_TIMEOUT_MS = 120_000
 
+/** Auto-cancel timeout in seconds */
+const CHECKPOINT_TIMEOUT_SECONDS = CHECKPOINT_TIMEOUT_MS / 1000
+
 /** Shared ease for opacity/transform */
 const EASE_OUT: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94]
 
@@ -51,7 +54,7 @@ export function CheckpointCard({
   className,
 }: CheckpointCardProps) {
   const [localStatus, setLocalStatus] = useState<CheckpointStatus>(checkpoint.status)
-  const [countdown, setCountdown] = useState(Math.ceil(CHECKPOINT_TIMEOUT_MS / 1000))
+  const [countdown, setCountdown] = useState(Math.ceil(CHECKPOINT_TIMEOUT_SECONDS))
 
   // Sync with external status changes
   useEffect(() => {
@@ -88,7 +91,7 @@ export function CheckpointCard({
   }, [checkpoint.checkpointId, onCancel])
 
   const isResolved = localStatus !== 'pending'
-  const countdownFraction = countdown / (CHECKPOINT_TIMEOUT_MS / 1000)
+  const countdownFraction = countdown / CHECKPOINT_TIMEOUT_SECONDS
 
   return (
     <motion.div
@@ -244,8 +247,8 @@ function CountdownRing({ fraction, seconds }: { fraction: number; seconds: numbe
   const dashOffset = circumference * (1 - fraction)
 
   return (
-    <div className="ml-auto flex items-center gap-1">
-      <svg width="18" height="18" viewBox="0 0 18 18" className="flex-shrink-0 -rotate-90">
+    <div className="ml-auto flex items-center gap-1" role="timer" aria-label={`${seconds} segundos restantes para confirmación`}>
+      <svg width="18" height="18" viewBox="0 0 18 18" className="flex-shrink-0 -rotate-90" aria-hidden="true">
         {/* Track */}
         <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/10" />
         {/* Progress */}
