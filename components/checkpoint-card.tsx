@@ -89,7 +89,7 @@ export function CheckpointCard({
       }}
       transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
       className={cn(
-        "rounded-md border overflow-hidden transition-all duration-280",
+        "rounded-md border overflow-hidden transition-all duration-300",
         isResolved
           ? "border-border/30 bg-transparent"
           : "border-destructive/30 bg-destructive/[0.03]",

@@ -13,6 +13,12 @@ interface HumanizedLabel {
   completed: string
 }
 
+/** Extends HumanizedLabel with optional query-enriched variants for tool steps. */
+interface ToolLabelConfig extends HumanizedLabel {
+  activeWithQuery?: string
+  completedWithQuery?: string
+}
+
 /**
  * Known pipeline step IDs → human-friendly labels.
  *
@@ -64,7 +70,7 @@ const STEP_LABELS: Record<string, HumanizedLabel> = {
  * never see raw function names like "search_academic_literature".
  * The `query` placeholder is replaced at runtime with the actual query.
  */
-const TOOL_LABELS: Record<string, HumanizedLabel & { activeWithQuery?: string; completedWithQuery?: string }> = {
+const TOOL_LABELS: Record<string, ToolLabelConfig> = {
   'search_academic_literature': {
     active: 'Consultando literatura científica…',
     completed: 'Literatura revisada',

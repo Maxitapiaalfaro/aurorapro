@@ -369,7 +369,7 @@ function ParallelLane({
 
         {/* Label */}
         <span className={cn(
-          'flex-1 min-w-0 truncate transition-colors duration-280',
+          'flex-1 min-w-0 truncate transition-colors duration-300',
           isActive ? 'text-foreground/80' : 'text-muted-foreground/45',
         )}>
           {humanLabel}
