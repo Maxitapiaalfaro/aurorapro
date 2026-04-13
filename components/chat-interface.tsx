@@ -39,6 +39,11 @@ import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-stat
 import { createLogger } from '@/lib/logger'
 const logger = createLogger('system')
 
+/** Generate a client-side message ID matching the server's convention. */
+function generateMessageId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+}
+
 interface ChatInterfaceProps {
   activeAgent: AgentType
   isProcessing: boolean
@@ -701,7 +706,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 // Determine the message ID that will be used in the history entry.
                 // Pre-register it as "known" so the historical message renders without
                 // a fade-in animation — the user already saw the content while streaming.
-                const messageId = serverAiMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+                const messageId = serverAiMessageId || generateMessageId()
                 knownMessageIdsRef.current.add(messageId)
                 // 🔧 Don't await: the React state update inside addStreamingResponseToHistory
                 // is synchronous. By NOT awaiting, the history update and the streaming-cleanup
@@ -771,7 +776,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               // de lo contrario usar el agente activo actual
               const responseAgent = response?.routingInfo?.targetAgent || activeAgent
               // Pre-register message ID to skip fade-in animation
-              const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+              const messageId = generateMessageId()
               knownMessageIdsRef.current.add(messageId)
               // Don't await: batch with cleanup states to prevent blink
               addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [], undefined, undefined, messageId)
