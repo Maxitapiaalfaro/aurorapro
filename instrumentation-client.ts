@@ -32,11 +32,11 @@ Sentry.init({
   dsn: "https://da82e6d85538fbb3f2f5337705c12919@o4509744324673536.ingest.us.sentry.io/4509744325853184",
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
+  tracesSampleRate: 0.1,
 
   // Session replay sample rates (moved to top-level as of SDK v7.24.0+)
-  replaysSessionSampleRate: 0.1, // captures 10% of all sessions
-  replaysOnErrorSampleRate: 1.0,  // captures 100% of sessions with errors
+  replaysSessionSampleRate: 0.05, // captures 5% of all sessions
+  replaysOnErrorSampleRate: 0.5,  // captures 50% of sessions with errors
 
   // Enable experimental features
   _experiments: {
