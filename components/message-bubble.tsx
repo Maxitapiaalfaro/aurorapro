@@ -58,15 +58,15 @@ export const MessageBubble = React.memo(
         </div>
       )}
 
-      <div className={cn("max-w-[70%] space-y-1", isUser && "items-end")}>
+      <div className={cn("max-w-[75%] space-y-1.5", isUser && "items-end")}>
         {!isUser && <div className={cn("text-xs font-medium px-1", config.textColor)} aria-label={`Agente: ${config.name}`}>{config.name}</div>}
 
         <Card
           className={cn(
-            "p-4 shadow-sm transition-colors ring-1 ring-transparent",
+            "p-4 shadow-sm transition-colors duration-quick ring-1 ring-transparent",
             isUser
-              ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
-              : config.bgColor,
+              ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-warm-sm rounded-2xl rounded-tr-md"
+              : cn(config.bgColor, "rounded-2xl rounded-tl-md"),
             !isUser && `border ${config.borderColor} hover:bg-secondary/40`,
           )}
           role="region"
@@ -109,7 +109,7 @@ export const MessageBubble = React.memo(
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-[0_3px_12px_rgba(0,0,0,0.12)]" aria-label="Avatar del usuario">
+        <div className="w-8 h-8 rounded-full bg-[hsl(var(--user-bubble-bg))] flex items-center justify-center flex-shrink-0 mt-1 shadow-warm-sm" aria-label="Avatar del usuario">
           <User className="h-4 w-4 text-[hsl(var(--user-bubble-text))]" />
         </div>
       )}

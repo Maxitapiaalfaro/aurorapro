@@ -114,81 +114,110 @@
 
 @layer base {
   :root {
-    /* Aurora Palette - Light Mode (softer, reduced contrast for clinical calm) */
-    --background: 210 20% 99%; /* Slightly warmer Cloud White */
-    --foreground: 210 11% 25%; /* Deep Charcoal #343A40 */
-    --card: 0 0% 100%; /* Pure white cards for clean separation */
-    --card-foreground: 210 11% 25%;
+    /*
+     * Aurora Design Tokens — Light Mode
+     * Refined per 2026-ai-interface-design-research.md §2.1 "Cognitive Calm"
+     * Warmer off-white background in the #F7F7F5–#FAFAF9 range.
+     */
+    --background: 40 20% 99%;       /* Warm off-white — cognitive calm */
+    --foreground: 210 14% 15%;      /* Near-black — 95% legibility */
+    --card: 0 0% 100%;              /* Pure white cards for clean separation */
+    --card-foreground: 210 14% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 210 11% 25%;
-    --primary: 211 100% 50%; /* Clarity Blue #0D6EFD */
+    --popover-foreground: 210 14% 15%;
+    --primary: 211 100% 50%;        /* Clarity Blue #0D6EFD */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 14% 96%; /* Softer Ash for less visual weight */
-    --secondary-foreground: 210 11% 25%;
-    --muted: 210 14% 96%;
-    --muted-foreground: 210 11% 49%; /* Mineral Gray #6C757D */
+    --secondary: 40 10% 96%;        /* Warm ash — reduced visual weight */
+    --secondary-foreground: 210 14% 15%;
+    --muted: 40 10% 96%;
+    --muted-foreground: 210 11% 46%;/* Mineral Gray — slightly darker for AAA aim */
     --accent: 211 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 210 14% 93%; /* Softer border */
-    --input: 210 14% 95%;
+    --border: 40 8% 91%;            /* Warm subtle border */
+    --input: 40 8% 94%;
     --ring: 211 100% 50%;
-    --chart-1: 211 100% 50%; /* Clarity Blue */
-    --chart-2: 162 76% 47%; /* Serene Teal */
-    --chart-3: 262 48% 51%; /* Academic Plum */
-    --chart-4: 210 11% 49%; /* Mineral Gray */
-    --chart-5: 210 11% 25%; /* Deep Charcoal */
-    --radius: 0.5rem;
-    --sidebar-background: 210 20% 99%;
-    --sidebar-foreground: 210 11% 25%;
+    --chart-1: 211 100% 50%;        /* Clarity Blue */
+    --chart-2: 162 76% 47%;         /* Serene Teal */
+    --chart-3: 262 48% 51%;         /* Academic Plum */
+    --chart-4: 210 11% 49%;         /* Mineral Gray */
+    --chart-5: 210 11% 25%;         /* Deep Charcoal */
+    --radius: 0.75rem;              /* 12px — "soft corners" per research §2.1 */
+    --sidebar-background: 40 20% 99%;
+    --sidebar-foreground: 210 14% 15%;
     --sidebar-primary: 211 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 14% 96%;
-    --sidebar-accent-foreground: 210 11% 25%;
-    --sidebar-border: 210 14% 93%;
+    --sidebar-accent: 40 10% 96%;
+    --sidebar-accent-foreground: 210 14% 15%;
+    --sidebar-border: 40 8% 91%;
     --sidebar-ring: 211 100% 50%;
     /* User message bubble colors — muted neutral for minimal aesthetic */
-    --user-bubble-bg: 210 14% 95%; /* Soft ash — nearly matching secondary */
-    --user-bubble-text: 210 11% 25%; /* Deep Charcoal for readability */
+    --user-bubble-bg: 40 8% 94%;    /* Warm ash bubble */
+    --user-bubble-text: 210 14% 15%;
+
+    /* Animation duration tokens — research §1.1 */
+    --duration-instant: 100ms;
+    --duration-quick: 200ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+
+    /* Easing tokens — research §1.1 */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   }
   .dark {
-    /* Aurora Palette - Dark Mode */
-    --background: 210 11% 12%; /* Darker background for better contrast */
-    --foreground: 210 17% 95%; /* Light text */
-    --card: 210 11% 16%; /* Slightly lighter than background */
-    --card-foreground: 210 17% 95%;
-    --popover: 210 11% 16%;
-    --popover-foreground: 210 17% 95%;
-    --primary: 211 100% 65%; /* Lighter Clarity Blue for dark mode */
+    /*
+     * Aurora Design Tokens — Dark Mode
+     * Enhanced contrast per research §6.1 accessibility benchmarks.
+     */
+    --background: 220 14% 10%;      /* Deep dark — less blue-tint for rest */
+    --foreground: 220 14% 95%;      /* Light text */
+    --card: 220 14% 13%;            /* Slightly lighter than background */
+    --card-foreground: 220 14% 95%;
+    --popover: 220 14% 13%;
+    --popover-foreground: 220 14% 95%;
+    --primary: 211 100% 65%;        /* Lighter Clarity Blue for dark mode */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 11% 18%; /* Darker secondary */
-    --secondary-foreground: 210 17% 95%;
-    --muted: 210 11% 18%; /* Darker muted */
-    --muted-foreground: 210 11% 60%; /* Medium gray for secondary text */
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 220 14% 95%;
+    --muted: 220 14% 16%;
+    --muted-foreground: 220 10% 62%;/* Brighter secondary text for dark */
     --accent: 211 100% 65%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 50%;
-    --destructive-foreground: 210 17% 98%;
-    --border: 210 11% 20%; /* Softer border for visibility */
-    --input: 210 11% 18%; /* Input background */
+    --destructive-foreground: 220 14% 98%;
+    --border: 220 14% 18%;
+    --input: 220 14% 16%;
     --ring: 211 100% 65%;
-    --chart-1: 211 100% 65%; /* Clarity Blue */
-    --chart-2: 162 76% 55%; /* Serene Teal */
-    --chart-3: 262 48% 65%; /* Academic Plum */
-    --chart-4: 210 11% 65%; /* Mineral Gray */
-    --chart-5: 210 17% 85%; /* Light Gray */
-    --sidebar-background: 210 11% 14%; /* Slightly lighter than main background */
-    --sidebar-foreground: 210 17% 95%;
+    --chart-1: 211 100% 65%;
+    --chart-2: 162 76% 55%;
+    --chart-3: 262 48% 65%;
+    --chart-4: 210 11% 65%;
+    --chart-5: 210 17% 85%;
+    --sidebar-background: 220 14% 11%;
+    --sidebar-foreground: 220 14% 95%;
     --sidebar-primary: 211 100% 65%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 11% 18%;
-    --sidebar-accent-foreground: 210 17% 95%;
-    --sidebar-border: 210 11% 22%;
+    --sidebar-accent: 220 14% 16%;
+    --sidebar-accent-foreground: 220 14% 95%;
+    --sidebar-border: 220 14% 20%;
     --sidebar-ring: 211 100% 65%;
-    /* User message bubble colors - Dark Mode — subtle elevation */
-    --user-bubble-bg: 210 11% 20%; /* Slightly lighter than card */
-    --user-bubble-text: 210 17% 95%; /* Light text */
+    /* User message bubble colors — Dark Mode — subtle elevation */
+    --user-bubble-bg: 220 14% 18%;
+    --user-bubble-text: 220 14% 95%;
+
+    /* Animation duration tokens (same as light) */
+    --duration-instant: 100ms;
+    --duration-quick: 200ms;
+    --duration-normal: 300ms;
+    --duration-slow: 500ms;
+
+    /* Easing tokens */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   }
 }
 
@@ -289,7 +318,7 @@
   }
   
   .markdown-content pre {
-    @apply bg-muted border border-border rounded-lg p-3 my-3 overflow-x-auto;
+    @apply bg-muted border border-border rounded-xl p-3 my-3 overflow-x-auto;
     line-height: 1.4;
   }
   
@@ -299,8 +328,8 @@
   }
   
   .markdown-content blockquote {
-    @apply border-l-4 border-border bg-secondary pl-4 py-2 my-3 italic;
-    border-radius: 0 0.375rem 0.375rem 0;
+    @apply border-l-4 border-border bg-secondary/60 pl-4 py-2 my-3 italic;
+    border-radius: 0 0.75rem 0.75rem 0;
   }
   
   .markdown-content a {
@@ -930,4 +959,88 @@
     padding-left: 2.5rem !important; /* Separación óptima en pantallas grandes */
     padding-right: 2.5rem !important; /* Balance simétrico */
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2026 Research-Driven Aesthetic Enhancements
+   Based on docs/research/2026-ai-interface-design-research.md
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Enhanced Focus Indicators (WCAG 2.4.7 AA) ── research §6.2 ────────── */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 0;
+  border-color: hsl(var(--ring));
+}
+
+/* ─── Glassmorphism Card Utility ── research §3.1 Laboratory Minimalism ──── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-card {
+  background: rgba(30, 32, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Typing Cursor ── research §5.3 ────────────────────────────────────── */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: currentColor;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 1.2s ease-in-out infinite;
+}
+
+/* ─── Prefers Reduced Motion ── research §6.3 ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Warm Shadow Utility ── research §3.1 Scandinavian Warmth ──────────── */
+.shadow-warm-sm {
+  box-shadow: 0 1px 3px rgba(60, 50, 40, 0.08);
+}
+
+.shadow-warm {
+  box-shadow: 0 2px 8px rgba(60, 50, 40, 0.06), 0 1px 3px rgba(60, 50, 40, 0.08);
+}
+
+.shadow-warm-lg {
+  box-shadow: 0 8px 24px rgba(60, 50, 40, 0.08), 0 2px 8px rgba(60, 50, 40, 0.04);
+}
+
+.dark .shadow-warm-sm,
+.dark .shadow-warm,
+.dark .shadow-warm-lg {
+  /* Shadows are less visible on dark — use standard box-shadow */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }

@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils"
 /** Header skeleton — matches components/header.tsx dimensions */
 function HeaderSkeleton() {
   return (
-    <div className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-3.5 flex items-center justify-between border-b border-border/40 bg-background/95">
+    <div className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between border-b border-border/30 bg-background/90 backdrop-blur-xl shadow-warm-sm">
       <div className="flex items-center gap-3 md:gap-4">
         {/* Mobile hamburger placeholder */}
         <Skeleton className="md:hidden h-9 w-9 rounded-lg" />
@@ -50,7 +50,7 @@ function HeaderSkeleton() {
 /** Sidebar skeleton — matches collapsed sidebar w-14 */
 function SidebarSkeleton() {
   return (
-    <div className="hidden md:flex flex-col w-14 border-r border-border/30 bg-background/90 py-4 items-center gap-3">
+    <div className="hidden md:flex flex-col w-14 border-r border-border/20 bg-background/90 py-4 items-center gap-3">
       {/* New chat button */}
       <Skeleton className="h-9 w-9 rounded-lg" />
       {/* Nav items */}
@@ -72,16 +72,16 @@ function ChatAreaSkeleton() {
           <Skeleton className="h-3 w-56 rounded mx-auto" />
           {/* Suggestion chips placeholder */}
           <div className="flex flex-wrap gap-2 justify-center pt-4">
-            <Skeleton className="h-8 w-32 rounded-full" />
-            <Skeleton className="h-8 w-28 rounded-full" />
-            <Skeleton className="h-8 w-36 rounded-full" />
+            <Skeleton className="h-8 w-32 rounded-xl" />
+            <Skeleton className="h-8 w-28 rounded-xl" />
+            <Skeleton className="h-8 w-36 rounded-xl" />
           </div>
         </div>
       </div>
       {/* Input bar placeholder */}
       <div className="px-4 pb-4 pt-2">
         <div className="max-w-3xl mx-auto">
-          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-2xl" />
         </div>
       </div>
     </div>
