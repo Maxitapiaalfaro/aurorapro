@@ -14,7 +14,6 @@ import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
 import { ProgressQueue } from "../utils/progress-queue"
 import { createLogger } from "@/lib/logger"
-import { recordTokenConsumption } from "../subscriptions/subscription-service"
 import type { TokenConsumption } from "../subscriptions/types"
 import type { DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 
@@ -515,7 +514,7 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
           if (completedMetrics) {
             logger.info(`Streaming interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
 
-            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget)
+            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
             if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
               const consumption: TokenConsumption = {
                 promptTokens: completedMetrics.tokens.inputTokens,
@@ -525,7 +524,9 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
                 sessionId: completedMetrics.sessionId,
                 agentType: completedMetrics.computational?.agentUsed || 'unknown',
               };
-              recordTokenConsumption(psychologistId, consumption).catch((err) =>
+              import('../subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
+                recordTokenConsumption(psychologistId!, consumption)
+              ).catch((err) =>
                 logger.error('Failed to persist token consumption to Firestore', { error: err instanceof Error ? err.message : String(err) })
               );
             }
@@ -956,7 +957,7 @@ export async function handleStreamingWithTools(
           if (completedMetrics) {
             logger.info(`Streaming with tools interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
 
-            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget)
+            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
             if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
               const consumption: TokenConsumption = {
                 promptTokens: completedMetrics.tokens.inputTokens,
@@ -966,7 +967,9 @@ export async function handleStreamingWithTools(
                 sessionId: completedMetrics.sessionId,
                 agentType: completedMetrics.computational?.agentUsed || 'unknown',
               };
-              recordTokenConsumption(psychologistId, consumption).catch((err) =>
+              import('../subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
+                recordTokenConsumption(psychologistId!, consumption)
+              ).catch((err) =>
                 logger.error('Failed to persist token consumption to Firestore', { error: err instanceof Error ? err.message : String(err) })
               );
             }

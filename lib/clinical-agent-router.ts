@@ -7,7 +7,6 @@ import { PerformanceLogger } from "./performance-logger"
 import { ContextWindowManager, isContextExhaustedError } from "./context-window-manager"
 // P3: Streaming & Tool handler — extracted to agents/streaming-handler.ts
 import { createMetricsStreamingWrapper, handleStreamingWithTools, extractTextFromChunk, estimateTokenCount } from "./agents/streaming-handler"
-import { recordTokenConsumption } from "./subscriptions/subscription-service"
 import type { TokenConsumption } from "./subscriptions/types"
 import { buildEnhancedMessage } from "./agents/message-context-builder"
 import type { AgentType, AgentConfig, ChatMessage } from "@/types/clinical-types"
@@ -477,7 +476,7 @@ export class ClinicalAgentRouter {
             if (completedMetrics) {
               logger.info(`✅ Interaction completed`, { cost: `$${completedMetrics.tokens.estimatedCost.toFixed(6)}`, tokens: completedMetrics.tokens.totalTokens, time: `${completedMetrics.timing.totalResponseTime}ms` });
 
-              // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget)
+              // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
               if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
                 const consumption: TokenConsumption = {
                   promptTokens: completedMetrics.tokens.inputTokens,
@@ -487,7 +486,9 @@ export class ClinicalAgentRouter {
                   sessionId: completedMetrics.sessionId,
                   agentType: completedMetrics.computational?.agentUsed || 'unknown',
                 };
-                recordTokenConsumption(psychologistId, consumption).catch((err) =>
+                import('./subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
+                  recordTokenConsumption(psychologistId!, consumption)
+                ).catch((err) =>
                   logger.error('Failed to persist token consumption to Firestore', { error: err instanceof Error ? err.message : String(err) })
                 );
               }
