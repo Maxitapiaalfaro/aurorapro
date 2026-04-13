@@ -687,23 +687,32 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
               // Agregar la respuesta completa al historial
               if (fullResponse.trim() && addStreamingResponseToHistory) {
-                try {
-                  // Usar el agente de la información de enrutamiento si está disponible,
-                  // de lo contrario usar el agente activo actual
-                  const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-                  // 📚 Combinar groundingUrls y referencias académicas
-                  const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
-                  // 📊 Snapshot execution timeline for persistent storage on the message
-                  // Use ref to get the LATEST processingStatus (closure captures stale prop value)
-                  const latestStatus = processingStatusRef.current
-                  const timeline = latestStatus
-                    ? snapshotExecutionTimeline(latestStatus, responseAgent, streamingDuration)
-                    : undefined
-                  await addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline, serverAiMessageId)
-                } catch (historyError) {
-                  logger.error('❌ Frontend: Error agregando al historial:', historyError)
-                  Sentry.captureException(historyError)
-                }
+                // Usar el agente de la información de enrutamiento si está disponible,
+                // de lo contrario usar el agente activo actual
+                const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+                // 📚 Combinar groundingUrls y referencias académicas
+                const allReferences = [...accumulatedGroundingUrls, ...accumulatedAcademicReferences]
+                // 📊 Snapshot execution timeline for persistent storage on the message
+                // Use ref to get the LATEST processingStatus (closure captures stale prop value)
+                const latestStatus = processingStatusRef.current
+                const timeline = latestStatus
+                  ? snapshotExecutionTimeline(latestStatus, responseAgent, streamingDuration)
+                  : undefined
+                // Determine the message ID that will be used in the history entry.
+                // Pre-register it as "known" so the historical message renders without
+                // a fade-in animation — the user already saw the content while streaming.
+                const messageId = serverAiMessageId || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+                knownMessageIdsRef.current.add(messageId)
+                // 🔧 Don't await: the React state update inside addStreamingResponseToHistory
+                // is synchronous. By NOT awaiting, the history update and the streaming-cleanup
+                // states below are batched into a SINGLE render. This prevents the blink caused
+                // by the streaming bubble unmounting in a different frame than the historical
+                // message appearing.
+                addStreamingResponseToHistory(fullResponse, responseAgent, allReferences, undefined, timeline, messageId)
+                  .catch(historyError => {
+                    logger.error('❌ Frontend: Error agregando al historial:', historyError)
+                    Sentry.captureException(historyError)
+                  })
               }
               
               setStreamingResponse("")
@@ -758,16 +767,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             
             // Agregar la respuesta al historial únicamente si NO fue persistida por el servidor
             if (response.text.trim() && addStreamingResponseToHistory && !response.persistedInServer) {
-              try {
-                // Usar el agente de la información de enrutamiento si está disponible,
-                // de lo contrario usar el agente activo actual
-                const responseAgent = response?.routingInfo?.targetAgent || activeAgent
-                await addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [])
-                logger.info('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent)
-              } catch (historyError) {
-                logger.error('❌ Frontend: Error agregando al historial:', historyError)
-                Sentry.captureException(historyError)
-              }
+              // Usar el agente de la información de enrutamiento si está disponible,
+              // de lo contrario usar el agente activo actual
+              const responseAgent = response?.routingInfo?.targetAgent || activeAgent
+              // Pre-register message ID to skip fade-in animation
+              const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+              knownMessageIdsRef.current.add(messageId)
+              // Don't await: batch with cleanup states to prevent blink
+              addStreamingResponseToHistory(response.text, responseAgent, response.groundingUrls || [], undefined, undefined, messageId)
+                .then(() => logger.info('✅ Frontend: Respuesta agregada al historial con agente:', responseAgent))
+                .catch(historyError => {
+                  logger.error('❌ Frontend: Error agregando al historial:', historyError)
+                  Sentry.captureException(historyError)
+                })
             }
             
             setIsStreaming(false)
@@ -1224,12 +1236,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 transition={{ duration: 0 }}
                 className={cn("flex items-start", messageSpacingClass)}
               >
-                <motion.div
-                  animate={{
-                    borderColor: realConfig.borderColor,
-                    backgroundColor: realConfig.bgColor
-                  }}
-                  transition={{ duration: 0 }}
+                <div
                   className={cn("chat-message-bubble relative rounded-lg border border-border/30 w-full min-w-0 overflow-hidden bg-card", fontSizeClass)}
                 >
                   {/* Agent Context Header — minimal, matching historical messages */}
@@ -1514,7 +1521,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     </div>
                   </div>
                 )}
-                </motion.div>
+                </div>
               </motion.div>
             )
           })()}
