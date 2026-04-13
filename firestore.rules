@@ -6,6 +6,13 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == psychologistId;
     }
 
+    // Subscription data — client can read, only server (Admin SDK) can write.
+    // This override takes precedence over the wildcard rule above for subscription docs.
+    match /psychologists/{psychologistId}/subscription/{docId} {
+      allow read: if request.auth != null && request.auth.uid == psychologistId;
+      allow write: if false; // Server-only writes via Admin SDK (bypasses rules)
+    }
+
     // CollectionGroup queries for sessions (needed for findSessionById)
     match /{path=**}/sessions/{sessionId} {
       allow read: if request.auth != null && resource.data._userId == request.auth.uid;

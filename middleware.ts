@@ -45,6 +45,7 @@ const EXCLUDED_PATHS = [
   '/static',
   '/favicon.ico',
   '/monitoring', // Sentry tunnel
+  '/api/payments/webhook', // Stripe webhook — verified by signature, not rate-limited
 ];
 
 /**
@@ -87,8 +88,8 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.sentry.io https://*.google.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://appleid.apple.com",
-      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com",
+      "connect-src 'self' https://*.sentry.io https://*.google.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://appleid.apple.com https://api.stripe.com",
+      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com https://js.stripe.com https://checkout.stripe.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self' https://accounts.google.com https://appleid.apple.com"
