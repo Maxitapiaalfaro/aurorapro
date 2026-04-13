@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
+import { TrialBanner } from "@/components/trial-banner"
 
 import { WorkspaceLayout } from "@/components/workspace-layout"
 import { ClinicalCanvas } from "@/components/clinical-canvas"
@@ -841,6 +842,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
+        <TrialBanner />
         <Header 
           onHistoryToggle={() => setMobileNavOpen(true)} 
           sessionMeta={systemState.sessionMeta}

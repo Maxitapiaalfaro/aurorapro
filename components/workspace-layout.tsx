@@ -1,11 +1,14 @@
 "use client"
 
 /**
- * WorkspaceLayout — Split-screen desktop / swipeable-tabs mobile layout.
+ * WorkspaceLayout — Collapsible desktop / swipeable-tabs mobile layout.
  *
- * Desktop (≥ 768px): Resizable two-panel layout using react-resizable-panels.
- *   Left panel  ~30% → Chat
- *   Right panel ~70% → Clinical Canvas
+ * Desktop (≥ 768px): Collapsible canvas with animated transitions.
+ *   Default    → Chat full-width, canvas collapsed to a 40px rail
+ *   Expanded   → Chat ~45%, Canvas ~55%
+ *   Toggle     → Click rail / header button, or Ctrl+. keyboard shortcut
+ *   Auto-expand when canvas content arrives (documents, fichas)
+ *   Auto-collapse ~2s after content is dismissed
  *
  * Mobile (< 768px): Tab-based navigation with swipe gesture support.
  *   Tab "Chat"   → Chat interface (default)
@@ -14,16 +17,14 @@
  * The layout is purely structural — it receives Chat and Canvas as children
  * and arranges them spatially. No business logic lives here.
  *
- * **Scroll Persistence**: Both panels stay mounted at all times (translated
- * off-screen when inactive) so that DOM state, including scroll position,
- * is preserved across tab switches.
+ * **Scroll Persistence** (mobile): Both panels stay mounted at all times so
+ * that DOM state, including scroll position, is preserved across tab switches.
  */
 
-import React, { memo, useState, useCallback, useRef } from 'react'
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { motion, useMotionValue, animate, type PanInfo } from 'framer-motion'
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { cn } from '@/lib/utils'
-import { MessageSquare, LayoutDashboard } from 'lucide-react'
+import { MessageSquare, LayoutDashboard, PanelRightOpen, PanelRightClose } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,48 +44,149 @@ interface WorkspaceLayoutProps {
 }
 
 // ---------------------------------------------------------------------------
-// Desktop Layout — Resizable Split Panels
+// Canvas Rail — Collapsed state affordance (40px vertical strip)
 // ---------------------------------------------------------------------------
+
+function CanvasRail({ onClick, hasContent }: { onClick: () => void; hasContent: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-2 w-full h-full py-4 bg-muted/20 hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      aria-label={hasContent ? 'Abrir Canvas — contenido disponible (Ctrl+.)' : 'Abrir Canvas (Ctrl+.)'}
+      aria-expanded={false}
+      title="Abrir Canvas (Ctrl+.)"
+    >
+      <PanelRightOpen className="h-4 w-4" />
+      <span className="text-[10px] font-medium tracking-wide [writing-mode:vertical-lr] rotate-180 select-none">
+        Canvas
+      </span>
+      {hasContent && (
+        <span className="w-2 h-2 rounded-full bg-primary animate-pulse mt-1" aria-hidden="true" />
+      )}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Desktop Layout — Collapsible Canvas
+// ---------------------------------------------------------------------------
+//
+// Canvas starts collapsed (40px rail). Auto-expands when content arrives.
+// Auto-collapses ~2s after content is dismissed (if auto-opened).
+// User can toggle with click or Ctrl+.
+//
+// States:
+//   Collapsed  → Chat 100% (minus 40px rail)
+//   Expanded   → Chat ~45%, Canvas ~55%
 
 const DesktopWorkspaceLayout = memo(function DesktopWorkspaceLayout({
   chatPanel,
   canvasPanel,
+  hasCanvasContent,
   className,
-}: Pick<WorkspaceLayoutProps, 'chatPanel' | 'canvasPanel' | 'className'>) {
+}: Pick<WorkspaceLayoutProps, 'chatPanel' | 'canvasPanel' | 'hasCanvasContent' | 'className'>) {
+  const [isCanvasOpen, setIsCanvasOpen] = useState(false)
+  // Tracks whether canvas was opened by user or auto-expand
+  const openSourceRef = useRef<'auto' | 'user'>('auto')
+  // When true, auto-expand is suppressed (user explicitly collapsed)
+  const [userCollapsed, setUserCollapsed] = useState(false)
+  const autoCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // Auto-expand when content arrives (unless user explicitly collapsed)
+  useEffect(() => {
+    if (hasCanvasContent && !isCanvasOpen && !userCollapsed) {
+      setIsCanvasOpen(true)
+      openSourceRef.current = 'auto'
+    }
+  }, [hasCanvasContent, isCanvasOpen, userCollapsed])
+
+  // Auto-collapse ~2s after content dismissed (only if auto-opened)
+  useEffect(() => {
+    clearTimeout(autoCollapseTimerRef.current)
+    if (!hasCanvasContent && isCanvasOpen && openSourceRef.current === 'auto') {
+      autoCollapseTimerRef.current = setTimeout(() => {
+        setIsCanvasOpen(false)
+      }, 2000)
+    }
+    return () => clearTimeout(autoCollapseTimerRef.current)
+  }, [hasCanvasContent, isCanvasOpen])
+
+  // Toggle handler
+  const handleToggle = useCallback(() => {
+    setIsCanvasOpen(prev => {
+      if (prev) {
+        // Collapsing — mark as user-collapsed
+        setUserCollapsed(true)
+        return false
+      } else {
+        // Expanding — clear user-collapsed flag
+        setUserCollapsed(false)
+        openSourceRef.current = 'user'
+        return true
+      }
+    })
+  }, [])
+
+  // Keyboard shortcut: Ctrl+. (or Cmd+.)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+        e.preventDefault()
+        handleToggle()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleToggle])
+
   return (
-    <ResizablePanelGroup
-      direction="horizontal"
-      className={cn('flex-1 overflow-hidden', className)}
-    >
-      {/* Chat Panel — ~30% default, min 20%, max 50% */}
-      <ResizablePanel
-        defaultSize={30}
-        minSize={20}
-        maxSize={50}
-        className="flex flex-col overflow-hidden"
-      >
-        <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0">
-          {chatPanel}
-        </div>
-      </ResizablePanel>
+    <div className={cn('flex-1 flex overflow-hidden', className)}>
+      {/* Chat panel — takes remaining space */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {chatPanel}
+      </div>
 
-      {/* Resize Handle */}
-      <ResizableHandle
-        withHandle
-        className="bg-border/40 hover:bg-border/60 transition-colors data-[resize-handle-active]:bg-primary/20"
-      />
-
-      {/* Canvas Panel — ~70% default */}
-      <ResizablePanel
-        defaultSize={70}
-        minSize={30}
-        className="flex flex-col overflow-hidden"
+      {/* Canvas container — smooth width transition */}
+      <div
+        className={cn(
+          'flex flex-col overflow-hidden transition-[width] duration-300 ease-out flex-none border-l',
+          isCanvasOpen
+            ? 'w-[55%] border-border/40'
+            : 'w-10 border-border/30'
+        )}
+        role="complementary"
+        aria-label="Clinical Canvas"
       >
-        <div className="flex-1 flex flex-col overflow-hidden h-full min-h-0 border-l border-border/40">
-          {canvasPanel}
-        </div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        {isCanvasOpen ? (
+          <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in duration-200 fill-mode-both" style={{ animationDelay: '150ms' }}>
+            {/* Canvas header with collapse toggle */}
+            <div className="flex-shrink-0 flex items-center justify-between px-3 py-1.5 border-b border-border/20 bg-background/50">
+              <span className="text-xs font-medium text-muted-foreground select-none">Canvas</span>
+              <button
+                type="button"
+                onClick={handleToggle}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                aria-label="Cerrar Canvas (Ctrl+.)"
+                title="Cerrar Canvas (Ctrl+.)"
+              >
+                <PanelRightClose className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+              {canvasPanel}
+            </div>
+          </div>
+        ) : (
+          <CanvasRail onClick={handleToggle} hasContent={!!hasCanvasContent} />
+        )}
+      </div>
+
+      {/* Screen reader live region */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isCanvasOpen ? 'Canvas abierto' : 'Canvas cerrado'}
+      </div>
+    </div>
   )
 })
 
@@ -290,6 +392,7 @@ export const WorkspaceLayout = memo(function WorkspaceLayout({
     <DesktopWorkspaceLayout
       chatPanel={chatPanel}
       canvasPanel={canvasPanel}
+      hasCanvasContent={hasCanvasContent}
       className={className}
     />
   )

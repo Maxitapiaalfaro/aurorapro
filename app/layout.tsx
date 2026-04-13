@@ -9,6 +9,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { DisplayPreferencesProvider } from '@/providers/display-preferences-provider'
 import { AuthProvider } from '@/providers/auth-provider'
 import { MotionProvider } from '@/providers/motion-provider'
+import { UpgradeModalProvider } from '@/components/upgrade-modal'
 import { IBM_Plex_Serif, IBM_Plex_Sans } from 'next/font/google'
 
 // Fuentes académicas profesionales para contexto clínico
@@ -60,7 +61,9 @@ export default function RootLayout({
                 enableSystem
                 disableTransitionOnChange
               >
-                {children}
+                <UpgradeModalProvider>
+                  {children}
+                </UpgradeModalProvider>
               </ThemeProvider>
             </DisplayPreferencesProvider>
           </MotionProvider>
