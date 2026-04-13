@@ -3,8 +3,14 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === 'true';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 📱 CAPACITOR: Exportación estática para empaquetado móvil.
+  // Activado condicionalmente con CAPACITOR_BUILD=true para no afectar el deploy web.
+  ...(isCapacitorBuild && { output: 'export' }),
+
   // Expose NEXT_PUBLIC env vars at build time for both client and server bundles.
   // webpack DefinePlugin inlines these into all dot-notation process.env.X references.
   // This ensures the API key is available even when the serverless function runtime
@@ -33,12 +39,14 @@ const nextConfig = {
   // credential/authentication flow. The Admin SDK then makes unauthenticated
   // requests to Firestore, which triggers Security Rules evaluation and
   // returns "7 PERMISSION_DENIED: Missing or insufficient permissions."
-  serverExternalPackages: ['firebase-admin'],
+  ...(!isCapacitorBuild && { serverExternalPackages: ['firebase-admin'] }),
 
-  // 🔒 SEGURIDAD: Habilitar instrumentation hook
-  experimental: {
-    instrumentationHook: true,
-  },
+  // 🔒 SEGURIDAD: Habilitar instrumentation hook (solo web, incompatible con export estático)
+  ...(!isCapacitorBuild && {
+    experimental: {
+      instrumentationHook: true,
+    },
+  }),
 
   // 🔒 SEGURIDAD: Configuración de producción
   productionBrowserSourceMaps: false, // No exponer source maps en producción
@@ -108,36 +116,38 @@ const nextConfig = {
     return config
   },
 
-  // 🔒 Headers de seguridad
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'microphone=*, camera=*',
-          },
-        ],
-      },
-    ]
-  },
+  // 🔒 Headers de seguridad (solo web, incompatible con export estático)
+  ...(!isCapacitorBuild && {
+    async headers() {
+      return [
+        {
+          source: '/:path*',
+          headers: [
+            {
+              key: 'X-Content-Type-Options',
+              value: 'nosniff',
+            },
+            {
+              key: 'X-Frame-Options',
+              value: 'DENY',
+            },
+            {
+              key: 'X-XSS-Protection',
+              value: '1; mode=block',
+            },
+            {
+              key: 'Referrer-Policy',
+              value: 'strict-origin-when-cross-origin',
+            },
+            {
+              key: 'Permissions-Policy',
+              value: 'microphone=*, camera=*',
+            },
+          ],
+        },
+      ]
+    },
+  }),
 }
 
 export default withSentryConfig(nextConfig, {
@@ -160,13 +170,14 @@ export default withSentryConfig(nextConfig, {
   hideSourceMaps: true,
 
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
-  tunnelRoute: "/monitoring",
+  // (incompatible con export estático — se omite en build de Capacitor)
+  ...(isCapacitorBuild ? {} : { tunnelRoute: "/monitoring" }),
 
   // 🔒 SEGURIDAD: Eliminar statements de logger de Sentry para reducir bundle
   disableLogger: true,
 
   // Enables automatic instrumentation of Vercel Cron Monitors.
-  automaticVercelMonitors: true,
+  automaticVercelMonitors: !isCapacitorBuild,
 
   // 🔒 SEGURIDAD: Deshabilitar telemetría de Sentry
   telemetry: false,
