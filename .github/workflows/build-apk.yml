@@ -30,6 +30,9 @@ jobs:
       - name: Install Capacitor dependencies
         run: npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
 
+      - name: Remove API routes incompatible with static export
+        run: rm -rf app/api pages/api src/app/api src/pages/api || true
+
       - name: Build Next.js static export
         run: npm run build
         env:
