@@ -6,7 +6,6 @@ import '@/lib/logger'
 import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
-import { DisplayPreferencesProvider } from '@/providers/display-preferences-provider'
 import { AuthProvider } from '@/providers/auth-provider'
 import { MotionProvider } from '@/providers/motion-provider'
 import { UpgradeModalProvider } from '@/components/upgrade-modal'
@@ -54,18 +53,16 @@ export default function RootLayout({
       <body className={`${ibmPlexSans.variable} ${ibmPlexSerif.variable}`}>
         <AuthProvider>
           <MotionProvider>
-            <DisplayPreferencesProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <UpgradeModalProvider>
-                  {children}
-                </UpgradeModalProvider>
-              </ThemeProvider>
-            </DisplayPreferencesProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <UpgradeModalProvider>
+                {children}
+              </UpgradeModalProvider>
+            </ThemeProvider>
           </MotionProvider>
         </AuthProvider>
       </body>

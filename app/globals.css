@@ -155,6 +155,7 @@
     /* User message bubble colors — muted neutral for minimal aesthetic */
     --user-bubble-bg: 40 8% 94%;    /* Warm ash bubble */
     --user-bubble-text: 210 14% 15%;
+    --user-border: 40 8% 78%;       /* Warm ash, darker — left-border accent */
 
     /* Animation duration tokens — research §1.1 */
     --duration-instant: 100ms;
@@ -207,6 +208,7 @@
     /* User message bubble colors — Dark Mode — subtle elevation */
     --user-bubble-bg: 220 14% 18%;
     --user-bubble-text: 220 14% 95%;
+    --user-border: 220 14% 28%;     /* Raised neutral — left-border accent */
 
     /* Animation duration tokens (same as light) */
     --duration-instant: 100ms;
@@ -236,6 +238,13 @@
   }
   .dark body {
     background-color: hsl(var(--background));
+  }
+
+  /* Safe area insets for iOS devices (notch, home indicator) */
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .safe-area-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
   }
 
   /* Optimización de fuentes: Simular peso 500 usando 400 + font-synthesis */
@@ -752,213 +761,6 @@
 
 .animate-gentle-glow {
   animation: gentle-glow 2s ease-in-out infinite;
-}
-
-/* Transiciones suaves para cambios de personalización */
-[class*="message-text-"],
-[class*="message-text-"] *,
-[class*="message-width-"],
-[class*="chat-container-"] {
-  transition: font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              line-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Clases para personalización de tamaño de texto en mensajes */
-.message-text-sm,
-.message-text-sm .markdown-content,
-.message-text-sm .markdown-content p,
-.message-text-sm .markdown-content li,
-.message-text-sm .markdown-content span,
-.message-text-sm .markdown-content div,
-.message-text-sm p,
-.message-text-sm div,
-.message-text-sm span:not([class*="h-"]):not([class*="w-"]) {
-  font-size: 0.875rem !important;
-  line-height: 1.5rem !important;
-}
-
-.message-text-base,
-.message-text-base .markdown-content,
-.message-text-base .markdown-content p,
-.message-text-base .markdown-content li,
-.message-text-base .markdown-content span,
-.message-text-base .markdown-content div,
-.message-text-base p,
-.message-text-base div,
-.message-text-base span:not([class*="h-"]):not([class*="w-"]) {
-  font-size: 1rem !important;
-  line-height: 1.6rem !important;
-}
-
-.message-text-lg,
-.message-text-lg .markdown-content,
-.message-text-lg .markdown-content p,
-.message-text-lg .markdown-content li,
-.message-text-lg .markdown-content span,
-.message-text-lg .markdown-content div,
-.message-text-lg p,
-.message-text-lg div,
-.message-text-lg span:not([class*="h-"]):not([class*="w-"]) {
-  font-size: 1.125rem !important;
-  line-height: 1.75rem !important;
-}
-
-.message-text-xl,
-.message-text-xl .markdown-content,
-.message-text-xl .markdown-content p,
-.message-text-xl .markdown-content li,
-.message-text-xl .markdown-content span,
-.message-text-xl .markdown-content div,
-.message-text-xl p,
-.message-text-xl div,
-.message-text-xl span:not([class*="h-"]):not([class*="w-"]) {
-  font-size: 1.25rem !important;
-  line-height: 1.875rem !important;
-}
-
-/* Clases para personalización de ancho de mensajes - Mobile First */
-/* En mobile, el ancho se controla mediante el contenedor, no el mensaje individual */
-.message-width-narrow,
-.message-width-comfortable,
-.message-width-wide,
-.message-width-full {
-  width: 100% !important;
-  max-width: none !important;
-}
-
-/* A partir de tablet (640px+) se aplican max-width a los mensajes */
-@media (min-width: 640px) {
-  .message-width-narrow {
-    max-width: 36rem !important; /* 576px - Ideal para lectura concentrada */
-  }
-  
-  .message-width-comfortable {
-    max-width: 48rem !important; /* 768px - Balance óptimo */
-  }
-  
-  .message-width-wide {
-    max-width: 64rem !important; /* 1024px - Aprovecha pantallas grandes */
-  }
-  
-  .message-width-full {
-    max-width: 95% !important; /* Mantiene márgenes en desktop */
-  }
-}
-
-/* Optimizaciones para pantallas grandes */
-@media (min-width: 1024px) {
-  .message-width-wide {
-    max-width: 72rem !important; /* 1152px - Máximo aprovechamiento */
-  }
-}
-
-@media (min-width: 1280px) {
-  .message-width-full {
-    max-width: 98% !important; /* Casi full en pantallas muy grandes */
-  }
-}
-
-/* Clases para contenedor de chat que respetan las preferencias */
-/* En mobile, ajustamos padding lateral para crear sensación de ancho */
-.chat-container-narrow {
-  max-width: 100% !important;
-  padding-left: 2rem !important; /* Más padding = mensajes más estrechos */
-  padding-right: 2rem !important;
-}
-
-.chat-container-comfortable {
-  max-width: 100% !important;
-  padding-left: 0.75rem !important; /* Padding moderado - Default - REDUCIDO para tablas */
-  padding-right: 0.75rem !important;
-}
-
-.chat-container-wide {
-  max-width: 100% !important;
-  padding-left: 0.5rem !important; /* Poco padding = mensajes más anchos */
-  padding-right: 0.5rem !important;
-}
-
-.chat-container-full {
-  max-width: 100% !important;
-  padding-left: 0.25rem !important; /* Mínimo padding - Máximo aprovechamiento */
-  padding-right: 0.25rem !important;
-}
-
-/* En mobile, ajustar padding con diferencias visibles entre wide y full */
-@media (max-width: 640px) {
-  .chat-container-wide {
-    padding-left: 0.625rem !important; /* 10px - Permite diferencia visual con full */
-    padding-right: 0.625rem !important;
-  }
-  
-  .chat-container-full {
-    padding-left: 0.375rem !important; /* 6px - Máximo aprovechamiento manteniendo iconos visibles */
-    padding-right: 0.375rem !important;
-  }
-  
-  /* Ajustar offset de iconos de esquina en anchos wide y full para evitar cortes */
-  /* Los iconos pasan de -10px a -6px de offset */
-  .chat-container-wide .mobile-icon-corner,
-  .chat-container-full .mobile-icon-corner {
-    top: -0.375rem !important; /* -6px */
-  }
-  
-  .chat-container-wide .mobile-icon-left,
-  .chat-container-full .mobile-icon-left {
-    left: -0.375rem !important; /* -6px */
-  }
-  
-  .chat-container-wide .mobile-icon-right,
-  .chat-container-full .mobile-icon-right {
-    right: -0.375rem !important; /* -6px */
-  }
-}
-
-/* A partir de tablet (640px+) usamos max-width en vez de padding */
-@media (min-width: 640px) {
-  .chat-container-narrow {
-    max-width: 40rem !important; /* 640px - Contenedor más amplio que mensajes */
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-  }
-  
-  .chat-container-comfortable {
-    max-width: 52rem !important; /* 832px */
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-  }
-  
-  .chat-container-wide {
-    max-width: 68rem !important; /* 1088px */
-    padding-left: 1.5rem !important; /* Separación del sidebar */
-    padding-right: 1.5rem !important; /* Balance simétrico */
-  }
-  
-  .chat-container-full {
-    max-width: 100% !important;
-    padding-left: 2rem !important; /* Mayor separación en modo full */
-    padding-right: 2rem !important; /* Balance simétrico */
-  }
-}
-
-@media (min-width: 1024px) {
-  .chat-container-wide {
-    max-width: 76rem !important; /* 1216px */
-    padding-left: 2rem !important; /* Más espacio en pantallas grandes */
-    padding-right: 2rem !important; /* Balance simétrico */
-  }
-  
-  .chat-container-full {
-    padding-left: 2.5rem !important; /* Separación óptima en pantallas grandes */
-    padding-right: 2.5rem !important; /* Balance simétrico */
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon, SignOutIcon } from "@phosphor-icons/react"
+import { ListIcon, UserCircleIcon, BookOpenIcon, SunIcon, MoonIcon, FileIcon, CalendarBlankIcon, XIcon, SignOutIcon, ShieldCheckIcon } from "@phosphor-icons/react"
 import { useTheme } from "next-themes"
 import { signOut } from "firebase/auth"
 import { auth } from "@/lib/firebase-config"
@@ -16,9 +16,16 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
-import { DisplaySettingsPopover } from "@/components/display-settings-popover"
 import { SyncStatusIndicator } from "@/components/sync-status-indicator"
 import { TokenUsageBar } from "@/components/token-usage-bar"
+import { LocalDataControls } from "@/components/local-data-controls"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 
 import { createLogger } from '@/lib/logger'
@@ -264,7 +271,28 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
       <div className="relative flex items-center gap-1 md:gap-1.5 flex-shrink-0">
         <TokenUsageBar compact />
         <SyncStatusIndicator className="mr-0.5" />
-        <DisplaySettingsPopover />
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+              title="Datos locales"
+              aria-label="Gestión de datos locales"
+            >
+              <ShieldCheckIcon className="h-4 w-4" weight="duotone" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+                <ShieldCheckIcon className="h-4 w-4 text-muted-foreground" weight="duotone" />
+                Datos locales
+              </DialogTitle>
+            </DialogHeader>
+            <LocalDataControls />
+          </DialogContent>
+        </Dialog>
         <Button
           variant="ghost"
           size="icon"

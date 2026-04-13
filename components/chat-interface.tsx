@@ -27,13 +27,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import * as Sentry from "@sentry/nextjs"
 import type { TransitionState } from "@/hooks/use-hopeai-system"
 import type { ReasoningBulletsState, MessageProcessingStatus } from "@/types/clinical-types"
-import { useDisplayPreferences, getFontSizeClass, getMessageWidthClass, getMessageSpacingClass, getChatContainerWidthClass } from "@/providers/display-preferences-provider"
 import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
 import { AgenticTransparencyFlow } from "@/components/agentic-transparency-flow"
 import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-status"
+import { DesignTransitionNotice } from "@/components/design-transition-notice"
 
 
 import { createLogger } from '@/lib/logger'
@@ -42,6 +42,13 @@ const logger = createLogger('system')
 /** Generate a client-side message ID matching the server's convention. */
 function generateMessageId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+}
+
+/** Format a Date as HH:MM in 24h format (Chilean convention). */
+function formatTime(timestamp: Date | string | undefined): string {
+  if (!timestamp) return ''
+  const d = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
+  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 interface ChatInterfaceProps {
@@ -253,12 +260,6 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [previewAgent, setPreviewAgent] = useState<AgentType | null>(null)
   const [shouldScrollOnce, setShouldScrollOnce] = useState(false)
-
-  // Hook para preferencias de visualización
-  const { preferences } = useDisplayPreferences()
-  const fontSizeClass = getFontSizeClass(preferences.fontSize)
-  const messageSpacingClass = getMessageSpacingClass(preferences.messageSpacing)
-  const chatContainerWidthClass = getChatContainerWidthClass(preferences.messageWidth)
 
   // Hook para preferencias de UI (sugerencias dinámicas)
   const { shouldShowDynamicSuggestions, hideDynamicSuggestions, isLoading: isLoadingUIPreferences } = useUIPreferences()
@@ -943,7 +944,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         aria-atomic="false"
         aria-label="Historial de conversación"
       >
-        <div className={cn("w-full mx-auto h-full flex flex-col space-y-5 md:space-y-8 pt-2 md:pt-3 pb-36", chatContainerWidthClass)}>
+        <div className="w-full mx-auto max-w-3xl px-3 md:px-0 h-full flex flex-col pt-2 md:pt-3 pb-36">
+          {/* One-time transition notice for display settings removal */}
+          <DesignTransitionNotice />
+
           {/* Indicador de mensajes anteriores */}
           {currentSession?.history && currentSession.history.length > visibleMessageCount && (
             <div className="text-center py-2">
@@ -958,9 +962,12 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           {/* Welcome greeting — serene, minimal */}
           {(!currentSession?.history || currentSession.history.length === 0) && (
             <div className="flex-1 min-h-[55svh] md:min-h-[65svh] animate-in fade-in duration-700 ease-out flex flex-col items-center justify-center text-center px-4">
-              <h1 className="font-serif text-2xl md:text-4xl tracking-tight text-foreground/80 mb-3 font-normal">
+              <h1 className="font-serif text-2xl md:text-3xl tracking-tight text-foreground/70 mb-2 font-normal">
                 ¿En qué piensas?
               </h1>
+              <p className="text-sm text-muted-foreground/60 font-sans max-w-md">
+                Escribe tu consulta clínica o pregunta de investigación
+              </p>
               {!isLoadingUIPreferences && shouldShowDynamicSuggestions && (
                 <div className="mt-6 md:mt-10 w-full max-w-2xl mx-auto px-2">
                   <div
@@ -1025,7 +1032,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
             const wrapperClassName = cn(
               "flex items-start justify-start",
-              isFirstMessage ? "pt-6" : messageSpacingClass
+              isFirstMessage ? "pt-6" : "py-4"
             )
 
             // For known messages (e.g. the one transitioning from streaming),
@@ -1034,24 +1041,33 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             const messageCard = (
                 <div
                   className={cn(
-                    "chat-message-bubble relative rounded-lg overflow-hidden w-full min-w-0",
-                    fontSizeClass,
+                    "chat-message-bubble relative rounded-lg overflow-hidden w-full min-w-0 text-base leading-relaxed font-sans",
                     message.role === "user"
-                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border border-border/30"
+                      ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-l-[3px] border-l-[hsl(var(--user-border))]"
                       : "bg-card border border-border/30",
                   )}
                 >
-                  {/* Indicador mínimo de archivo adjunto (solo icono) */}
-                  {message.role === "user" && (message.fileReferences?.length ?? 0) > 0 && (
-                    <div className="absolute top-2 right-2" title="Archivo adjunto">
-                      <PaperclipIcon
-                        className="w-3 h-3 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                        aria-hidden="true"
-                      />
-                      <span className="sr-only">Archivo adjunto</span>
+                  {/* User message: timestamp + file indicator in header area */}
+                  {message.role === "user" && (
+                    <div className="flex items-center justify-end gap-2 px-3 md:px-4 pt-2.5">
+                      {(message.fileReferences?.length ?? 0) > 0 && (
+                        <div title="Archivo adjunto">
+                          <PaperclipIcon
+                            className="w-3 h-3 text-muted-foreground/50"
+                            aria-hidden="true"
+                          />
+                          <span className="sr-only">Archivo adjunto</span>
+                        </div>
+                      )}
+                      <time
+                        className="text-[11px] tabular-nums text-muted-foreground/60 font-sans"
+                        dateTime={message.timestamp?.toISOString?.() || ''}
+                      >
+                        {formatTime(message.timestamp)}
+                      </time>
                     </div>
                   )}
-                  {/* Agent Context Header — minimal */}
+                  {/* Agent Context Header with timestamp — AI messages */}
                   {message.role === "model" && (
                     <div className="px-4 md:px-5 pt-3.5 pb-2.5 border-b border-border/20">
                       <div className="flex items-center gap-2.5">
@@ -1061,12 +1077,21 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                           messageAgentConfig.typingDotColor
                         )} />
 
-                        {/* Agent name only */}
-                        <span className={cn(
-                          "text-xs font-medium font-sans tracking-wide text-muted-foreground"
-                        )}>
+                        {/* Agent name */}
+                        <span className="text-xs font-medium font-sans tracking-wide text-muted-foreground">
                           {messageAgentConfig.name}
                         </span>
+
+                        {/* Spacer */}
+                        <span className="flex-1" />
+
+                        {/* Timestamp — right-aligned */}
+                        <time
+                          className="text-[11px] tabular-nums text-muted-foreground/50 font-sans"
+                          dateTime={message.timestamp?.toISOString?.() || ''}
+                        >
+                          {formatTime(message.timestamp)}
+                        </time>
                       </div>
                     </div>
                   )}
@@ -1186,7 +1211,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <button
                           type="button"
                           onClick={() => copyMessageContent(message.content, message.id)}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="Copiar contenido"
                           title="Copiar contenido"
                         >
@@ -1203,7 +1228,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="Me gusta"
                           title="Me gusta"
                         >
@@ -1212,7 +1237,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         <button
                           type="button"
                           onClick={() => { toast({ description: "Gracias por tu feedback." }); }}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
+                          className="inline-flex items-center justify-center h-7 w-7 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-md hover:bg-secondary/60 text-muted-foreground/40 hover:text-muted-foreground transition-colors active:scale-95 select-none touch-manipulation"
                           aria-label="No me gusta"
                           title="No me gusta"
                         >
@@ -1257,10 +1282,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0 }}
-                className={cn("flex items-start", messageSpacingClass)}
+                className={cn("flex items-start", "py-4")}
               >
                 <div
-                  className={cn("chat-message-bubble relative rounded-lg border border-border/30 w-full min-w-0 overflow-hidden bg-card", fontSizeClass)}
+                  className="chat-message-bubble relative rounded-lg border border-border/30 w-full min-w-0 overflow-hidden bg-card text-base leading-relaxed font-sans"
                 >
                   {/* Agent Context Header — minimal, matching historical messages */}
                   <div className="px-4 md:px-5 pt-3.5 pb-2.5 border-b border-border/20">
@@ -1576,7 +1601,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
         )}
 
         {/* Ficha Clínica controls moved into input toolbar */}
-        <div className={cn("w-full mx-auto relative z-10", chatContainerWidthClass)}>
+        <div className="w-full mx-auto max-w-3xl px-3 md:px-0 relative z-10">
           <div className="relative">
             {/* Inline send error banner — retry-friendly, non-destructive */}
             <AnimatePresence>

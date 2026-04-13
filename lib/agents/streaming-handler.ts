@@ -14,6 +14,8 @@ import { ToolRegistry } from "../tool-registry"
 import { executeToolsSafely, type PreparedToolCall, type ToolCallResult } from "../utils/tool-orchestrator"
 import { ProgressQueue } from "../utils/progress-queue"
 import { createLogger } from "@/lib/logger"
+import { recordTokenConsumption } from "../subscriptions/subscription-service"
+import type { TokenConsumption } from "../subscriptions/types"
 import type { DocumentPreviewEvent, DocumentReadyEvent } from "@/types/clinical-types"
 
 const logger = createLogger('agent')
@@ -454,7 +456,7 @@ function formatMs(ms: unknown): string {
 /**
  * Create a streaming wrapper that captures metrics when the stream completes
  */
-export function createMetricsStreamingWrapper(streamResult: any, interactionId: string | undefined, enhancedMessage: string) {
+export function createMetricsStreamingWrapper(streamResult: any, interactionId: string | undefined, enhancedMessage: string, psychologistId?: string) {
   // Return an async generator that wraps the original stream
   const wrappedGenerator = (async function* () {
     let accumulatedText = "";
@@ -512,6 +514,21 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
           const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
           if (completedMetrics) {
             logger.info(`Streaming interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+
+            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget)
+            if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
+              const consumption: TokenConsumption = {
+                promptTokens: completedMetrics.tokens.inputTokens,
+                responseTokens: completedMetrics.tokens.outputTokens,
+                totalTokens: completedMetrics.tokens.totalTokens,
+                timestamp: new Date().toISOString(),
+                sessionId: completedMetrics.sessionId,
+                agentType: completedMetrics.computational?.agentUsed || 'unknown',
+              };
+              recordTokenConsumption(psychologistId, consumption).catch((err) =>
+                logger.error('Failed to persist token consumption to Firestore', { error: err instanceof Error ? err.message : String(err) })
+              );
+            }
           }
         } catch (error) {
           logger.warn(`Could not extract streaming token usage:`, error);
@@ -938,6 +955,21 @@ export async function handleStreamingWithTools(
           const completedMetrics = sessionMetricsTracker.completeInteraction(interactionId);
           if (completedMetrics) {
             logger.info(`Streaming with tools interaction completed - Cost: $${completedMetrics.tokens.estimatedCost.toFixed(6)}, Tokens: ${completedMetrics.tokens.totalTokens}, Time: ${completedMetrics.timing.totalResponseTime}ms`);
+
+            // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget)
+            if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
+              const consumption: TokenConsumption = {
+                promptTokens: completedMetrics.tokens.inputTokens,
+                responseTokens: completedMetrics.tokens.outputTokens,
+                totalTokens: completedMetrics.tokens.totalTokens,
+                timestamp: new Date().toISOString(),
+                sessionId: completedMetrics.sessionId,
+                agentType: completedMetrics.computational?.agentUsed || 'unknown',
+              };
+              recordTokenConsumption(psychologistId, consumption).catch((err) =>
+                logger.error('Failed to persist token consumption to Firestore', { error: err instanceof Error ? err.message : String(err) })
+              );
+            }
           }
         } catch (error) {
           logger.warn(`Could not extract streaming with tools token usage:`, error);
