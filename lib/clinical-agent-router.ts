@@ -30,13 +30,21 @@ export class ClinicalAgentRouter {
   // Session-scoped caches to avoid re-fetching and re-verifying files each turn
   private sessionFileCache: Map<string, Map<string, any>> = new Map()
   private verifiedActiveMap: Map<string, Set<string>> = new Map()
-  // 🔧 FIX: Track which files have been sent FULLY (via URI) per session to avoid re-sending
-  private filesFullySentMap: Map<string, Set<string>> = new Map()
+
+  // ── Context Caching: Track explicit caches per session ──
+  // Maps sessionId → { cacheName, fileUris[], cacheState }
+  private sessionCacheMap: Map<string, {
+    cacheName: string;
+    fileUris: string[];
+    cacheState: 'active' | 'fallback';
+    createdAt: number;
+  }> = new Map()
 
   // 🧹 CLEANUP: Track session activity for automatic cleanup
   private sessionLastActivity = new Map<string, number>()
   private cleanupTimer: NodeJS.Timeout | null = null
   private readonly SESSION_TIMEOUT_MS = 30 * 60 * 1000  // 30 minutos de inactividad
+  private readonly CACHE_TTL_SECONDS = 2100  // 35 min — session timeout + 5 min buffer
 
   // P1.1: Context window manager for reactive compaction
   private contextWindowManager = new ContextWindowManager()
@@ -60,11 +68,13 @@ export class ClinicalAgentRouter {
     this.unifiedConfig = createUnifiedAgentConfig()
   }
 
-  async createChatSession(sessionId: string, _agent?: AgentType, history?: ChatMessage[]): Promise<any> {
+  async createChatSession(sessionId: string, _agent?: AgentType, history?: ChatMessage[], cachedContentName?: string): Promise<any> {
     const agentConfig = this.unifiedConfig
 
     try {
-      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(sessionId, history) : []
+      // When a cache is active, file parts should NOT be embedded in history
+      const skipFileParts = !!cachedContentName
+      let geminiHistory = history ? await this.convertHistoryToGeminiFormat(sessionId, history, { skipFileParts }) : []
 
       // Detect if any message in history references files uploaded via API-key Files API.
       // When Vertex AI is the main client, it cannot resolve file URIs from the API-key
@@ -73,19 +83,29 @@ export class ClinicalAgentRouter {
       const historyHasFiles = history?.some(m => m.fileReferences && m.fileReferences.length > 0) || false
       const client = historyHasFiles ? aiFiles : ai
 
+      // Build config: when cachedContent is available, systemInstruction goes INTO the cache
+      // (they are mutually exclusive at the API level)
+      const chatConfig: any = {
+        temperature: agentConfig.config.temperature,
+        topK: agentConfig.config.topK,
+        topP: agentConfig.config.topP,
+        maxOutputTokens: agentConfig.config.maxOutputTokens,
+        safetySettings: agentConfig.config.safetySettings,
+        tools: agentConfig.tools && agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
+        thinkingConfig: agentConfig.config.thinkingConfig,
+      }
+
+      if (cachedContentName) {
+        chatConfig.cachedContent = cachedContentName
+        logger.info(`🗄️ Using cachedContent for session ${sessionId}: ${cachedContentName}`)
+      } else {
+        chatConfig.systemInstruction = agentConfig.systemInstruction
+      }
+
       // Create chat session using the correct SDK API
       const chat = client.chats.create({
-        model: agentConfig.config.model || 'gemini-3.1-flash-lite-preview',
-        config: {
-          temperature: agentConfig.config.temperature,
-          topK: agentConfig.config.topK,
-          topP: agentConfig.config.topP,
-          maxOutputTokens: agentConfig.config.maxOutputTokens,
-          safetySettings: agentConfig.config.safetySettings,
-          systemInstruction: agentConfig.systemInstruction,
-          tools: agentConfig.tools && agentConfig.tools.length > 0 ? agentConfig.tools : undefined,
-          thinkingConfig: agentConfig.config.thinkingConfig,
-        },
+        model: agentConfig.config.model || 'gemini-3-flash-preview',
+        config: chatConfig,
         history: geminiHistory,
       })
 
@@ -93,7 +113,6 @@ export class ClinicalAgentRouter {
       // Prepare caches for this session
       if (!this.sessionFileCache.has(sessionId)) this.sessionFileCache.set(sessionId, new Map())
       if (!this.verifiedActiveMap.has(sessionId)) this.verifiedActiveMap.set(sessionId, new Set())
-      if (!this.filesFullySentMap.has(sessionId)) this.filesFullySentMap.set(sessionId, new Set())
 
       // 🧹 CLEANUP: Track session activity
       this.updateSessionActivity(sessionId)
@@ -105,7 +124,9 @@ export class ClinicalAgentRouter {
     }
   }
 
-  async convertHistoryToGeminiFormat(sessionId: string, history: ChatMessage[]) {
+  async convertHistoryToGeminiFormat(sessionId: string, history: ChatMessage[], opts?: { skipFileParts?: boolean }) {
+    const skipFileParts = opts?.skipFileParts ?? false
+
     // Find the most recent message that actually has file references
     const lastMsgWithFilesIdx = [...history].reverse().findIndex(m => m.fileReferences && m.fileReferences.length > 0)
     const attachIndex = lastMsgWithFilesIdx === -1 ? -1 : history.length - 1 - lastMsgWithFilesIdx
@@ -115,10 +136,11 @@ export class ClinicalAgentRouter {
 
       // OPTIMIZATION (FIXED): Attach files for the most recent message that included fileReferences
       // This ensures agent switches recreate context with the actual file parts
+      // SKIP when cachedContent is active — file parts are server-side in the cache
       const isAttachmentCarrier = idx === attachIndex
 
       // ARQUITECTURA OPTIMIZADA: Procesamiento dinámico de archivos por ID
-      if (isAttachmentCarrier && msg.fileReferences && msg.fileReferences.length > 0) {
+      if (isAttachmentCarrier && !skipFileParts && msg.fileReferences && msg.fileReferences.length > 0) {
         logger.debug(`Processing files for latest message only: ${msg.fileReferences.length} file IDs`)
 
         try {
@@ -247,111 +269,169 @@ export class ClinicalAgentRouter {
       // Construir las partes del mensaje (texto + archivos adjuntos)
       const messageParts: any[] = [{ text: enhancedMessage }]
 
-      // 🔧 FIX: Estrategia de archivos - SOLO enviar completo en primer turno
-      // Turnos posteriores: solo referencia ligera para evitar sobrecarga de tokens
+      // ── CONTEXT CACHING: Create explicit cache on first turn with files,
+      // use cached reference on subsequent turns. This eliminates file token
+      // re-transmission (~60K+ tokens/turn savings for typical PDFs). ──
       if (enrichedContext?.sessionFiles && Array.isArray(enrichedContext.sessionFiles) && enrichedContext.sessionFiles.length > 0) {
         logger.debug(`📁 Processing sessionFiles for attachment`, {
           totalFiles: enrichedContext.sessionFiles.length,
           fileNames: enrichedContext.sessionFiles.map((f: any) => f.name)
         })
 
-        // Heurística: adjuntar solo los archivos más recientes o con índice
         const files = (enrichedContext.sessionFiles as any[])
-          .slice(-2) // preferir los últimos 2
-          .sort((a, b) => (b.keywords?.length || 0) - (a.keywords?.length || 0)) // ligera priorización si tienen índice
+          .slice(-2)
+          .sort((a, b) => (b.keywords?.length || 0) - (a.keywords?.length || 0))
           .slice(0, 2)
 
-        // 🔧 FIX CRÍTICO: Usar Map dedicado para detectar si es primer turno
-        // filesFullySentMap rastrea qué archivos ya fueron enviados completos en esta sesión
-        const fullySentFiles = this.filesFullySentMap.get(sessionId) || new Set<string>();
-        this.filesFullySentMap.set(sessionId, fullySentFiles);
+        const existingCache = this.sessionCacheMap.get(sessionId)
 
-        // Detectar si ALGUNO de estos archivos NO ha sido enviado completo aún
-        const hasUnsentFiles = files.some(f => !fullySentFiles.has(f.id || f.geminiFileId || f.geminiFileUri));
+        // Detect if new files were added that aren't in the current cache
+        const currentFileUris = files
+          .map(f => f.geminiFileUri || f.geminiFileId)
+          .filter(Boolean) as string[]
+        const hasNewFiles = existingCache
+          ? currentFileUris.some(uri => !existingCache.fileUris.includes(uri))
+          : true
 
-        logger.debug(`📁 File attachment decision`, {
-          hasUnsentFiles,
-          filesToProcess: files.length,
-          filesAlreadySent: Array.from(fullySentFiles),
-          currentFiles: files.map((f: any) => ({
-            id: f.id,
-            name: f.name,
-            geminiFileUri: f.geminiFileUri,
-            alreadySent: fullySentFiles.has(f.id || f.geminiFileId || f.geminiFileUri)
-          }))
-        })
+        if (!existingCache || hasNewFiles) {
+          // ── FIRST TURN or NEW FILES: Create explicit cache ──
+          logger.info(`🔵 Creating explicit cache (${hasNewFiles && existingCache ? 'new files detected' : 'first file turn'})`)
 
-        if (hasUnsentFiles) {
-          // ✅ PRIMER TURNO: Adjuntar archivo completo vía URI
-          logger.info(`🔵 First turn detected: Attaching FULL files (${files.length}) via URI`);
+          // If there was an old cache with different files, delete it
+          if (existingCache) {
+            aiFiles.caches.delete({ name: existingCache.cacheName }).catch(err =>
+              logger.warn(`Failed to delete old cache: ${err instanceof Error ? err.message : String(err)}`)
+            )
+          }
 
-          // Prepend textual file annotation so the agent knows files are attached
+          // Build file parts for the cache contents
+          const fileParts: any[] = []
+          const cachedFileUris: string[] = []
+          for (const fileRef of files) {
+            const fCache = this.sessionFileCache.get(sessionId) || new Map<string, any>()
+            this.sessionFileCache.set(sessionId, fCache)
+            if (fileRef?.id) fCache.set(fileRef.id, fileRef)
+            if (!fileRef?.geminiFileId && !fileRef?.geminiFileUri) continue
+            const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/')
+              ? fileRef.geminiFileId
+              : `files/${fileRef.geminiFileId}`)
+            if (!fileUri) continue
+
+            // Verify ACTIVE before caching
+            const verifiedSet = this.verifiedActiveMap.get(sessionId) || new Set<string>()
+            this.verifiedActiveMap.set(sessionId, verifiedSet)
+            const fileIdForCheck = fileRef.geminiFileId || fileUri
+            if (!verifiedSet.has(fileIdForCheck)) {
+              try {
+                await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
+                verifiedSet.add(fileIdForCheck)
+              } catch (e) {
+                logger.warn(`Skipping non-active file: ${fileUri}`)
+                continue
+              }
+            }
+
+            fileParts.push(createPartFromUri(fileUri, fileRef.type))
+            cachedFileUris.push(fileUri)
+            logger.info(`📦 File prepared for cache: ${fileRef.name}`)
+          }
+
+          if (fileParts.length > 0) {
+            // Attempt explicit cache creation
+            const model = this.unifiedConfig.config?.model || 'gemini-3-flash-preview'
+            try {
+              const cache = await aiFiles.caches.create({
+                model,
+                config: {
+                  displayName: `aurora-session-${sessionId.slice(0, 8)}`,
+                  systemInstruction: this.unifiedConfig.systemInstruction,
+                  contents: fileParts,
+                  ttl: `${this.CACHE_TTL_SECONDS}s`,
+                },
+              })
+
+              if (cache.name) {
+                this.sessionCacheMap.set(sessionId, {
+                  cacheName: cache.name,
+                  fileUris: cachedFileUris,
+                  cacheState: 'active',
+                  createdAt: Date.now(),
+                })
+                logger.info(`🗄️ Explicit cache created: ${cache.name}`, {
+                  cachedTokens: cache.usageMetadata?.totalTokenCount,
+                  ttl: this.CACHE_TTL_SECONDS,
+                  files: cachedFileUris.length,
+                })
+
+                // Recreate chat session with cachedContent (systemInstruction is in cache)
+                this.activeChatSessions.delete(sessionId)
+                const currentHistory = sessionData.history || []
+                await this.createChatSession(sessionId, undefined, currentHistory as ChatMessage[], cache.name)
+                const newSessionData = this.activeChatSessions.get(sessionId)
+                if (newSessionData) {
+                  chat = newSessionData.chat
+                  if (sessionData.history) newSessionData.history = sessionData.history
+                }
+
+                // Add textual annotation (no file parts needed — they're in the cache)
+                const fileDescriptions = files
+                  .filter(f => f.geminiFileUri || f.geminiFileId)
+                  .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
+                if (fileDescriptions.length > 0) {
+                  messageParts[0].text = `<archivos_adjuntos>\nDocumentos adjuntos (contenido disponible vía contexto cacheado):\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
+                }
+              } else {
+                throw new Error('Cache creation returned no name')
+              }
+            } catch (cacheErr: any) {
+              const errMsg = cacheErr?.message || String(cacheErr)
+              // Fallback: files too small or caching not supported for this model
+              if (errMsg.includes('INVALID_ARGUMENT') || errMsg.includes('too few tokens') || errMsg.includes('not supported')) {
+                logger.info(`📁 Cache fallback: ${errMsg.slice(0, 100)}. Using direct file attachment.`)
+                this.sessionCacheMap.set(sessionId, {
+                  cacheName: '',
+                  fileUris: cachedFileUris,
+                  cacheState: 'fallback',
+                  createdAt: Date.now(),
+                })
+              } else {
+                logger.warn(`⚠️ Cache creation failed, falling back to direct attachment: ${errMsg}`)
+              }
+              // Fallback: attach file parts directly to the message (current behavior)
+              const fileDescriptions = files
+                .filter(f => f.geminiFileUri || f.geminiFileId)
+                .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
+              if (fileDescriptions.length > 0) {
+                messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
+              }
+              messageParts.push(...fileParts)
+            }
+          }
+        } else if (existingCache.cacheState === 'active') {
+          // ── SUBSEQUENT TURNS with active cache: text-only message ──
+          // File content is served from the cache — massive token savings
+          logger.info(`🟢 Cache active: ${existingCache.cacheName} — sending text-only (saves ~${files.reduce((s, f) => s + (f.size || 60000), 0) / 1024}KB file tokens)`)
+
           const fileDescriptions = files
             .filter(f => f.geminiFileUri || f.geminiFileId)
             .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
           if (fileDescriptions.length > 0) {
-            messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
-          }
-
-          for (const fileRef of files) {
-            try {
-              // Cache session-level
-              const cache = this.sessionFileCache.get(sessionId) || new Map<string, any>()
-              this.sessionFileCache.set(sessionId, cache)
-              if (fileRef?.id) cache.set(fileRef.id, fileRef)
-              if (!fileRef?.geminiFileId && !fileRef?.geminiFileUri) continue
-              const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/')
-                ? fileRef.geminiFileId
-                : `files/${fileRef.geminiFileId}`)
-              if (!fileUri) continue
-
-              // Verificar que esté ACTIVE antes de adjuntar
-              const verifiedSet = this.verifiedActiveMap.get(sessionId) || new Set<string>()
-              this.verifiedActiveMap.set(sessionId, verifiedSet)
-              const fileIdForCheck = fileRef.geminiFileId || fileUri
-              if (!verifiedSet.has(fileIdForCheck)) {
-                try {
-                  await clinicalFileManager.waitForFileToBeActive(fileIdForCheck, 30000)
-                  verifiedSet.add(fileIdForCheck)
-                } catch (e) {
-                  logger.warn(`Skipping non-active file: ${fileUri}`)
-                  continue
-                }
-              }
-
-              const filePart = createPartFromUri(fileUri, fileRef.type)
-              messageParts.push(filePart)
-
-              // 🔧 FIX: Marcar archivo como "enviado completo" para que próximos turnos usen referencia ligera
-              const fileIdentifier = fileRef.id || fileRef.geminiFileId || fileRef.geminiFileUri;
-              if (fileIdentifier) {
-                fullySentFiles.add(fileIdentifier);
-              }
-
-              logger.info(`✅ Attached FULL file: ${fileRef.name} (${fileRef.size ? Math.round(fileRef.size / 1024) + 'KB' : 'size unknown'})`)
-            } catch (err) {
-              logger.error('Error attaching session file', { error: err instanceof Error ? err.message : String(err) })
-            }
+            messageParts[0].text = `<archivos_en_contexto>\nDocumentos disponibles en contexto cacheado:\n${fileDescriptions.join('\n')}\n</archivos_en_contexto>\n\n${enhancedMessage}`
           }
         } else {
-          // ✅ TURNOS POSTERIORES: Solo referencia ligera textual (ahorra ~60k tokens)
-          logger.info(`🟢 Subsequent turn detected: Using LIGHTWEIGHT file references (saves ~60k tokens)`);
-
+          // ── FALLBACK mode: lightweight textual reference ──
+          logger.info(`🟡 Cache fallback mode: Using lightweight file references`)
           const fileReferences = files.map(f => {
             const safeName = escapeXml(f.name)
             const summary = f.summary || `Documento: ${safeName}`;
-            const fileInfo = [
+            return [
               `- ${safeName}`,
               f.type ? `(${escapeXml(f.type)})` : '',
               f.outline ? `| Contenido: ${escapeXml(f.outline)}` : `| ${escapeXml(summary)}`,
               f.keywords?.length ? `| Keywords: ${f.keywords.slice(0, 5).map(escapeXml).join(', ')}` : ''
-            ].filter(Boolean).join(' ');
-            return fileInfo;
-          }).join('\n');
-
-          // Prefijar el mensaje con contexto ligero de archivos usando XML tags
-          messageParts[0].text = `<archivos_en_contexto>\nDocumentos previamente procesados en esta sesión (contenido completo ya fue compartido):\n${fileReferences}\n</archivos_en_contexto>\n\n${enhancedMessage}`;
-          logger.info(`✅ Added lightweight file context (~${fileReferences.length} chars vs ~60k tokens)`);
+            ].filter(Boolean).join(' ')
+          }).join('\n')
+          messageParts[0].text = `<archivos_en_contexto>\nDocumentos previamente procesados en esta sesión:\n${fileReferences}\n</archivos_en_contexto>\n\n${enhancedMessage}`
         }
       }
 
@@ -380,12 +460,28 @@ export class ClinicalAgentRouter {
         const MAX_RETRIES = 3;
         let streamResult: any;
         let contextCompacted = false;
+        let cacheRecreated = false;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           try {
             streamResult = await chat.sendMessageStream(messageParams);
             break; // Success - exit retry loop
           } catch (err: any) {
+            // ─── Cache expired/not found: recreate cache and retry ───
+            if (this.isCacheExpiredError(err) && !cacheRecreated) {
+              const cacheData = this.sessionCacheMap.get(sessionId)
+              if (cacheData?.cacheState === 'active') {
+                logger.warn(`🗄️ Cache expired/not found on attempt ${attempt}. Recreating...`)
+                const recreated = await this.recreateExpiredCache(sessionId)
+                if (recreated) {
+                  const newSession = this.activeChatSessions.get(sessionId)
+                  if (newSession) chat = newSession.chat
+                  cacheRecreated = true
+                  continue
+                }
+              }
+            }
+
             // ─── P1.1: Check if this is a context-window-exhausted error ───
             if (isContextExhaustedError(err) && !contextCompacted) {
               logger.warn(`🗜️ Context window exhausted on streaming attempt ${attempt}. Triggering reactive compaction...`);
@@ -421,11 +517,27 @@ export class ClinicalAgentRouter {
         const patientId = enrichedContext?.patient_reference as string | undefined
         result = await handleStreamingWithTools(streamResult, sessionId, { activeChatSessions: this.activeChatSessions }, interactionId, psychologistId, patientId)
       } else {
-        // ─── Non-streaming path with P1.1 reactive compaction ───
+        // ─── Non-streaming path with cache expiry recovery + reactive compaction ───
         try {
           result = await chat.sendMessage(messageParams)
         } catch (err: any) {
-          if (isContextExhaustedError(err)) {
+          // Cache expired — recreate and retry
+          if (this.isCacheExpiredError(err)) {
+            const cacheData = this.sessionCacheMap.get(sessionId)
+            if (cacheData?.cacheState === 'active') {
+              logger.warn(`🗄️ Cache expired on non-streaming call. Recreating...`)
+              const recreated = await this.recreateExpiredCache(sessionId)
+              if (recreated) {
+                const newSession = this.activeChatSessions.get(sessionId)
+                if (newSession) chat = newSession.chat
+                result = await chat.sendMessage(messageParams)
+              } else {
+                throw err
+              }
+            } else {
+              throw err
+            }
+          } else if (isContextExhaustedError(err)) {
             logger.warn(`🗜️ Context window exhausted on non-streaming call. Triggering reactive compaction...`);
 
             const compactionResult = await this.performReactiveCompaction(sessionId);
@@ -461,7 +573,7 @@ export class ClinicalAgentRouter {
                 responseText
               );
 
-              logger.debug(`📊 Token usage`, { input: usageMetadata.promptTokenCount, output: usageMetadata.candidatesTokenCount, total: usageMetadata.totalTokenCount });
+              logger.debug(`📊 Token usage`, { input: usageMetadata.promptTokenCount, output: usageMetadata.candidatesTokenCount, total: usageMetadata.totalTokenCount, cached: usageMetadata.cachedContentTokenCount ?? 0 });
             } else {
               // Fallback: estimate tokens if usage metadata not available
               const inputTokens = Math.ceil(enhancedMessage.length / 4);
@@ -478,13 +590,17 @@ export class ClinicalAgentRouter {
 
               // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
               if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
+                const cachedTokens = response.usageMetadata?.cachedContentTokenCount ?? 0;
+                const promptTokens = completedMetrics.tokens.inputTokens;
                 const consumption: TokenConsumption = {
-                  promptTokens: completedMetrics.tokens.inputTokens,
+                  promptTokens,
                   responseTokens: completedMetrics.tokens.outputTokens,
                   totalTokens: completedMetrics.tokens.totalTokens,
                   timestamp: new Date().toISOString(),
                   sessionId: completedMetrics.sessionId,
                   agentType: completedMetrics.computational?.agentUsed || 'unknown',
+                  cachedContentTokens: cachedTokens,
+                  cacheHitRatio: promptTokens > 0 ? cachedTokens / promptTokens : 0,
                 };
                 import('./subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
                   recordTokenConsumption(psychologistId!, consumption)
@@ -550,8 +666,11 @@ export class ClinicalAgentRouter {
       });
 
       // Destroy old session and recreate with compacted history
+      // Preserve existing cache — files + system instruction don't change during compaction
+      const cacheData = this.sessionCacheMap.get(sessionId)
+      const cachedContentName = cacheData?.cacheState === 'active' ? cacheData.cacheName : undefined
       this.activeChatSessions.delete(sessionId);
-      await this.createChatSession(sessionId, undefined, compactionResult.compactedHistory);
+      await this.createChatSession(sessionId, undefined, compactionResult.compactedHistory, cachedContentName);
 
       // Update the stored history reference so Firestore persistence stays in sync
       const newSessionData = this.activeChatSessions.get(sessionId);
@@ -571,11 +690,95 @@ export class ClinicalAgentRouter {
     return this.unifiedConfig
   }
 
+  // ============================================================================
+  // CACHE LIFECYCLE HELPERS
+  // ============================================================================
+
+  private isCacheExpiredError(err: any): boolean {
+    const msg = err?.message || String(err)
+    return (
+      (msg.includes('NOT_FOUND') && msg.includes('cached')) ||
+      msg.includes('is expired') ||
+      (err?.status === 404 && msg.includes('cachedContent'))
+    )
+  }
+
+  private async recreateExpiredCache(sessionId: string): Promise<boolean> {
+    try {
+      const cacheData = this.sessionCacheMap.get(sessionId)
+      if (!cacheData || cacheData.fileUris.length === 0) return false
+
+      // Rebuild file parts from stored URIs
+      const fileParts: any[] = []
+      for (const uri of cacheData.fileUris) {
+        // Infer mimeType from existing file cache
+        const fileObjCache = this.sessionFileCache.get(sessionId)
+        let mimeType = 'application/octet-stream'
+        if (fileObjCache) {
+          for (const f of fileObjCache.values()) {
+            if (f.geminiFileUri === uri || f.geminiFileId === uri) {
+              mimeType = f.type || mimeType
+              break
+            }
+          }
+        }
+        fileParts.push(createPartFromUri(uri, mimeType))
+      }
+
+      const model = this.unifiedConfig.config?.model || 'gemini-3-flash-preview'
+      const cache = await aiFiles.caches.create({
+        model,
+        config: {
+          displayName: `aurora-session-${sessionId.slice(0, 8)}-renewed`,
+          systemInstruction: this.unifiedConfig.systemInstruction,
+          contents: fileParts,
+          ttl: `${this.CACHE_TTL_SECONDS}s`,
+        },
+      })
+
+      if (!cache.name) return false
+
+      this.sessionCacheMap.set(sessionId, {
+        cacheName: cache.name,
+        fileUris: cacheData.fileUris,
+        cacheState: 'active',
+        createdAt: Date.now(),
+      })
+
+      // Recreate chat session with new cache
+      const sessionData = this.activeChatSessions.get(sessionId)
+      const history = sessionData?.history as ChatMessage[] | undefined
+      this.activeChatSessions.delete(sessionId)
+      await this.createChatSession(sessionId, undefined, history || [], cache.name)
+
+      logger.info(`🗄️ Cache recreated after expiry: ${cache.name}`,
+        { cachedTokens: cache.usageMetadata?.totalTokenCount })
+      return true
+    } catch (err) {
+      logger.error(`Failed to recreate expired cache`, { error: err instanceof Error ? err.message : String(err) })
+      // Degrade to fallback
+      const cacheData = this.sessionCacheMap.get(sessionId)
+      if (cacheData) {
+        cacheData.cacheState = 'fallback'
+        cacheData.cacheName = ''
+      }
+      return false
+    }
+  }
+
   closeChatSession(sessionId: string): void {
+    // Delete explicit cache for PHI compliance
+    const cacheData = this.sessionCacheMap.get(sessionId)
+    if (cacheData?.cacheName) {
+      aiFiles.caches.delete({ name: cacheData.cacheName }).catch(err =>
+        logger.warn(`Failed to delete cache on session close: ${err instanceof Error ? err.message : String(err)}`)
+      )
+      logger.info(`🗑️ Deleted cache for session: ${sessionId}`)
+    }
     this.activeChatSessions.delete(sessionId)
     this.sessionFileCache.delete(sessionId)
     this.verifiedActiveMap.delete(sessionId)
-    this.filesFullySentMap.delete(sessionId)
+    this.sessionCacheMap.delete(sessionId)
     this.sessionLastActivity.delete(sessionId)
     logger.info(`🗑️ Closed session: ${sessionId}`)
   }
@@ -645,6 +848,7 @@ export class ClinicalAgentRouter {
     activeSessions: number
     cachedFiles: number
     verifiedFiles: number
+    activeCaches: number
     oldestSessionAge: number | null
   } {
     let oldestAge: number | null = null
@@ -657,10 +861,16 @@ export class ClinicalAgentRouter {
       }
     }
 
+    let activeCaches = 0
+    for (const c of this.sessionCacheMap.values()) {
+      if (c.cacheState === 'active') activeCaches++
+    }
+
     return {
       activeSessions: this.activeChatSessions.size,
       cachedFiles: this.sessionFileCache.size,
       verifiedFiles: this.verifiedActiveMap.size,
+      activeCaches,
       oldestSessionAge: oldestAge
     }
   }

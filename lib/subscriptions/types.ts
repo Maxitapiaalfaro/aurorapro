@@ -102,6 +102,10 @@ export interface TokenConsumption {
   timestamp: string
   sessionId: string
   agentType: AgentId | string
+  /** Tokens served from Gemini implicit/explicit context cache */
+  cachedContentTokens?: number
+  /** Ratio of cached tokens to total prompt tokens (0-1) */
+  cacheHitRatio?: number
 }
 
 // ---------------------------------------------------------------------------

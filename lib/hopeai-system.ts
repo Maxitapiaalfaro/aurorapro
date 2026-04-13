@@ -55,6 +55,10 @@ export async function savePatientToFirestore(
     .collection('patients').doc(patient.id)
 
   const data: Record<string, unknown> = { ...patient }
+  // Ensure isDeleted field exists (required by client-side query filter)
+  if (data.isDeleted === undefined) {
+    data.isDeleted = false
+  }
   // Convert Dates to Firestore Timestamps
   if (data.createdAt instanceof Date) {
     data.createdAt = AdminTimestamp.fromDate(data.createdAt as Date)
@@ -74,6 +78,8 @@ export async function listPatientsFromFirestore(
   const adminDb = getAdminFirestore(getAdminApp())
   const limit = Math.min(options?.limit ?? 50, 100)
 
+  // No Firestore-level isDeleted filter: documents without the field (historical
+  // patients) would be excluded by Firestore inequality semantics. Filter in-memory.
   const snapshot = await adminDb
     .collection('psychologists').doc(psychologistId)
     .collection('patients')
@@ -86,7 +92,7 @@ export async function listPatientsFromFirestore(
     if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate()
     if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate()
     return data as PatientRecord
-  })
+  }).filter(p => p.isDeleted !== true)
 
   // In-memory search (patient count per psychologist is small)
   if (options?.searchTerm) {

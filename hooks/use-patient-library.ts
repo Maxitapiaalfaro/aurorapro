@@ -7,8 +7,11 @@ import {
   savePatient,
   loadPatient,
   getAllPatients,
+  subscribeToPatients,
   deletePatient as deletePatientFromFirestore,
   getFichasByPatient,
+  getActivePatientMemories,
+  listUserSessions,
   saveFicha,
 } from "@/lib/firestore-client-storage"
 import type { PatientRecord, FichaClinicaState } from "@/types/clinical-types"
@@ -18,6 +21,17 @@ import { PatientSummaryBuilder } from "@/lib/patient-summary-builder"
 import { createLogger } from '@/lib/logger'
 const logger = createLogger('system')
 
+// ---------------------------------------------------------------------------
+// Clinical stats per patient — aggregated from subcollections
+// ---------------------------------------------------------------------------
+
+export interface PatientClinicalStats {
+  memoryCount: number
+  fichaCount: number
+  latestFichaStatus: FichaClinicaState['estado'] | null
+  sessionCount: number
+}
+
 export interface UsePatientLibraryReturn {
   // State
   patients: PatientRecord[]
@@ -26,6 +40,10 @@ export interface UsePatientLibraryReturn {
   searchQuery: string
   filteredPatients: PatientRecord[]
   selectedPatient: PatientRecord | null
+
+  // Clinical stats
+  patientStats: Map<string, PatientClinicalStats>
+  loadPatientStats: (patientId: string) => Promise<void>
 
   // Actions
   loadPatients: () => Promise<void>
@@ -59,23 +77,76 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null)
   const [fichasClinicas, setFichasClinicas] = useState<FichaClinicaState[]>([])
+  const [patientStats, setPatientStats] = useState<Map<string, PatientClinicalStats>>(new Map())
   const fichaPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const statsLoadedRef = useRef<Set<string>>(new Set())
 
-  // Initialize on mount — load patients when psychologistId is available
+  // -----------------------------------------------------------------------
+  // Real-time subscription to patients collection
+  // -----------------------------------------------------------------------
   useEffect(() => {
     if (!psychologistId) return
 
-    const initializePatients = async () => {
-      try {
-        await loadPatientsInternal()
-      } catch (err) {
-        logger.error("Failed to initialize patient library:", err)
-        setError("Failed to initialize patient library")
-      }
-    }
+    setIsLoading(true)
+    const unsubscribe = subscribeToPatients(psychologistId, (updatedPatients, _hasPendingWrites) => {
+      setPatients(updatedPatients)
+      setIsLoading(false)
 
-    initializePatients()
+      // Auto-load stats for new patients we haven't fetched yet
+      for (const p of updatedPatients) {
+        if (!statsLoadedRef.current.has(p.id)) {
+          statsLoadedRef.current.add(p.id)
+          loadPatientStatsInternal(p.id)
+        }
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
   }, [psychologistId])
+
+  // -----------------------------------------------------------------------
+  // Clinical stats loader (memories, fichas, sessions per patient)
+  // -----------------------------------------------------------------------
+  const loadPatientStatsInternal = useCallback(async (patientId: string) => {
+    if (!psychologistId) return
+
+    try {
+      // Fire all three reads in parallel
+      const [memories, fichas, sessionResult] = await Promise.all([
+        getActivePatientMemories(psychologistId, patientId).catch(() => []),
+        getFichasByPatient(psychologistId, patientId).catch(() => []),
+        listUserSessions(psychologistId, { pageSize: 200 }).catch(() => ({ items: [] })),
+      ])
+
+      const patientSessions = sessionResult.items?.filter(
+        (s: { patientId?: string }) => s.patientId === patientId
+      ) ?? []
+
+      const latestFicha = fichas.length > 0 ? fichas[0] : null
+
+      const stats: PatientClinicalStats = {
+        memoryCount: memories.length,
+        fichaCount: fichas.length,
+        latestFichaStatus: latestFicha?.estado ?? null,
+        sessionCount: patientSessions.length,
+      }
+
+      setPatientStats(prev => {
+        const next = new Map(prev)
+        next.set(patientId, stats)
+        return next
+      })
+    } catch (err) {
+      logger.warn(`Failed to load clinical stats for patient ${patientId}:`, err)
+    }
+  }, [psychologistId])
+
+  const loadPatientStats = useCallback(async (patientId: string) => {
+    statsLoadedRef.current.add(patientId)
+    await loadPatientStatsInternal(patientId)
+  }, [loadPatientStatsInternal])
 
   /**
    * Internal load patients (uses psychologistId from closure)
@@ -129,7 +200,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       }
 
       await savePatient(psychologistId, newPatient)
-      await loadPatientsInternal() // Refresh the list
+      // No manual refresh needed — real-time subscription updates automatically
 
       return newPatient
     } catch (err) {
@@ -137,7 +208,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setError("Failed to create patient")
       throw err
     }
-  }, [psychologistId, loadPatientsInternal])
+  }, [psychologistId])
 
   /**
    * Update an existing patient record
@@ -159,7 +230,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       }
 
       await savePatient(psychologistId, updatedPatient)
-      await loadPatientsInternal() // Refresh the list
+      // No manual refresh needed — real-time subscription updates automatically
 
       // Update selected patient if it's the one being updated
       if (selectedPatient?.id === patient.id) {
@@ -170,7 +241,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setError("Failed to update patient")
       throw err
     }
-  }, [psychologistId, loadPatientsInternal, selectedPatient])
+  }, [psychologistId, selectedPatient])
 
   /**
    * Delete a patient record
@@ -182,7 +253,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
 
     try {
       await deletePatientFromFirestore(psychologistId, patientId)
-      await loadPatientsInternal() // Refresh the list
+      // No manual refresh needed — real-time subscription updates automatically
 
       // Clear selection if deleted patient was selected
       if (selectedPatient?.id === patientId) {
@@ -193,7 +264,7 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
       setError("Failed to delete patient")
       throw err
     }
-  }, [psychologistId, loadPatientsInternal, selectedPatient])
+  }, [psychologistId, selectedPatient])
 
   /**
    * Search patients by query
@@ -231,13 +302,13 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
         updatedAt: new Date()
       }
       await savePatient(psychologistId, updatedPatient)
-      await loadPatientsInternal() // Refresh the list
+      // No manual refresh needed — real-time subscription updates automatically
     } catch (err) {
       logger.error("Failed to refresh patient summary:", err)
       setError("Failed to refresh patient summary")
       throw err
     }
-  }, [psychologistId, loadPatientsInternal])
+  }, [psychologistId])
 
   // --- Ficha clinica API integration ---
   const generateFichaClinica = useCallback(async (patientId: string, fichaId: string, sessionState: any) => {
@@ -390,6 +461,10 @@ export function usePatientLibrary(): UsePatientLibraryReturn {
     searchQuery,
     filteredPatients,
     selectedPatient,
+
+    // Clinical stats
+    patientStats,
+    loadPatientStats,
 
     // Actions
     loadPatients,

@@ -499,7 +499,9 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
               accumulatedText
             );
 
-            logger.info(`Streaming Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            const cachedTokens = usageMetadata.cachedContentTokenCount ?? 0;
+            const cacheHitRatio = usageMetadata.promptTokenCount ? cachedTokens / usageMetadata.promptTokenCount : 0;
+            logger.info(`Streaming Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}, Cached: ${cachedTokens}, CacheHitRatio: ${(cacheHitRatio * 100).toFixed(1)}%`);
           } else {
             // Fallback: estimate tokens
             const inputTokens = Math.ceil(enhancedMessage.length / 4);
@@ -516,13 +518,17 @@ export function createMetricsStreamingWrapper(streamResult: any, interactionId: 
 
             // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
             if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
+              const cachedTokens = finalResponse?.usageMetadata?.cachedContentTokenCount ?? 0;
+              const promptTokens = completedMetrics.tokens.inputTokens;
               const consumption: TokenConsumption = {
-                promptTokens: completedMetrics.tokens.inputTokens,
+                promptTokens,
                 responseTokens: completedMetrics.tokens.outputTokens,
                 totalTokens: completedMetrics.tokens.totalTokens,
                 timestamp: new Date().toISOString(),
                 sessionId: completedMetrics.sessionId,
                 agentType: completedMetrics.computational?.agentUsed || 'unknown',
+                cachedContentTokens: cachedTokens,
+                cacheHitRatio: promptTokens > 0 ? cachedTokens / promptTokens : 0,
               };
               import('../subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
                 recordTokenConsumption(psychologistId!, consumption)
@@ -942,7 +948,9 @@ export async function handleStreamingWithTools(
               accumulatedText
             );
 
-            logger.info(`Streaming with tools - Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}`);
+            const cachedTokens = usageMetadata.cachedContentTokenCount ?? 0;
+            const cacheHitRatio = usageMetadata.promptTokenCount ? cachedTokens / usageMetadata.promptTokenCount : 0;
+            logger.info(`Streaming with tools - Token usage - Input: ${usageMetadata.promptTokenCount}, Output: ${usageMetadata.candidatesTokenCount}, Total: ${usageMetadata.totalTokenCount}, Cached: ${cachedTokens}, CacheHitRatio: ${(cacheHitRatio * 100).toFixed(1)}%`);
           } else {
             // Fallback: estimate tokens
             const inputTokens = Math.ceil(enhancedMessage.length / 4);
@@ -959,13 +967,17 @@ export async function handleStreamingWithTools(
 
             // 🔥 PERSIST TOKEN CONSUMPTION TO FIRESTORE (fire-and-forget, dynamic import to avoid server-only in client bundle)
             if (psychologistId && completedMetrics.tokens.totalTokens > 0) {
+              const cachedTokens = finalResponse?.usageMetadata?.cachedContentTokenCount ?? 0;
+              const promptTokens = completedMetrics.tokens.inputTokens;
               const consumption: TokenConsumption = {
-                promptTokens: completedMetrics.tokens.inputTokens,
+                promptTokens,
                 responseTokens: completedMetrics.tokens.outputTokens,
                 totalTokens: completedMetrics.tokens.totalTokens,
                 timestamp: new Date().toISOString(),
                 sessionId: completedMetrics.sessionId,
                 agentType: completedMetrics.computational?.agentUsed || 'unknown',
+                cachedContentTokens: cachedTokens,
+                cacheHitRatio: promptTokens > 0 ? cachedTokens / promptTokens : 0,
               };
               import('../subscriptions/subscription-service').then(({ recordTokenConsumption }) =>
                 recordTokenConsumption(psychologistId!, consumption)

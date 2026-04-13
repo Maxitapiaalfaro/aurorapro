@@ -269,6 +269,7 @@ registerToolHandler('create_patient', async (args, ctx) => {
       tags,
       notes: notes || '',
       confidentiality: { pii: true, accessLevel: 'medium' },
+      isDeleted: false,
       createdAt: now,
       updatedAt: now,
     });

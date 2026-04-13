@@ -439,13 +439,16 @@ export async function loadPatient(
 export async function getAllPatients(
   psychologistId: string
 ): Promise<PatientRecord[]> {
+  // Fetch all patients and filter client-side: Firestore where('isDeleted','==',false)
+  // excludes documents where the field doesn't exist (all historical patients).
   const q = query(
     patientsCol(psychologistId),
-    where('isDeleted', '==', false),
     orderBy('updatedAt', 'desc')
   )
   const snapshot = await getDocs(q)
-  return snapshot.docs.map(d => reviveDates(d.data()) as PatientRecord)
+  return snapshot.docs
+    .map(d => reviveDates(d.data()) as PatientRecord)
+    .filter(p => p.isDeleted !== true)
 }
 
 export async function deletePatient(
@@ -483,13 +486,16 @@ export function subscribeToPatients(
   psychologistId: string,
   callback: (patients: PatientRecord[], hasPendingWrites: boolean) => void
 ): Unsubscribe {
+  // No Firestore-level isDeleted filter: documents without the field (historical
+  // patients) would be excluded. Filter client-side instead.
   const q = query(
     patientsCol(psychologistId),
-    where('isDeleted', '==', false),
     orderBy('updatedAt', 'desc')
   )
   return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
-    const patients = snapshot.docs.map(d => reviveDates(d.data()) as PatientRecord)
+    const patients = snapshot.docs
+      .map(d => reviveDates(d.data()) as PatientRecord)
+      .filter(p => p.isDeleted !== true)
     const hasPendingWrites = snapshot.docs.some(d => d.metadata.hasPendingWrites)
     callback(patients, hasPendingWrites)
   })
