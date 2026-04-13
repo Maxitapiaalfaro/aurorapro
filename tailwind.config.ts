@@ -13,25 +13,25 @@ const config: Config = {
   ],
   safelist: [
     // Aurora Palette - Serene Teal (Memoria/Documentación)
-    'text-serene-teal-50', 'text-serene-teal-100', 'text-serene-teal-200', 'text-serene-teal-300', 'text-serene-teal-400', 'text-serene-teal-500', 'text-serene-teal-600', 'text-serene-teal-700', 'text-serene-teal-800', 'text-serene-teal-900',
-    'bg-serene-teal-50', 'bg-serene-teal-100', 'bg-serene-teal-200', 'bg-serene-teal-300', 'bg-serene-teal-400', 'bg-serene-teal-500', 'bg-serene-teal-600', 'bg-serene-teal-700', 'bg-serene-teal-800', 'bg-serene-teal-900',
-    'border-serene-teal-50', 'border-serene-teal-100', 'border-serene-teal-200', 'border-serene-teal-300', 'border-serene-teal-400', 'border-serene-teal-500', 'border-serene-teal-600', 'border-serene-teal-700', 'border-serene-teal-800', 'border-serene-teal-900',
+    'text-serene-teal-50', 'text-serene-teal-100', 'text-serene-teal-150', 'text-serene-teal-200', 'text-serene-teal-250', 'text-serene-teal-300', 'text-serene-teal-400', 'text-serene-teal-500', 'text-serene-teal-600', 'text-serene-teal-700', 'text-serene-teal-800', 'text-serene-teal-900',
+    'bg-serene-teal-50', 'bg-serene-teal-100', 'bg-serene-teal-150', 'bg-serene-teal-200', 'bg-serene-teal-250', 'bg-serene-teal-300', 'bg-serene-teal-400', 'bg-serene-teal-500', 'bg-serene-teal-600', 'bg-serene-teal-700', 'bg-serene-teal-800', 'bg-serene-teal-900',
+    'border-serene-teal-50', 'border-serene-teal-100', 'border-serene-teal-150', 'border-serene-teal-200', 'border-serene-teal-250', 'border-serene-teal-300', 'border-serene-teal-400', 'border-serene-teal-500', 'border-serene-teal-600', 'border-serene-teal-700', 'border-serene-teal-800', 'border-serene-teal-900',
     'focus-within:border-serene-teal-300', 'focus-within:border-serene-teal-400', 'focus-within:border-serene-teal-500',
-    'hover:bg-serene-teal-100', 'hover:bg-serene-teal-200', 'hover:bg-serene-teal-300', 'hover:bg-serene-teal-600', 'hover:bg-serene-teal-700',
+    'hover:bg-serene-teal-100', 'hover:bg-serene-teal-150', 'hover:bg-serene-teal-200', 'hover:bg-serene-teal-250', 'hover:bg-serene-teal-300', 'hover:bg-serene-teal-600', 'hover:bg-serene-teal-700',
 
     // Aurora Palette - Clarity Blue (Perspectiva/Análisis)
-    'text-clarity-blue-50', 'text-clarity-blue-100', 'text-clarity-blue-200', 'text-clarity-blue-300', 'text-clarity-blue-400', 'text-clarity-blue-500', 'text-clarity-blue-600', 'text-clarity-blue-700', 'text-clarity-blue-800', 'text-clarity-blue-900',
-    'bg-clarity-blue-50', 'bg-clarity-blue-100', 'bg-clarity-blue-200', 'bg-clarity-blue-300', 'bg-clarity-blue-400', 'bg-clarity-blue-500', 'bg-clarity-blue-600', 'bg-clarity-blue-700', 'bg-clarity-blue-800', 'bg-clarity-blue-900',
-    'border-clarity-blue-50', 'border-clarity-blue-100', 'border-clarity-blue-200', 'border-clarity-blue-300', 'border-clarity-blue-400', 'border-clarity-blue-500', 'border-clarity-blue-600', 'border-clarity-blue-700', 'border-clarity-blue-800', 'border-clarity-blue-900',
+    'text-clarity-blue-50', 'text-clarity-blue-100', 'text-clarity-blue-150', 'text-clarity-blue-200', 'text-clarity-blue-250', 'text-clarity-blue-300', 'text-clarity-blue-400', 'text-clarity-blue-500', 'text-clarity-blue-600', 'text-clarity-blue-700', 'text-clarity-blue-800', 'text-clarity-blue-900',
+    'bg-clarity-blue-50', 'bg-clarity-blue-100', 'bg-clarity-blue-150', 'bg-clarity-blue-200', 'bg-clarity-blue-250', 'bg-clarity-blue-300', 'bg-clarity-blue-400', 'bg-clarity-blue-500', 'bg-clarity-blue-600', 'bg-clarity-blue-700', 'bg-clarity-blue-800', 'bg-clarity-blue-900',
+    'border-clarity-blue-50', 'border-clarity-blue-100', 'border-clarity-blue-150', 'border-clarity-blue-200', 'border-clarity-blue-250', 'border-clarity-blue-300', 'border-clarity-blue-400', 'border-clarity-blue-500', 'border-clarity-blue-600', 'border-clarity-blue-700', 'border-clarity-blue-800', 'border-clarity-blue-900',
     'focus-within:border-clarity-blue-300', 'focus-within:border-clarity-blue-400', 'focus-within:border-clarity-blue-500',
-    'hover:bg-clarity-blue-100', 'hover:bg-clarity-blue-200', 'hover:bg-clarity-blue-300', 'hover:bg-clarity-blue-600', 'hover:bg-clarity-blue-700',
+    'hover:bg-clarity-blue-100', 'hover:bg-clarity-blue-150', 'hover:bg-clarity-blue-200', 'hover:bg-clarity-blue-250', 'hover:bg-clarity-blue-300', 'hover:bg-clarity-blue-600', 'hover:bg-clarity-blue-700',
 
     // Aurora Palette - Academic Plum (Evidencia/Investigación)
-    'text-academic-plum-50', 'text-academic-plum-100', 'text-academic-plum-200', 'text-academic-plum-300', 'text-academic-plum-400', 'text-academic-plum-500', 'text-academic-plum-600', 'text-academic-plum-700', 'text-academic-plum-800', 'text-academic-plum-900',
-    'bg-academic-plum-50', 'bg-academic-plum-100', 'bg-academic-plum-200', 'bg-academic-plum-300', 'bg-academic-plum-400', 'bg-academic-plum-500', 'bg-academic-plum-600', 'bg-academic-plum-700', 'bg-academic-plum-800', 'bg-academic-plum-900',
-    'border-academic-plum-50', 'border-academic-plum-100', 'border-academic-plum-200', 'border-academic-plum-300', 'border-academic-plum-400', 'border-academic-plum-500', 'border-academic-plum-600', 'border-academic-plum-700', 'border-academic-plum-800', 'border-academic-plum-900',
+    'text-academic-plum-50', 'text-academic-plum-100', 'text-academic-plum-150', 'text-academic-plum-200', 'text-academic-plum-250', 'text-academic-plum-300', 'text-academic-plum-400', 'text-academic-plum-500', 'text-academic-plum-600', 'text-academic-plum-700', 'text-academic-plum-800', 'text-academic-plum-900',
+    'bg-academic-plum-50', 'bg-academic-plum-100', 'bg-academic-plum-150', 'bg-academic-plum-200', 'bg-academic-plum-250', 'bg-academic-plum-300', 'bg-academic-plum-400', 'bg-academic-plum-500', 'bg-academic-plum-600', 'bg-academic-plum-700', 'bg-academic-plum-800', 'bg-academic-plum-900',
+    'border-academic-plum-50', 'border-academic-plum-100', 'border-academic-plum-150', 'border-academic-plum-200', 'border-academic-plum-250', 'border-academic-plum-300', 'border-academic-plum-400', 'border-academic-plum-500', 'border-academic-plum-600', 'border-academic-plum-700', 'border-academic-plum-800', 'border-academic-plum-900',
     'focus-within:border-academic-plum-300', 'focus-within:border-academic-plum-400', 'focus-within:border-academic-plum-500',
-    'hover:bg-academic-plum-100', 'hover:bg-academic-plum-200', 'hover:bg-academic-plum-300', 'hover:bg-academic-plum-600', 'hover:bg-academic-plum-700',
+    'hover:bg-academic-plum-100', 'hover:bg-academic-plum-150', 'hover:bg-academic-plum-200', 'hover:bg-academic-plum-250', 'hover:bg-academic-plum-300', 'hover:bg-academic-plum-600', 'hover:bg-academic-plum-700',
 
     // Aurora Palette - Neutrals
     'text-cloud-white', 'bg-cloud-white', 'border-cloud-white',
@@ -111,10 +111,13 @@ const config: Config = {
   			'mineral-gray': '#6C757D',
   			'ash': '#E9ECEF',
   			// Aurora Palette - Serene Teal (Memoria/Documentación) #20C997
+  			// Intermediate shades (150, 250) added per research §5.1
   			'serene-teal': {
   				50: '#E6FCF5',
   				100: '#C3FAE8',
+  				150: '#B3F5DF',
   				200: '#8CF5D2',
+  				250: '#6EEDC6',
   				300: '#51EABB',
   				400: '#2DD4A7',
   				500: '#20C997',
@@ -124,10 +127,13 @@ const config: Config = {
   				900: '#0A3F2F',
   			},
   			// Aurora Palette - Clarity Blue (Perspectiva/Análisis) #0D6EFD
+  			// Intermediate shades (150, 250) added per research §5.1
   			'clarity-blue': {
   				50: '#E7F1FF',
   				100: '#C3DEFF',
+  				150: '#D3E9FF',
   				200: '#8BBFFF',
+  				250: '#A3CEFF',
   				300: '#529FFF',
   				400: '#2684FF',
   				500: '#0D6EFD',
@@ -136,24 +142,41 @@ const config: Config = {
   				800: '#063574',
   				900: '#042349',
   			},
-			// Aurora Palette - Academic Plum (Evidencia/Investigación) #6F42C1
-			'academic-plum': {
-				50: '#F4EFFC',
-				100: '#E5D9F7',
-				200: '#CBAFEF',
-				300: '#B088E8',
-				400: '#9565D4',
-				500: '#6F42C1',
-				600: '#5A359D',
-				700: '#47297A',
-				800: '#341E57',
-				900: '#221334',
-			},
+  			// Aurora Palette - Academic Plum (Evidencia/Investigación) #6F42C1
+  			// Intermediate shades (150, 250) added per research §5.1
+  			'academic-plum': {
+  				50: '#F4EFFC',
+  				100: '#E5D9F7',
+  				150: '#DDD1F3',
+  				200: '#CBAFEF',
+  				250: '#C4A7EC',
+  				300: '#B088E8',
+  				400: '#9565D4',
+  				500: '#6F42C1',
+  				600: '#5A359D',
+  				700: '#47297A',
+  				800: '#341E57',
+  				900: '#221334',
+  			},
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		// Animation duration tokens per research §1.1 micro-animations
+  		transitionDuration: {
+  			'instant': '100ms',
+  			'quick': '200ms',
+  			'normal': '300ms',
+  			'slow': '500ms',
+  		},
+  		// Easing curve tokens per research §1.1
+  		transitionTimingFunction: {
+  			'ease-standard': 'cubic-bezier(0.4, 0, 0.2, 1)',
+  			'ease-enter': 'cubic-bezier(0, 0, 0.2, 1)',
+  			'ease-exit': 'cubic-bezier(0.4, 0, 1, 1)',
+  			'ease-bounce': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
   		},
   		keyframes: {
   			'accordion-down': {
@@ -171,11 +194,16 @@ const config: Config = {
   				to: {
   					height: '0'
   				}
-  			}
+  			},
+  			'token-appear': {
+  				'0%': { opacity: '0', transform: 'translateY(2px)' },
+  				'100%': { opacity: '1', transform: 'translateY(0)' },
+  			},
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'token-appear': 'token-appear 150ms cubic-bezier(0, 0, 0.2, 1)',
   		}
   	}
   },

@@ -288,7 +288,7 @@ export function AuthGate() {
             <p className="mt-2 text-sm text-muted-foreground font-sans">Plataforma clínica con IA</p>
           </div>
 
-          <Card className="border-border/40 shadow-sm bg-card/95 backdrop-blur-sm">
+          <Card className="border-border/30 shadow-warm bg-card/95 backdrop-blur-xl rounded-2xl">
             <CardHeader className="text-center pb-2 pt-6">
               <CardDescription>Inicia sesión con tu número de teléfono</CardDescription>
             </CardHeader>
@@ -320,7 +320,7 @@ export function AuthGate() {
           <p className="mt-2 text-sm text-muted-foreground font-sans">Plataforma clínica con IA</p>
         </div>
 
-        <Card className="border-border/40 shadow-sm bg-card/95 backdrop-blur-sm">
+        <Card className="border-border/30 shadow-warm bg-card/95 backdrop-blur-xl rounded-2xl">
           <CardHeader className="text-center pb-2 pt-6">
             <CardDescription className="text-muted-foreground">
               {isLogin

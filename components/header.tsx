@@ -104,7 +104,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId, psychologistId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-3.5 flex items-center justify-between z-50 border-b border-border/40 backdrop-blur-md bg-background/95" role="banner">
+    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-border/30 backdrop-blur-xl bg-background/90 shadow-warm-sm" role="banner">
       <div className="relative flex items-center gap-3 md:gap-4 flex-1 min-w-0">
         <Button
           variant="ghost"
@@ -116,7 +116,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
           <ListIcon className="h-[1.125rem] w-[1.125rem]" weight="bold" />
         </Button>
         
-        <h1 className="font-serif text-lg md:text-xl tracking-tight text-foreground/85 flex-shrink-0">
+        <h1 className="font-serif text-lg md:text-xl tracking-tight text-foreground/90 flex-shrink-0">
           Aurora
         </h1>
         

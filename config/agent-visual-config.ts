@@ -33,7 +33,7 @@ const agentVisuals = {
         typingDotColor: 'bg-clarity-blue-500 dark:bg-clarity-blue-400',
         button: {
             bg: 'bg-clarity-blue-100 dark:bg-clarity-blue-700/50',
-            hoverBg: 'hover:bg-clarity-blue-200 dark:hover:bg-clarity-blue-600/60',
+            hoverBg: 'hover:bg-clarity-blue-150 dark:hover:bg-clarity-blue-600/60',
             text: 'text-clarity-blue-900 dark:text-clarity-blue-100',
         },
         ghostButton: {
@@ -54,7 +54,7 @@ const agentVisuals = {
         typingDotColor: 'bg-serene-teal-500 dark:bg-serene-teal-400',
         button: {
             bg: 'bg-serene-teal-100 dark:bg-serene-teal-700/50',
-            hoverBg: 'hover:bg-serene-teal-200 dark:hover:bg-serene-teal-600/60',
+            hoverBg: 'hover:bg-serene-teal-150 dark:hover:bg-serene-teal-600/60',
             text: 'text-serene-teal-900 dark:text-serene-teal-100',
         },
         ghostButton: {
@@ -75,7 +75,7 @@ const agentVisuals = {
         typingDotColor: 'bg-academic-plum-500 dark:bg-academic-plum-400',
         button: {
             bg: 'bg-academic-plum-100 dark:bg-academic-plum-700/50',
-            hoverBg: 'hover:bg-academic-plum-200 dark:hover:bg-academic-plum-600/60',
+            hoverBg: 'hover:bg-academic-plum-150 dark:hover:bg-academic-plum-600/60',
             text: 'text-academic-plum-900 dark:text-academic-plum-100',
         },
         ghostButton: {

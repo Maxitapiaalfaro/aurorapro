@@ -1601,9 +1601,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               )}
             </AnimatePresence>
             <div className={cn(
-                "rounded-2xl border bg-card/95 dark:bg-card/95 backdrop-blur-md transition-all shadow-sm p-1",
-                "border-border/30",
-                "focus-within:border-border/50"
+                "rounded-2xl border bg-card/95 dark:bg-card/95 backdrop-blur-xl transition-all shadow-warm-sm p-1",
+                "border-border/20",
+                "focus-within:border-border/40 focus-within:shadow-warm"
               )}>
               {/* Text Input Section */}
               <div className="relative">
