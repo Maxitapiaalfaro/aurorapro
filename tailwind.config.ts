@@ -131,9 +131,9 @@ const config: Config = {
   			'clarity-blue': {
   				50: '#E7F1FF',
   				100: '#C3DEFF',
-  				150: '#D3E9FF',
+  				150: '#A7CFFF',
   				200: '#8BBFFF',
-  				250: '#A3CEFF',
+  				250: '#6EAFFF',
   				300: '#529FFF',
   				400: '#2684FF',
   				500: '#0D6EFD',
@@ -147,9 +147,9 @@ const config: Config = {
   			'academic-plum': {
   				50: '#F4EFFC',
   				100: '#E5D9F7',
-  				150: '#DDD1F3',
+  				150: '#D8C4F3',
   				200: '#CBAFEF',
-  				250: '#C4A7EC',
+  				250: '#BD9CEB',
   				300: '#B088E8',
   				400: '#9565D4',
   				500: '#6F42C1',

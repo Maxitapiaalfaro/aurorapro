@@ -59,11 +59,11 @@ export const MessageBubble = React.memo(
       )}
 
       <div className={cn("max-w-[75%] space-y-1.5", isUser && "items-end")}>
-        {!isUser && <div className={cn("text-xs font-medium tracking-wide px-1", config.textColor)} aria-label={`Agente: ${config.name}`}>{config.name}</div>}
+        {!isUser && <div className={cn("text-xs font-medium px-1", config.textColor)} aria-label={`Agente: ${config.name}`}>{config.name}</div>}
 
         <Card
           className={cn(
-            "p-4 transition-colors duration-quick ring-1 ring-transparent",
+            "p-4 shadow-sm transition-colors duration-quick ring-1 ring-transparent",
             isUser
               ? "text-[hsl(var(--user-bubble-text))] bg-[hsl(var(--user-bubble-bg))] border-0 shadow-warm-sm rounded-2xl rounded-tr-md"
               : cn(config.bgColor, "rounded-2xl rounded-tl-md"),
