@@ -876,7 +876,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
         <main className="flex-1 flex overflow-hidden">
           <WorkspaceLayout
             isMobile={isMobile}
-            hasCanvasContent={!!(documentPreview || documentReady) || (!!patient && isFichaOpen)}
+            hasCanvasContent={!!((documentPreview || documentReady) && isDocumentPanelOpen) || (!!patient && isFichaOpen)}
             chatPanel={
               <ChatInterface
                 activeAgent={systemState.activeAgent}
@@ -923,6 +923,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
                 onCloseDocumentPanel={closeDocumentPanel}
                 onOpenDocumentPanel={openDocumentPanel}
                 onSaveDocumentEdit={saveDocumentEdit}
+                activeDocument={activeDocument}
                 patient={patient ?? null}
                 isFichaOpen={isFichaOpen}
                 onFichaOpenChange={setIsFichaOpen}

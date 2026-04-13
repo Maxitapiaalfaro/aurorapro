@@ -13,13 +13,14 @@
  * 3. Empty state (default — encourages starting a conversation)
  */
 
-import React, { memo } from 'react'
+import React, { memo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Stethoscope, Sparkles, MessageSquare } from 'lucide-react'
+import { FileText, Stethoscope, Sparkles, MessageSquare, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { DocumentPreviewPanel } from '@/components/document-preview-panel'
 import FichaClinicaPanel from '@/components/patient-library/FichaClinicaPanel'
 import { cn } from '@/lib/utils'
-import type { DocumentPreviewEvent, DocumentReadyEvent, FichaClinicaState, PatientRecord } from '@/types/clinical-types'
+import type { ClinicalDocument, DocumentPreviewEvent, DocumentReadyEvent, FichaClinicaState, PatientRecord } from '@/types/clinical-types'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,9 +32,8 @@ export interface ClinicalCanvasProps {
   /** Document ready event — null while still generating */
   documentReady: DocumentReadyEvent | null
   /**
-   * Whether the document panel is visible.
-   * Currently the Canvas renders DocumentPreviewPanel when content exists (isOpen is always true),
-   * but this prop is retained for future use (e.g. user-toggled collapse within the canvas).
+   * Whether the document panel is visible (user-controlled).
+   * When false, the panel is hidden even if document data exists.
    */
   isDocumentPanelOpen: boolean
   /** Close the document panel */
@@ -42,6 +42,8 @@ export interface ClinicalCanvasProps {
   onOpenDocumentPanel: () => void
   /** Callback to save user edits to the document markdown */
   onSaveDocumentEdit: (documentId: string, newMarkdown: string) => Promise<void>
+  /** The most recently generated or restored document (survives panel close) */
+  activeDocument: ClinicalDocument | null
 
   /** Patient context for ficha panel */
   patient: PatientRecord | null
@@ -74,7 +76,13 @@ export interface ClinicalCanvasProps {
 // Empty State
 // ---------------------------------------------------------------------------
 
-const CanvasEmptyState = memo(function CanvasEmptyState() {
+const CanvasEmptyState = memo(function CanvasEmptyState({
+  activeDocument,
+  onReopen,
+}: {
+  activeDocument: ClinicalDocument | null
+  onReopen: () => void
+}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-12">
       <motion.div
@@ -83,38 +91,68 @@ const CanvasEmptyState = memo(function CanvasEmptyState() {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="max-w-md"
       >
-        <div className="relative mx-auto mb-6 w-16 h-16">
-          <div className="absolute inset-0 bg-primary/10 rounded-2xl rotate-6" />
-          <div className="absolute inset-0 bg-primary/5 rounded-2xl -rotate-3" />
-          <div className="relative flex items-center justify-center w-full h-full bg-card border border-border/60 rounded-2xl shadow-sm">
-            <Sparkles className="h-7 w-7 text-primary/70" />
-          </div>
-        </div>
+        {activeDocument ? (
+          <>
+            <div className="relative mx-auto mb-6 w-16 h-16">
+              <div className="absolute inset-0 bg-primary/10 rounded-2xl rotate-6" />
+              <div className="absolute inset-0 bg-primary/5 rounded-2xl -rotate-3" />
+              <div className="relative flex items-center justify-center w-full h-full bg-card border border-border/60 rounded-2xl shadow-sm">
+                <FileText className="h-7 w-7 text-primary/70" />
+              </div>
+            </div>
 
-        <h3 className="text-lg font-medium text-foreground/90 mb-2 font-sans">
-          Clinical Canvas
-        </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed font-sans">
-          Aquí aparecerán los documentos, fichas clínicas y contenido generado por los agentes de IA durante tu conversación.
-        </p>
+            <h3 className="text-lg font-medium text-foreground/90 mb-2 font-sans">
+              Documento disponible
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed font-sans mb-4">
+              {activeDocument.documentType.toUpperCase()} &middot; {activeDocument.markdown.length} caracteres
+            </p>
 
-        <div className="mt-8 grid gap-3 text-left">
-          <FeatureHint
-            icon={<FileText className="h-4 w-4" />}
-            title="Documentos clínicos"
-            description="Generados automáticamente durante la conversación"
-          />
-          <FeatureHint
-            icon={<Stethoscope className="h-4 w-4" />}
-            title="Fichas clínicas"
-            description="Resúmenes estructurados del paciente"
-          />
-          <FeatureHint
-            icon={<MessageSquare className="h-4 w-4" />}
-            title="Análisis en tiempo real"
-            description="Resultados que se actualizan con cada interacción"
-          />
-        </div>
+            <Button
+              variant="outline"
+              onClick={onReopen}
+              className="gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              Ver documento
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="relative mx-auto mb-6 w-16 h-16">
+              <div className="absolute inset-0 bg-primary/10 rounded-2xl rotate-6" />
+              <div className="absolute inset-0 bg-primary/5 rounded-2xl -rotate-3" />
+              <div className="relative flex items-center justify-center w-full h-full bg-card border border-border/60 rounded-2xl shadow-sm">
+                <Sparkles className="h-7 w-7 text-primary/70" />
+              </div>
+            </div>
+
+            <h3 className="text-lg font-medium text-foreground/90 mb-2 font-sans">
+              Clinical Canvas
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed font-sans">
+              Aquí aparecerán los documentos, fichas clínicas y contenido generado por los agentes de IA durante tu conversación.
+            </p>
+
+            <div className="mt-8 grid gap-3 text-left">
+              <FeatureHint
+                icon={<FileText className="h-4 w-4" />}
+                title="Documentos clínicos"
+                description="Generados automáticamente durante la conversación"
+              />
+              <FeatureHint
+                icon={<Stethoscope className="h-4 w-4" />}
+                title="Fichas clínicas"
+                description="Resúmenes estructurados del paciente"
+              />
+              <FeatureHint
+                icon={<MessageSquare className="h-4 w-4" />}
+                title="Análisis en tiempo real"
+                description="Resultados que se actualizan con cada interacción"
+              />
+            </div>
+          </>
+        )}
       </motion.div>
     </div>
   )
@@ -143,6 +181,7 @@ export const ClinicalCanvas = memo(function ClinicalCanvas({
   onCloseDocumentPanel,
   onOpenDocumentPanel,
   onSaveDocumentEdit,
+  activeDocument,
   patient,
   isFichaOpen,
   onFichaOpenChange,
@@ -156,9 +195,16 @@ export const ClinicalCanvas = memo(function ClinicalCanvas({
   fichaInitialTab,
   className,
 }: ClinicalCanvasProps) {
-  const hasDocumentContent = !!(documentPreview || documentReady)
+  // Document panel shows only when data exists AND user hasn't closed it.
+  // isDocumentPanelOpen is auto-set to true by the SSE callback when a new doc starts streaming.
+  const hasDocumentContent = !!(documentPreview || documentReady) && isDocumentPanelOpen
   const hasFichaContent = !!(patient && isFichaOpen)
   const hasContent = hasDocumentContent || hasFichaContent
+
+  // Re-open: restore documentReady from activeDocument so the panel can render it
+  const handleReopenDocument = useCallback(() => {
+    onOpenDocumentPanel()
+  }, [onOpenDocumentPanel])
 
   return (
     <div className={cn('flex flex-col h-full overflow-hidden bg-background', className)}>
@@ -175,7 +221,7 @@ export const ClinicalCanvas = memo(function ClinicalCanvas({
             <DocumentPreviewPanel
               previewEvent={documentPreview}
               readyEvent={documentReady}
-              isOpen={true}
+              isOpen={isDocumentPanelOpen}
               onClose={onCloseDocumentPanel}
               onSaveEdit={onSaveDocumentEdit}
               className="border-l-0 w-full md:w-full lg:w-full"
@@ -213,7 +259,7 @@ export const ClinicalCanvas = memo(function ClinicalCanvas({
             transition={{ duration: 0.3 }}
             className="flex-1 flex flex-col h-full"
           >
-            <CanvasEmptyState />
+            <CanvasEmptyState activeDocument={activeDocument} onReopen={handleReopenDocument} />
           </motion.div>
         )}
       </AnimatePresence>

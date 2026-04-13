@@ -546,9 +546,10 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
         }))
       }
 
-      // Reset document preview state for the new message
+      // Reset document streaming state for the new message.
+      // Keep documentReady so the user can still see the previous document.
+      // documentReady is only cleared when a *new* document starts streaming (onDocumentPreview).
       setDocumentPreview(null)
-      setDocumentReady(null)
       // Don't auto-close panel — user may want to keep viewing previous doc
 
       // 💾 Ensure session doc exists in Firestore (fire-and-forget, not on critical path)
@@ -943,6 +944,9 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               },
               onDocumentPreview: (preview: DocumentPreviewEvent) => {
                 logger.info('📄 Document preview:', preview.section.id, `${(preview.overallProgress * 100).toFixed(0)}%`)
+                // Clear previous ready state when a new document starts streaming
+                // so isGenerating correctly returns true for the new document
+                setDocumentReady(null)
                 setDocumentPreview(preview)
                 // Auto-open the panel on first preview event
                 setIsDocumentPanelOpen(true)
