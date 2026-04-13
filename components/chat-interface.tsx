@@ -1022,17 +1022,16 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             // Only animate messages that are new (not already known from a previous render)
             const isNewMessage = !knownMessageIdsRef.current.has(message.id)
             if (isNewMessage) knownMessageIdsRef.current.add(message.id)
-            
-            return (
-              <motion.div
-                key={message.id}
-                initial={isNewMessage ? { opacity: 0, y: 8 } : false}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                className={cn(
-                "flex items-start justify-start",
-                isFirstMessage ? "pt-6" : messageSpacingClass
-              )}>
+
+            const wrapperClassName = cn(
+              "flex items-start justify-start",
+              isFirstMessage ? "pt-6" : messageSpacingClass
+            )
+
+            // For known messages (e.g. the one transitioning from streaming),
+            // use a plain div to avoid any framer-motion mount overhead or flash.
+            // Only genuinely new messages get the entrance animation.
+            const messageCard = (
                 <div
                   className={cn(
                     "chat-message-bubble relative rounded-lg overflow-hidden w-full min-w-0",
@@ -1223,8 +1222,27 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     </div>
                   )}
                 </div>
-              </motion.div>
-            );
+            )
+
+            if (isNewMessage) {
+              return (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  className={wrapperClassName}
+                >
+                  {messageCard}
+                </motion.div>
+              )
+            }
+
+            return (
+              <div key={message.id} className={wrapperClassName}>
+                {messageCard}
+              </div>
+            )
           })}
 
           {/* Streaming Response - aparece inmediatamente cuando comienza isStreaming */}

@@ -1017,7 +1017,13 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
               },
               onComplete: () => {
                 logger.info('✅ Stream SSE completado')
-                // 🛠️ FIX: Asegurar que isGenerating quede en false al cerrar el stream
+                // 🛠️ FIX: Only set isComplete=true and stop bullet generation.
+                // Do NOT change processingStatus.phase to 'complete' here — this
+                // callback fires in a separate microtask (before the streaming
+                // cleanup code in chat-interface), so React may render an
+                // intermediate frame where the transparency flow dims to 0.6 opacity
+                // ("grayed-out" blink). The phase is reset to 'idle' later in
+                // addStreamingResponseToHistory, batched with setIsStreaming(false).
                 setSystemState(prev => ({
                   ...prev,
                   reasoningBullets: {
@@ -1026,7 +1032,6 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
                   },
                   processingStatus: {
                     ...prev.processingStatus,
-                    phase: 'complete',
                     isComplete: true
                   }
                 }))
@@ -1208,11 +1213,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
 
     // 🔧 CRITICAL: Update React state FIRST so the AI message appears in the UI immediately.
     // Persistence to IndexedDB/localStorage is best-effort and must not block the UI update.
+    // Also reset processingStatus to idle — this is batched with setIsStreaming(false) in the
+    // caller (chat-interface.tsx), so the streaming bubble unmounts cleanly without showing
+    // a "grayed-out" intermediate frame from the 'complete' phase.
     setSystemState(prev => ({
       ...prev,
       history: [...prev.history, aiMessage],
       activeAgent: agent,
-      isLoading: false
+      isLoading: false,
+      processingStatus: initialProcessingStatus
     }))
 
     // Limpiar bullets temporales después de asociarlos
