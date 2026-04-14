@@ -105,8 +105,8 @@ export interface ClinicalMemoryV2 {
 
   relevanceScore: number
 
-  /** Structured ontology metadata (Pillar 1). Null only on legacy docs pre-migration. */
-  ontology: ClinicalOntologyMetadata
+  /** Structured ontology metadata (Pillar 1). Null on legacy docs pre-migration. */
+  ontology: ClinicalOntologyMetadata | null
 
   /**
    * 768-dimensional embedding vector from text-embedding-004.

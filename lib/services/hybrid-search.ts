@@ -45,6 +45,9 @@ const DEFAULT_TOP_K = 10
 /** Distance field injected by Firestore's findNearest. */
 const DISTANCE_RESULT_FIELD = '_cosineDistance'
 
+/** Maximum cosine distance (1.0 = completely dissimilar). Used as fallback. */
+const MAX_COSINE_DISTANCE = 1.0
+
 // ---------------------------------------------------------------------------
 // Collection helper
 // ---------------------------------------------------------------------------
@@ -101,7 +104,7 @@ async function vectorSearch(
     const data = doc.data()
     hits.push({
       memoryId: data.memoryId ?? doc.id,
-      distance: data[DISTANCE_RESULT_FIELD] ?? 1.0,
+      distance: data[DISTANCE_RESULT_FIELD] ?? MAX_COSINE_DISTANCE,
       data,
     })
   }

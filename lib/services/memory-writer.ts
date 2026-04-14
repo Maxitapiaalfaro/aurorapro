@@ -38,6 +38,11 @@ const logger = createLogger('storage')
 /** Firestore batch writes are limited to 500 operations per commit. */
 const FIRESTORE_BATCH_LIMIT = 500
 
+/** Edge weight must be in [0, 1]. Clamps out-of-range values. */
+function clampWeight(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
 // ---------------------------------------------------------------------------
 // Collection reference helpers
 // ---------------------------------------------------------------------------
@@ -339,7 +344,7 @@ function buildEdgeDocument(
     sourceNodeId: input.sourceNodeId,
     targetNodeId: input.targetNodeId,
     relationType: input.relationType,
-    weight: Math.min(1, Math.max(0, input.weight)),
+    weight: clampWeight(input.weight),
     evidence: {
       sourceMemoryIds: FieldValue.arrayUnion(sourceMemoryId),
       sourceSessionIds: FieldValue.arrayUnion(...sourceSessionIds),
