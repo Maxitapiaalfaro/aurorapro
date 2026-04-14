@@ -15,6 +15,8 @@ import {
   loadSessionDocuments,
   getActivePatientMemories,
   addMessage,
+  updateExecutionStepResult,
+  updateSessionMeta,
 } from '@/lib/firestore-client-storage'
 import { getSSEClient } from '@/lib/sse-client'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
@@ -364,7 +366,11 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       isLoading: false
     }))
     logger.info('🚀 HopeAI Client System initialized (client-side storage + SSE)')
-  }, []) // Sin dependencias para evitar re-inicializaciones
+
+    // FIX #1: Auto-restore last session on page load to recover activeDocument state
+    // This enables seamless canvas state recovery after page reload
+    attemptSessionRestoration()
+  }, [attemptSessionRestoration]) // Added dependency for session restoration
 
   // Estado para prevenir creación múltiple simultánea
   const [isCreatingSession, setIsCreatingSession] = useState(false)
@@ -1254,7 +1260,15 @@ export function useHopeAISystem(): UseHopeAISystemReturn {
       ...prev,
       sessionMeta
     }))
-  }, [])
+
+    // FIX #3: Persist sessionMeta immediately to prevent agents from failing due to missing patientId
+    if (psychologistId && systemStateRef.current.sessionId && sessionMeta) {
+      const patientId = resolvePatientId({ sessionMeta } as Partial<ChatState>)
+      updateSessionMeta(psychologistId, patientId, systemStateRef.current.sessionId, sessionMeta).catch(err =>
+        logger.warn('⚠️ Failed to persist sessionMeta (non-blocking):', err)
+      )
+    }
+  }, [psychologistId])
 
   // Funciones para manejar bullets progresivos
   const clearReasoningBullets = useCallback((clearAll = false) => {

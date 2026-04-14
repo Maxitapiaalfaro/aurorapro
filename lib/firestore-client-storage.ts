@@ -667,6 +667,55 @@ export async function loadClinicalDocument(
   return reviveDates(snap.data()) as ClinicalDocument
 }
 
+/**
+ * FIX #2A: Update execution step result for a specific message.
+ * Persists sourcesFound/sourcesValidated counters so they survive page reload.
+ */
+export async function updateExecutionStepResult(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string,
+  messageId: string,
+  stepId: string,
+  result: { sourcesFound?: number; sourcesValidated?: number }
+): Promise<void> {
+  const ref = messageRef(psychologistId, patientId, sessionId, messageId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return
+
+  const message = reviveDates(snap.data()) as ChatMessage
+  if (!message.executionTimeline) return
+
+  // Update the specific step's result
+  const updatedSteps = message.executionTimeline.steps.map(step =>
+    step.id === stepId ? { ...step, result: { ...step.result, ...result } } : step
+  )
+
+  await setDoc(ref, {
+    executionTimeline: {
+      ...message.executionTimeline,
+      steps: updatedSteps
+    }
+  }, { merge: true })
+}
+
+/**
+ * FIX #3: Update session metadata (especially patientId) immediately.
+ * Prevents agents from failing to retrieve data because patientId isn't synced.
+ */
+export async function updateSessionMeta(
+  psychologistId: string,
+  patientId: string,
+  sessionId: string,
+  sessionMeta: any
+): Promise<void> {
+  const ref = sessionRef(psychologistId, patientId, sessionId)
+  await setDoc(ref, {
+    sessionMeta,
+    'metadata.lastUpdated': Timestamp.now()
+  }, { merge: true })
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Clinical Memories (client-side read for local-first ranking)
 // ────────────────────────────────────────────────────────────────────────────
