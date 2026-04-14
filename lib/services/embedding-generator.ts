@@ -4,12 +4,19 @@ import 'server-only'
  * Embedding Generator — Vector + Content Hash (Pipeline Step 2)
  *
  * Generates a 768-dimensional embedding from clinical text using
- * Google's text-embedding-004 model, and computes a SHA-256 hash
- * of the normalized content for cache-invalidation purposes.
+ * Google's gemini-embedding-001 model (GA), and computes a SHA-256
+ * hash of the normalized content for cache-invalidation purposes.
+ *
+ * API reference (verified 2025-04-14):
+ *   ai.models.embedContent({ model, contents, config })
+ *   → EmbedContentResponse { embeddings: ContentEmbedding[] }
+ *   → ContentEmbedding { values: number[] }
+ *   Config accepts: outputDimensionality, taskType, abortSignal.
  *
  * Guarantees:
  * - AbortController timeout: 3 000 ms max per embedding call.
  * - Deterministic hashing: content is lowercased and trimmed before SHA-256.
+ * - L2 normalization: applied for sub-3072 dimensions per Google's guidance.
  * - Graceful fallback: returns null on any error (never blocks persistence).
  *
  * @module lib/services/embedding-generator
@@ -24,11 +31,21 @@ const logger = createLogger('agent')
 /** Maximum time (ms) allowed for the embedding API call. */
 const EMBEDDING_TIMEOUT_MS = 3_000
 
-/** Model for text embeddings — 768 dimensions by default. */
-const EMBEDDING_MODEL = 'text-embedding-004'
+/**
+ * Model for text embeddings.
+ * gemini-embedding-001 is the GA text-only embedding model.
+ * Default output: 3072-D (MRL-trained, truncatable to 768/1536).
+ */
+const EMBEDDING_MODEL = 'gemini-embedding-001'
 
-/** Expected dimensionality of the output vector. */
+/** Requested dimensionality of the output vector (768 recommended for storage). */
 const EMBEDDING_DIMENSIONS = 768
+
+/**
+ * Task type hint for the embedding model.
+ * RETRIEVAL_DOCUMENT optimizes embeddings for document storage + cosine KNN.
+ */
+const EMBEDDING_TASK_TYPE = 'RETRIEVAL_DOCUMENT'
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -36,7 +53,8 @@ const EMBEDDING_DIMENSIONS = 768
 
 /**
  * Result of embedding generation.
- * `embedding` is a 768-element number array; `contentHash` is the SHA-256 hex digest.
+ * `embedding` is a 768-element L2-normalized number array;
+ * `contentHash` is the SHA-256 hex digest.
  */
 export interface EmbeddingResult {
   embedding: number[]
@@ -68,6 +86,32 @@ function computeContentHash(normalizedContent: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// L2 normalization (required for sub-3072 MRL truncation)
+// ---------------------------------------------------------------------------
+
+/**
+ * L2-normalizes a vector in-place.
+ *
+ * Per Google's official guidance, gemini-embedding-001 outputs are only
+ * unit-normed at the native 3072-D resolution. For reduced dimensions
+ * (768, 1536), the truncated prefix must be re-normalized so cosine
+ * distance calculations remain accurate.
+ */
+function l2Normalize(vector: number[]): number[] {
+  let sumSquares = 0
+  for (let i = 0; i < vector.length; i++) {
+    sumSquares += vector[i] * vector[i]
+  }
+  if (sumSquares === 0) return vector
+  const norm = Math.sqrt(sumSquares)
+  const result = new Array<number>(vector.length)
+  for (let i = 0; i < vector.length; i++) {
+    result[i] = vector[i] / norm
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -77,8 +121,9 @@ function computeContentHash(normalizedContent: string): string {
  * Implements Pipeline Step 2 (Vectorization):
  * 1. Normalize the input content (trim + lowercase).
  * 2. Compute SHA-256 hex digest of the normalized string.
- * 3. Call text-embedding-004 with an AbortController timeout of 3 s.
- * 4. Validate the returned vector dimensionality.
+ * 3. Call gemini-embedding-001 with an AbortController timeout of 3 s.
+ * 4. L2-normalize the truncated vector (required for sub-3072 dimensions).
+ * 5. Validate the returned vector dimensionality.
  *
  * On any error (timeout, API failure, dimension mismatch) returns null
  * so the memory can still be saved as a flat document without embedding.
@@ -106,6 +151,7 @@ export async function generateMemoryEmbedding(
       contents: normalized,
       config: {
         outputDimensionality: EMBEDDING_DIMENSIONS,
+        taskType: EMBEDDING_TASK_TYPE,
         abortSignal: controller.signal,
       },
     })
@@ -113,13 +159,15 @@ export async function generateMemoryEmbedding(
     clearTimeout(timeoutId)
 
     // Extract embedding values from the response
+    // SDK returns: response.embeddings[0].values (number[])
     const embeddingData = response.embeddings?.[0]
     if (!embeddingData?.values || embeddingData.values.length === 0) {
       logger.warn('Embedding response missing values')
       return null
     }
 
-    const embedding = embeddingData.values
+    // L2-normalize the truncated vector (768-D < native 3072-D)
+    const embedding = l2Normalize(embeddingData.values)
 
     // Validate dimensionality
     if (embedding.length !== EMBEDDING_DIMENSIONS) {
@@ -127,7 +175,7 @@ export async function generateMemoryEmbedding(
         expected: EMBEDDING_DIMENSIONS,
         received: embedding.length,
       })
-      // Accept truncated/padded embeddings but log the mismatch
+      // Accept non-matching dimensions but log the discrepancy
     }
 
     logger.debug('Embedding generated', {
