@@ -109,7 +109,7 @@ export interface ClinicalMemoryV2 {
   ontology: ClinicalOntologyMetadata | null
 
   /**
-   * 768-dimensional embedding vector from text-embedding-004.
+   * 768-dimensional embedding vector from gemini-embedding-001.
    * Stored as Firestore VectorValue via FieldValue.vector().
    * Undefined when embedding generation is pending (async pipeline).
    */

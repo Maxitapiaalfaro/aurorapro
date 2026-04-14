@@ -196,7 +196,7 @@ function fuseRRF(
  *
  * @param psychologistId - UID of the psychologist (Firestore security scope).
  * @param patientId      - Patient document ID.
- * @param queryVector    - 768-D embedding of the search query (from text-embedding-004).
+ * @param queryVector    - 768-D embedding of the search query (from gemini-embedding-001).
  * @param keywordResults - Pre-ranked keyword search results from the existing scorer.
  * @param topK           - Number of top results to return (default: 10).
  * @returns Top-K memories ranked by fused RRF score.
