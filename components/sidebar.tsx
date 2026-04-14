@@ -39,7 +39,7 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import type { AgentType, PatientRecord } from "@/types/clinical-types"
 import { getAgentVisualConfig } from "@/config/agent-visual-config"
-import { PatientLibrarySection } from "@/components/patient-library-section"
+// PatientLibrarySection moved to ClinicalCasesWorkhub (main area)
 
 
 import { createLogger } from '@/lib/logger'
@@ -506,19 +506,12 @@ export function Sidebar({ isOpen, onToggle, activeTab: activeTabProp, onActiveTa
               </div>
             </div>
           ) : (
-            <PatientLibrarySection 
-              isOpen={isOpen}
-              onStartConversation={(patient) => {
-                onPatientConversationStart?.(patient)
-              }}
-              onClearPatientContext={onClearPatientContext}
-              clearSelectionTrigger={clearPatientSelectionTrigger}
-              onPatientSelect={(patient) => {
-                // Handle patient selection if needed
-              }}
-              onConversationSelect={onConversationSelect}
-              onDialogOpenChange={setHasOpenPatientDialog}
-            />
+            /* Patient list is now rendered in the main area as ClinicalCasesWorkhub */
+            <div className="flex-1 flex items-center justify-center p-4">
+              <p className="text-xs text-muted-foreground/40 text-center font-sans">
+                Los casos clínicos se muestran en el panel principal.
+              </p>
+            </div>
           )}
         </div>
 

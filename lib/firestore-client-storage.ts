@@ -695,3 +695,33 @@ export async function getActivePatientMemories(
     } as ClinicalMemory
   })
 }
+
+/**
+ * Load all clinical documents across all sessions for a patient.
+ * Queries each session's documents subcollection and merges results.
+ * Path: psychologists/{uid}/patients/{pid}/sessions/{sid}/documents/*
+ */
+export async function loadPatientDocumentsAcrossSessions(
+  psychologistId: string,
+  patientId: string,
+): Promise<ClinicalDocument[]> {
+  // 1. Get all sessions for this patient
+  const result = await listUserSessions(psychologistId, { pageSize: 200 })
+  const patientSessions = (result.items || []).filter(
+    (s) => s.patientId === patientId
+  )
+
+  if (patientSessions.length === 0) return []
+
+  // 2. Query documents from each session in parallel
+  const documentArrays = await Promise.all(
+    patientSessions.map((session) =>
+      loadSessionDocuments(psychologistId, patientId, session.sessionId).catch(() => [] as ClinicalDocument[])
+    )
+  )
+
+  // 3. Flatten and sort by createdAt desc
+  return documentArrays
+    .flat()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}

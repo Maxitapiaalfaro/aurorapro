@@ -307,6 +307,13 @@ export async function POST(request: NextRequest) {
                       type: 'document_ready',
                       document: chunk.metadata.document,
                     })
+                  } else if (chunk.metadata.type === 'file_warning') {
+                    // ⚠️ File resolution warning — files could not be loaded
+                    logger.warn(`⚠️ [API /send-message] File warning: ${chunk.metadata.message}`)
+                    sendSSE({
+                      type: 'file_warning',
+                      message: chunk.metadata.message,
+                    })
                   }
                 }
 

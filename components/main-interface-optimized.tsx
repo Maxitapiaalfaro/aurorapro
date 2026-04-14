@@ -5,7 +5,8 @@ import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
-import { X } from "lucide-react"
+import { X, MessageSquare, ClipboardList } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { TrialBanner } from "@/components/trial-banner"
 
 import { WorkspaceLayout } from "@/components/workspace-layout"
@@ -27,6 +28,7 @@ import { getFichasByPatient, saveFicha, deleteFicha } from "@/lib/firestore-clie
 import { useAuth } from "@/providers/auth-provider"
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import { AppSkeleton } from '@/components/app-skeleton'
+import { ClinicalCasesWorkhub } from '@/components/clinical-cases/clinical-cases-workhub'
 
 
 import { createLogger } from '@/lib/logger'
@@ -875,7 +877,13 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
           />
         )}
 
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex overflow-hidden min-h-0">
+          {sidebarActiveTab === 'patients' ? (
+            <ClinicalCasesWorkhub
+              onConversationSelect={handleConversationSelect}
+              onSwitchToChat={() => setSidebarActiveTab('conversations')}
+            />
+          ) : (
           <WorkspaceLayout
             isMobile={isMobile}
             hasCanvasContent={!!((documentPreview || documentReady) && isDocumentPanelOpen) || (!!patient && isFichaOpen)}
@@ -900,8 +908,7 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
                 onOpenFichaClinica={patient ? handleOpenFichaFromChat : undefined}
                 onOpenPatientLibrary={() => {
                   if (isMobile) {
-                    setMobileNavInitialTab('patients')
-                    setMobileNavOpen(true)
+                    setSidebarActiveTab('patients')
                   } else {
                     setSidebarActiveTab('patients')
                     if (!sidebarOpen) {
@@ -940,7 +947,38 @@ export function MainInterfaceOptimized({ showDebugElements = true }: { showDebug
               />
             }
           />
+          )}
         </main>
+
+        {/* Mobile bottom tab bar for switching between chat and cases */}
+        {isMobile && (
+          <div className="flex-shrink-0 border-t border-border/30 bg-background flex h-12">
+            <button
+              onClick={() => setSidebarActiveTab('conversations')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 text-xs font-sans transition-colors",
+                sidebarActiveTab === 'conversations'
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground"
+              )}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Chat
+            </button>
+            <button
+              onClick={() => setSidebarActiveTab('patients')}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 text-xs font-sans transition-colors",
+                sidebarActiveTab === 'patients'
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground"
+              )}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Casos
+            </button>
+          </div>
+        )}
       </div>
 
       {shouldShowInvitation && (

@@ -804,6 +804,20 @@ export class HopeAISystem {
       }
     }
 
+    // Detect when files were expected but none were resolved
+    const filesWereExpected = (clientFileMetadata && clientFileMetadata.length > 0) ||
+      (clientFileReferences && clientFileReferences.length > 0) ||
+      currentState?.history?.some((m: any) => m.fileReferences?.length > 0)
+    const fileResolutionFailed = filesWereExpected && (!resolvedSessionFiles || resolvedSessionFiles.length === 0)
+    if (fileResolutionFailed) {
+      sessionLogger.warn('⚠️ FILE RESOLUTION FAILED: Files were expected but none could be resolved. The AI will not see file content.', {
+        expectedFromMetadata: clientFileMetadata?.length || 0,
+        expectedFromReferences: clientFileReferences?.length || 0,
+        historyHasFileRefs: currentState?.history?.some((m: any) => m.fileReferences?.length > 0) || false,
+        resolvedCount: resolvedSessionFiles?.length || 0
+      })
+    }
+
     try {
       emitStep('build_context', 'Preparando contexto de conversación…', 'active')
 
@@ -950,6 +964,7 @@ export class HopeAISystem {
       // Build enriched context for the unified agent (no routing needed)
       const enrichedAgentContext = {
         sessionFiles: resolvedSessionFiles || [],
+        fileResolutionFailed,
         patient_reference: patientReference,
         patient_summary: patientSummary,
         operationalMetadata: operationalMetadata,

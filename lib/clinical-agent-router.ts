@@ -97,6 +97,9 @@ export class ClinicalAgentRouter {
 
       if (cachedContentName) {
         chatConfig.cachedContent = cachedContentName
+        // CachedContent is mutually exclusive with systemInstruction, tools, and tool_config
+        // All of these must live inside the cache, not in the GenerateContent request
+        delete chatConfig.tools
         logger.info(`🗄️ Using cachedContent for session ${sessionId}: ${cachedContentName}`)
       } else {
         chatConfig.systemInstruction = agentConfig.systemInstruction
@@ -346,6 +349,7 @@ export class ClinicalAgentRouter {
                   displayName: `aurora-session-${sessionId.slice(0, 8)}`,
                   systemInstruction: this.unifiedConfig.systemInstruction,
                   contents: fileParts,
+                  tools: this.unifiedConfig.tools && this.unifiedConfig.tools.length > 0 ? this.unifiedConfig.tools : undefined,
                   ttl: `${this.CACHE_TTL_SECONDS}s`,
                 },
               })
@@ -408,15 +412,59 @@ export class ClinicalAgentRouter {
             }
           }
         } else if (existingCache.cacheState === 'active') {
-          // ── SUBSEQUENT TURNS with active cache: text-only message ──
-          // File content is served from the cache — massive token savings
-          logger.info(`🟢 Cache active: ${existingCache.cacheName} — sending text-only (saves ~${files.reduce((s, f) => s + (f.size || 60000), 0) / 1024}KB file tokens)`)
+          // ── SUBSEQUENT TURNS with active cache: validate TTL first ──
+          const cacheAgeMs = Date.now() - existingCache.createdAt
+          const cacheTtlMs = this.CACHE_TTL_SECONDS * 1000
+          const isCacheExpired = cacheAgeMs > cacheTtlMs
+          const isCacheNearExpiry = cacheAgeMs > cacheTtlMs * 0.8
 
-          const fileDescriptions = files
-            .filter(f => f.geminiFileUri || f.geminiFileId)
-            .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
-          if (fileDescriptions.length > 0) {
-            messageParts[0].text = `<archivos_en_contexto>\nDocumentos disponibles en contexto cacheado:\n${fileDescriptions.join('\n')}\n</archivos_en_contexto>\n\n${enhancedMessage}`
+          logger.info(`🔍 Cache TTL check: age=${Math.round(cacheAgeMs / 1000)}s, ttl=${this.CACHE_TTL_SECONDS}s, expired=${isCacheExpired}, nearExpiry=${isCacheNearExpiry}`)
+
+          if (isCacheExpired) {
+            // Cache TTL exceeded — attempt recreation before sending
+            logger.warn(`⏰ Cache expired (age=${Math.round(cacheAgeMs / 1000)}s > TTL=${this.CACHE_TTL_SECONDS}s). Attempting recreation...`)
+            const recreated = await this.recreateExpiredCache(sessionId)
+            if (recreated) {
+              const newSessionData = this.activeChatSessions.get(sessionId)
+              if (newSessionData) chat = newSessionData.chat
+              logger.info(`✅ Cache recreated after TTL expiry — continuing with refreshed cache`)
+
+              const fileDescriptions = files
+                .filter(f => f.geminiFileUri || f.geminiFileId)
+                .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
+              if (fileDescriptions.length > 0) {
+                messageParts[0].text = `<archivos_en_contexto>\nDocumentos disponibles en contexto cacheado (renovado):\n${fileDescriptions.join('\n')}\n</archivos_en_contexto>\n\n${enhancedMessage}`
+              }
+            } else {
+              // Recreation failed — fallback to direct file attachment
+              logger.warn(`❌ Cache recreation failed after TTL expiry. Falling back to direct file attachment.`)
+              const fileParts: any[] = []
+              for (const fileRef of files) {
+                if (!fileRef?.geminiFileId && !fileRef?.geminiFileUri) continue
+                const fileUri = fileRef.geminiFileUri || (fileRef.geminiFileId?.startsWith('files/')
+                  ? fileRef.geminiFileId
+                  : `files/${fileRef.geminiFileId}`)
+                if (!fileUri) continue
+                fileParts.push(createPartFromUri(fileUri, fileRef.type))
+              }
+              const fileDescriptions = files
+                .filter(f => f.geminiFileUri || f.geminiFileId)
+                .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
+              if (fileDescriptions.length > 0) {
+                messageParts[0].text = `<archivos_adjuntos>\nEl terapeuta adjuntó los siguientes documentos. Su contenido completo está en las partes de archivo de este mensaje.\n${fileDescriptions.join('\n')}\n</archivos_adjuntos>\n\n${enhancedMessage}`
+              }
+              if (fileParts.length > 0) messageParts.push(...fileParts)
+            }
+          } else {
+            // Cache still valid — send text-only (massive token savings)
+            logger.info(`🟢 Cache active: ${existingCache.cacheName} — sending text-only (saves ~${files.reduce((s, f) => s + (f.size || 60000), 0) / 1024}KB file tokens)`)
+
+            const fileDescriptions = files
+              .filter(f => f.geminiFileUri || f.geminiFileId)
+              .map(f => `- ${escapeXml(f.name)} (${escapeXml(f.type || 'unknown')})`)
+            if (fileDescriptions.length > 0) {
+              messageParts[0].text = `<archivos_en_contexto>\nDocumentos disponibles en contexto cacheado:\n${fileDescriptions.join('\n')}\n</archivos_en_contexto>\n\n${enhancedMessage}`
+            }
           }
         } else {
           // ── FALLBACK mode: lightweight textual reference ──
@@ -615,6 +663,21 @@ export class ClinicalAgentRouter {
         }
       }
 
+      // Wrap result to prepend a file warning if file resolution failed upstream
+      if (enrichedContext?.fileResolutionFailed && result && typeof result[Symbol.asyncIterator] === 'function') {
+        const originalGenerator = result
+        result = (async function* () {
+          yield {
+            text: '',
+            metadata: {
+              type: 'file_warning',
+              message: 'No se pudieron recuperar los archivos adjuntos de esta sesión. El análisis podría ser incompleto. Intenta subir los archivos nuevamente.'
+            }
+          }
+          yield* originalGenerator
+        })()
+      }
+
       return result;
 
     } catch (error) {
@@ -732,6 +795,7 @@ export class ClinicalAgentRouter {
           displayName: `aurora-session-${sessionId.slice(0, 8)}-renewed`,
           systemInstruction: this.unifiedConfig.systemInstruction,
           contents: fileParts,
+          tools: this.unifiedConfig.tools && this.unifiedConfig.tools.length > 0 ? this.unifiedConfig.tools : undefined,
           ttl: `${this.CACHE_TTL_SECONDS}s`,
         },
       })
@@ -761,6 +825,17 @@ export class ClinicalAgentRouter {
       if (cacheData) {
         cacheData.cacheState = 'fallback'
         cacheData.cacheName = ''
+      }
+      // Recreate chat session WITHOUT cache so systemInstruction, tools, and
+      // history file parts are restored (skipFileParts = false when no cachedContentName)
+      try {
+        const sessionData = this.activeChatSessions.get(sessionId)
+        const history = sessionData?.history as ChatMessage[] | undefined
+        this.activeChatSessions.delete(sessionId)
+        await this.createChatSession(sessionId, undefined, history || [])
+        logger.info(`♻️ Chat session recreated without cache after fallback degradation`)
+      } catch (sessionErr) {
+        logger.error(`Failed to recreate session after cache fallback`, { error: sessionErr instanceof Error ? sessionErr.message : String(sessionErr) })
       }
       return false
     }

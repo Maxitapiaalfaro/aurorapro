@@ -927,10 +927,10 @@ export async function handleStreamingWithTools(
         }
       }
 
-      // If no content was yielded at all, yield an empty chunk to prevent UI hanging
+      // If no content was yielded at all, yield a visible warning to prevent silent failure
       if (!hasYieldedContent) {
-        logger.warn('No content yielded, providing fallback')
-        yield { text: "" }
+        logger.warn('⚠️ No content yielded from AI — providing visible fallback message')
+        yield { text: "\n\n> ⚠️ La IA no produjo una respuesta. Esto puede ocurrir si los archivos adjuntos no estuvieron disponibles durante el procesamiento. Intenta reenviar el mensaje o subir los archivos nuevamente.\n" }
       }
 
       // 📊 CAPTURE METRICS AFTER STREAM COMPLETION (with tools)
