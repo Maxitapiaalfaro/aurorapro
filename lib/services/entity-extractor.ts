@@ -30,6 +30,9 @@ const logger = createLogger('agent')
 /** Maximum time (ms) allowed for the LLM extraction call. */
 const EXTRACTION_TIMEOUT_MS = 3_000
 
+/** Minimum confidence for SNOMED-CT code assignment (higher bar than general entities). */
+const SNOMED_CONFIDENCE = 0.7
+
 /** Minimum confidence threshold — entities below this are silently dropped. */
 const MIN_CONFIDENCE = 0.5
 
@@ -226,11 +229,16 @@ export async function extractClinicalEntities(
         ? raw.semanticTags.filter((t): t is string => typeof t === 'string' && t.length > 0).slice(0, 5)
         : []
 
+      // SNOMED code: only retain when confidence exceeds SNOMED_CONFIDENCE threshold (0.7)
+      const snomedCode = typeof raw.snomedCode === 'string' && raw.snomedCode.length > 0 && raw.confidence > SNOMED_CONFIDENCE
+        ? raw.snomedCode
+        : null
+
       validated.push({
         domain: raw.domain,
         valence: raw.valence,
         chronicity: raw.chronicity,
-        snomedCode: typeof raw.snomedCode === 'string' && raw.snomedCode.length > 0 ? raw.snomedCode : null,
+        snomedCode,
         dsm5Code: typeof raw.dsm5Code === 'string' && raw.dsm5Code.length > 0 ? raw.dsm5Code : null,
         semanticTags: tags,
       })

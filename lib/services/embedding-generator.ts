@@ -36,7 +36,7 @@ const EMBEDDING_DIMENSIONS = 768
 
 /**
  * Result of embedding generation.
- * `embedding` is a 768-D Float64 array; `contentHash` is the SHA-256 hex digest.
+ * `embedding` is a 768-element number array; `contentHash` is the SHA-256 hex digest.
  */
 export interface EmbeddingResult {
   embedding: number[]

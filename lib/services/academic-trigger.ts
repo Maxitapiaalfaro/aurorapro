@@ -122,7 +122,7 @@ export function evaluateAcademicTrigger(
   patternNode: KnowledgeGraphNode,
   sourceSessionIds: string[],
 ): AcademicTriggerResult {
-  // Gate 1: Confidence threshold
+  // Gate 1: Confidence threshold (strictly greater than 0.8 required)
   if (patternNode.confidence <= CONFIDENCE_THRESHOLD) {
     logger.debug('Academic trigger: below confidence threshold', {
       nodeId: patternNode.nodeId,
