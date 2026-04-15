@@ -5,6 +5,17 @@
 
 ---
 
+## 0. Deployment Status (Live Execution — 2026-04-15)
+
+| Component                    | Status        | Notes                                              |
+|------------------------------|---------------|----------------------------------------------------|
+| Firestore composite indexes  | ✅ **READY** (8/8) | All 8 composite indexes operational               |
+| Firestore vector index (768-D COSINE) | ⏳ **CREATING** | Async build; expect 10–30 min after deploy        |
+| Cloud Function (`calculateTrajectoryDeltas`) | ⚠️ **PENDING IAM** | Code packaged & uploaded; IAM bindings required (see §1.2) |
+| GCP APIs enabled             | ✅ **READY**  | cloudfunctions, cloudbuild, artifactregistry, run, eventarc, pubsub, storage |
+
+---
+
 ## 1. Deployment Commands (Targeted, Non-Destructive)
 
 ### 1.1 Firestore Indexes
@@ -23,12 +34,33 @@ This provisions:
 ### 1.2 Cloud Functions
 
 ```bash
-# From the functions/ directory, compile TypeScript first if a build step exists:
-cd functions && npm run build 2>/dev/null; cd ..
+# Install dependencies and compile TypeScript:
+cd functions && npm install && npm run build && cd ..
 
-# Deploy only the trajectory calculator function:
-firebase deploy --only functions:calculateTrajectoryDeltas
+# Deploy all functions in the aurora-clinical codebase:
+firebase deploy --only functions
 ```
+
+> **⚠️ IAM Prerequisite:** The first deployment requires a **project owner** to grant
+> IAM bindings for Cloud Run, Eventarc, and PubSub service agents. Run these commands
+> once as a project owner before the first `firebase deploy --only functions`:
+>
+> ```bash
+> PROJECT_ID="project-f72e4c83-5347-45b1-bb2"
+> PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+>
+> gcloud projects add-iam-policy-binding $PROJECT_ID \
+>   --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com" \
+>   --role="roles/iam.serviceAccountTokenCreator"
+>
+> gcloud projects add-iam-policy-binding $PROJECT_ID \
+>   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+>   --role="roles/run.invoker"
+>
+> gcloud projects add-iam-policy-binding $PROJECT_ID \
+>   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+>   --role="roles/eventarc.eventReceiver"
+> ```
 
 ### 1.3 Verify Index Build Status
 

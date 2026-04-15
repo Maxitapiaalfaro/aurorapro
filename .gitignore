@@ -42,3 +42,7 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 .env*.local
+
+# Cloud Functions build artifacts
+functions/lib/
+functions/node_modules/
