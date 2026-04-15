@@ -13,7 +13,54 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ontology.domain",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [],
+  "vectorIndexes": [
+    {
+      "collectionGroup": "memories",
+      "queryScope": "COLLECTION",
+      "fieldPath": "embedding",
+      "dimension": 768,
+      "distanceMeasure": "COSINE",
+      "prefilters": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ]
 }
