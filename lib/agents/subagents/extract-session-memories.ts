@@ -33,7 +33,7 @@ Categorías de memoria:
 
 Reglas:
 - Extrae SOLO información clínicamente significativa (no trivialidades)
-- Máximo 3 memorias por turno (prioriza las más valiosas)
+- Máximo 3 memorias por turno (prioriza las más recientes)
 - Cada memoria debe ser auto-contenida: útil fuera de esta sesión
 - Escribe en español clínico profesional y conciso (máx. 200 chars por memoria)
 - Asigna confianza: 0.9+ confirmado, 0.7-0.8 observación clara, 0.5-0.6 preliminar
@@ -92,7 +92,7 @@ export async function extractSessionMemories(
 
   try {
     // Truncate inputs to keep within token limits
-    const maxMsgLen = 1500
+    const maxMsgLen = 2500
     const truncatedUser = userMessage.length > maxMsgLen
       ? userMessage.substring(0, maxMsgLen) + '…'
       : userMessage
@@ -109,8 +109,8 @@ export async function extractSessionMemories(
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: EXTRACTION_SYSTEM_PROMPT,
-        temperature: 0.1,
-        maxOutputTokens: 512,
+        temperature: 1.0,
+        maxOutputTokens: 2048,
       },
     })
 
