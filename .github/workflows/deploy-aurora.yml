@@ -75,7 +75,16 @@ jobs:
       - name: Configure IAM bindings for Cloud Functions
         run: |
           PROJECT_ID=$(jq -r '.projects.default' .firebaserc)
+          if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "null" ]; then
+            echo "::error::Failed to read project ID from .firebaserc"
+            exit 1
+          fi
+
           PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+          if [ -z "$PROJECT_NUMBER" ]; then
+            echo "::error::Failed to retrieve project number for $PROJECT_ID"
+            exit 1
+          fi
 
           echo "Configuring IAM bindings for project $PROJECT_ID (number: $PROJECT_NUMBER)"
 
@@ -83,19 +92,19 @@ jobs:
           gcloud projects add-iam-policy-binding "$PROJECT_ID" \
             --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com" \
             --role="roles/iam.serviceAccountTokenCreator" \
-            --condition=None --quiet
+            --condition=None --no-user-output-enabled
 
           # Default compute SA needs Cloud Run invoker role
           gcloud projects add-iam-policy-binding "$PROJECT_ID" \
             --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
             --role="roles/run.invoker" \
-            --condition=None --quiet
+            --condition=None --no-user-output-enabled
 
           # Default compute SA needs Eventarc event receiver role
           gcloud projects add-iam-policy-binding "$PROJECT_ID" \
             --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
             --role="roles/eventarc.eventReceiver" \
-            --condition=None --quiet
+            --condition=None --no-user-output-enabled
 
       # ── 10. Deploy Cloud Functions ──────────────────────────
       - name: Deploy Cloud Functions
