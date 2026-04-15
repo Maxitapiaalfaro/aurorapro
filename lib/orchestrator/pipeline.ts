@@ -165,14 +165,10 @@ export async function processClinicalMessage(
 
   // Academic trigger is synchronous (fire-and-forget internally),
   // but wrap it consistently for the Promise.allSettled pattern.
+  // Pass the current sessionId — the trigger internally deduplicates via Set.
   const triggerPromise = Promise.resolve<AcademicTriggerResult | null>(
     context.patternNode
-      ? evaluateAcademicTrigger(
-          context.patternNode,
-          context.patternNode.sourceMemoryId
-            ? [context.sessionId]
-            : [context.sessionId],
-        )
+      ? evaluateAcademicTrigger(context.patternNode, [context.sessionId])
       : null,
   )
 

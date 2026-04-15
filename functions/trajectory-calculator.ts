@@ -239,8 +239,10 @@ function computeTagDeltas(
   // Union of all tags seen in either window
   const allTags = new Set([...currentTagCounts.keys(), ...previousTagCounts.keys()])
 
-  const currentTotal = Math.max(currentWindow.length, 1)
-  const previousTotal = Math.max(previousWindow.length, 1)
+  // When a window is empty, frequencies are 0 by definition (no observations).
+  // Avoid division by zero with explicit checks rather than masking with max(n, 1).
+  const currentTotal = currentWindow.length
+  const previousTotal = previousWindow.length
 
   const deltas: TagDelta[] = []
   const milestones: TrajectoryMilestone[] = []
@@ -249,8 +251,8 @@ function computeTagDeltas(
     const currentCount = currentTagCounts.get(tag) ?? 0
     const previousCount = previousTagCounts.get(tag) ?? 0
 
-    const freqCurrent = currentCount / currentTotal
-    const freqPrevious = previousCount / previousTotal
+    const freqCurrent = currentTotal > 0 ? currentCount / currentTotal : 0
+    const freqPrevious = previousTotal > 0 ? previousCount / previousTotal : 0
     const delta = freqCurrent - freqPrevious
     const significant = Math.abs(delta) >= SIGNIFICANCE_THRESHOLD
 
