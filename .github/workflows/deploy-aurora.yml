@@ -5,6 +5,7 @@
 name: Deploy Aurora (Firebase)
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main

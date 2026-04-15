@@ -59,6 +59,14 @@ function getFirebaseApp(): FirebaseApp {
 }
 
 function initializeServices() {
+  // Skip initialization when Firebase config is missing (e.g., during static
+  // export build in CI where NEXT_PUBLIC_FIREBASE_* env vars are not set).
+  // At runtime in the browser the env vars will be present and initialization
+  // will occur normally.
+  if (!firebaseConfig.apiKey) {
+    return
+  }
+
   if (typeof window === 'undefined') {
     // Server-side: solo inicializamos la app (Firestore con persistencia
     // offline requiere el browser). El servidor usa firebase-admin en su lugar.
