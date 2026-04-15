@@ -33,7 +33,7 @@ Categorías de memoria:
 
 Reglas:
 - Extrae SOLO información clínicamente significativa (no trivialidades)
-- Máximo 3 memorias por turno (prioriza las más recientes)
+- Máximo 5 memorias por turno (prioriza las que son clínicamente relevantes a la fecha)
 - Cada memoria debe ser auto-contenida: útil fuera de esta sesión
 - Escribe en español clínico profesional y conciso (máx. 200 chars por memoria)
 - Asigna confianza: 0.9+ confirmado, 0.7-0.8 observación clara, 0.5-0.6 preliminar
