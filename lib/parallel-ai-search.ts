@@ -83,10 +83,10 @@ const TRUSTED_ACADEMIC_DOMAINS = {
 }
 
 // ============================================================================
-// 🎯 TOP 10 DOMINIOS CLÍNICOS GLOBALES (FASE 1 — DESCUBIERTOS AUTÓNOMAMENTE)
+// 🎯 TOP 10 DOMINIOS CLÍNICOS GLOBALES
 // ============================================================================
-// Criterio: Factor de impacto JCR 2025, cobertura Scopus/WoS, acceso programático,
-// relevancia directa para psicología clínica y psiquiatría.
+// Selección autónoma basada en factor de impacto JCR 2025, cobertura Scopus/WoS,
+// acceso programático y relevancia para psicología clínica y psiquiatría.
 // ⚠️ LÍMITE DE API: Parallel AI permite máximo 10 dominios en include_domains
 
 export const TOP_10_GLOBAL_CLINICAL_DOMAINS = [
@@ -398,25 +398,33 @@ export class ParallelAISearch {
 
     try {
       const hostname = new URL(result.url).hostname.toLowerCase()
+
+      /**
+       * Checks if hostname matches a domain (exact or subdomain).
+       * E.g. matchesDomain("www.thelancet.com", "thelancet.com") → true
+       *      matchesDomain("notthelancet.com", "thelancet.com") → false
+       */
+      const matchesDomain = (host: string, domain: string): boolean =>
+        host === domain || host.endsWith(`.${domain}`)
       
       // Factor 1: Dominios clínicos globales de alto impacto (PRIORIDAD MÁXIMA)
       const isTopGlobalDomain = TOP_10_GLOBAL_CLINICAL_DOMAINS.some(domain => 
-        hostname.includes(domain.toLowerCase())
+        matchesDomain(hostname, domain.toLowerCase())
       )
       
       if (isTopGlobalDomain) {
         score += 35
         // Bonus adicional para fuentes de máximo factor de impacto
-        if (hostname.includes('cochranelibrary.com') || hostname.includes('thelancet.com')) {
+        if (matchesDomain(hostname, 'cochranelibrary.com') || matchesDomain(hostname, 'thelancet.com')) {
           score += 5 // Total: +40
         }
       } else {
         // Fallback a sistema de tiers (para resultados fuera de los 10 dominios)
-        if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => hostname.includes(domain))) {
+        if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => matchesDomain(hostname, domain))) {
           score += 30
-        } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => hostname.includes(domain))) {
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => matchesDomain(hostname, domain))) {
           score += 20
-        } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => hostname.includes(domain))) {
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => matchesDomain(hostname, domain))) {
           score += 10
         }
       }

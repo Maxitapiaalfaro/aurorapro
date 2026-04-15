@@ -105,8 +105,8 @@ function titleSimilarity(a: string, b: string): number {
  * Determina si dos fuentes son duplicadas (misma URL o título muy similar).
  */
 function isDuplicate(a: ValidatedAcademicSource, b: ValidatedAcademicSource): boolean {
-  // Dedup por URL exacta (normalizada)
-  if (normalizeHostname(a.url) === normalizeHostname(b.url) && a.url === b.url) return true
+  // Dedup por URL exacta
+  if (a.url === b.url) return true
   // Dedup por título similar (Jaccard ≥ 0.8)
   if (a.title && b.title && titleSimilarity(a.title, b.title) >= 0.8) return true
   return false
@@ -143,14 +143,16 @@ function mapGroundingChunksToSources(
     let trustScore = 55 // Base ligeramente superior (Google pre-filtra)
     try {
       const hostname = new URL(web.uri).hostname.toLowerCase()
-      // Bonus por dominio académico conocido
+      // Bonus por dominio académico conocido — proper suffix matching
       const academicDomains = [
         'pubmed.ncbi.nlm.nih.gov', 'cochranelibrary.com', 'jamanetwork.com',
         'nature.com', 'thelancet.com', 'psycnet.apa.org', 'sciencedirect.com',
         'frontiersin.org', 'bmj.com', 'springer.com', 'wiley.com',
         'tandfonline.com', 'plos.org', 'academic.oup.com', 'sagepub.com'
       ]
-      if (academicDomains.some(d => hostname.includes(d))) {
+      const matchesDomain = (host: string, domain: string): boolean =>
+        host === domain || host.endsWith(`.${domain}`)
+      if (academicDomains.some(d => matchesDomain(hostname, d))) {
         trustScore += 25
       }
     } catch { /* URL inválida — keep base score */ }
