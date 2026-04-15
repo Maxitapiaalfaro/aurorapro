@@ -41,6 +41,29 @@ import type { ClinicalMemoryCategory } from '@/types/memory-types'
 const logger = createLogger('orchestrator')
 
 // ---------------------------------------------------------------------------
+// Pipeline step callback (UX telemetry)
+// ---------------------------------------------------------------------------
+
+/**
+ * Callback signature for emitting pipeline progress events to the SSE layer.
+ * Compatible with the `ProcessingStepEvent` shape defined in clinical-types.ts.
+ *
+ * @param id     - Unique step identifier (e.g. 'ci_entities').
+ * @param label  - Human-readable label (e.g. 'Extrayendo entidades clínicas…').
+ * @param status - 'active' when starting, 'completed' when done.
+ * @param detail - Optional secondary detail (e.g. '3 entidades, 768-D vector').
+ */
+export type PipelineStepCallback = (
+  id: string,
+  label: string,
+  status: 'active' | 'completed',
+  detail?: string,
+) => void
+
+/** No-op step callback used when no listener is provided. */
+const noopStep: PipelineStepCallback = () => {}
+
+// ---------------------------------------------------------------------------
 // Pipeline context types
 // ---------------------------------------------------------------------------
 
@@ -111,17 +134,22 @@ export interface PipelineResult {
  *
  * @param userMessage - Raw user message text.
  * @param context     - Pipeline execution context (IDs, history, keyword results).
+ * @param onStep      - Optional callback for emitting progress events to the SSE layer.
  * @returns Enriched pipeline result for LLM context injection.
  */
 export async function processClinicalMessage(
   userMessage: string,
   context: PipelineContext,
+  onStep: PipelineStepCallback = noopStep,
 ): Promise<PipelineResult> {
   const startTime = performance.now()
 
   // -----------------------------------------------------------------------
   // T0: Parallel — Entity extraction (Step 1) + Embedding generation (Step 2)
   // -----------------------------------------------------------------------
+
+  onStep('ci_entities', 'Extrayendo entidades clínicas…', 'active')
+  onStep('ci_embedding', 'Generando embedding semántico…', 'active')
 
   const [entitiesResult, embeddingResult] = await Promise.all([
     extractClinicalEntities(userMessage, context.conversationHistory)
@@ -141,6 +169,11 @@ export async function processClinicalMessage(
   const entities = entitiesResult
   const t0LatencyMs = performance.now() - startTime
 
+  onStep('ci_entities', 'Entidades extraídas', 'completed',
+    entities.length > 0 ? `${entities.length} entidad${entities.length !== 1 ? 'es' : ''}` : 'sin entidades')
+  onStep('ci_embedding', embeddingResult ? 'Embedding generado' : 'Embedding omitido', 'completed',
+    embeddingResult ? '768-D vector' : 'degradado')
+
   logger.debug('Pipeline T0 complete', {
     entitiesCount: entities.length,
     hasEmbedding: embeddingResult !== null,
@@ -153,6 +186,8 @@ export async function processClinicalMessage(
   // -----------------------------------------------------------------------
 
   const t1Start = performance.now()
+
+  onStep('ci_search', 'Buscando memorias relevantes…', 'active')
 
   const searchPromise = embeddingResult
     ? searchRelevantMemories(
@@ -189,6 +224,10 @@ export async function processClinicalMessage(
   }
 
   const t1LatencyMs = performance.now() - t1Start
+
+  onStep('ci_search', 'Memorias recuperadas', 'completed',
+    relevantMemories.length > 0 ? `${relevantMemories.length} memoria${relevantMemories.length !== 1 ? 's' : ''}` : 'sin coincidencias')
+
   logger.debug('Pipeline T1 complete', {
     memoriesRetrieved: relevantMemories.length,
     triggerResult: academicTrigger?.triggered ?? 'skipped',
@@ -203,6 +242,7 @@ export async function processClinicalMessage(
 
   // Only persist if we have at least one entity to write
   if (entities.length > 0) {
+    onStep('ci_persist', 'Persistiendo memoria clínica…', 'active')
     const primaryOntology = entities[0]
     try {
       writeResult = await saveClinicalMemoryV2(
@@ -220,10 +260,12 @@ export async function processClinicalMessage(
           contentHash: embeddingResult?.contentHash,
         },
       )
+      onStep('ci_persist', 'Memoria persistida', 'completed')
     } catch (err) {
       logger.error('Pipeline T2: memory persistence failed', {
         error: err instanceof Error ? err.message : String(err),
       })
+      onStep('ci_persist', 'Persistencia omitida', 'completed', 'error')
     }
   } else {
     logger.debug('Pipeline T2: skipped persistence — no entities extracted')

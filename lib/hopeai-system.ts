@@ -909,6 +909,77 @@ export class HopeAISystem {
         sessionLogger.info(`🧠 Clinical memories injected: ${effectiveMemories.length} memories for patient ${patientReference}${clientContext ? ' (client-ranked)' : ''}`)
       }
 
+      // ─── Clinical Intelligence Pipeline (Phase 2 — fire-and-forget enrichment) ───
+      // When a patient context exists and the user message is clinical-grade,
+      // run the full intelligence pipeline (entity extraction, embedding,
+      // hybrid search, academic trigger, memory persistence) in parallel.
+      // Results are merged into the enriched context so the LLM sees V2 memories.
+      let clinicalPipelineResult: import('@/lib/orchestrator/pipeline').PipelineResult | null = null
+      if (patientReference && currentState.userId && message.length > 10) {
+        try {
+          emitStep('ci_pipeline', 'Inteligencia clínica procesando…', 'active')
+          const { processClinicalMessage } = await import('@/lib/orchestrator/pipeline')
+
+          // Build recent conversation history for entity extraction disambiguation
+          const recentHistory = currentState.history
+            .slice(-6)
+            .map((m: ChatMessage) => `${m.role}: ${m.content}`)
+
+          clinicalPipelineResult = await processClinicalMessage(
+            message,
+            {
+              psychologistId: currentState.userId,
+              patientId: patientReference,
+              sessionId,
+              conversationHistory: recentHistory,
+              keywordResults: [],   // Keyword results are provided by the existing scorer if available
+              category: 'observation',
+              tags: [],
+              relevanceScore: 0.5,
+              confidence: 0.5,
+            },
+            // Wire the pipeline step emissions into the SSE emitStep helper
+            (id, label, status, detail) => emitStep(id, label, status, detail),
+          )
+
+          // Merge V2 hybrid search memories into the enriched context
+          if (clinicalPipelineResult.relevantMemories.length > 0) {
+            const v2Memories = clinicalPipelineResult.relevantMemories.map((m) => ({
+              memoryId: m.memoryId,
+              rrfScore: m.rrfScore,
+              source: 'hybrid_search_v2' as const,
+            }))
+
+            // Append to existing memories (deduplicate by memoryId)
+            const existingIds = new Set(
+              (enrichedSessionContext.clinicalMemories || []).map((m: any) => m.memoryId || m.id)
+            )
+            const newMemories = v2Memories.filter((m) => !existingIds.has(m.memoryId))
+
+            if (newMemories.length > 0) {
+              enrichedSessionContext.clinicalMemories = [
+                ...(enrichedSessionContext.clinicalMemories || []),
+                ...newMemories,
+              ]
+              sessionLogger.info(`🧬 Clinical intelligence: +${newMemories.length} V2 memories merged (${clinicalPipelineResult.entities.length} entities, ${Math.round(clinicalPipelineResult.latencyMs)}ms)`)
+            }
+          }
+
+          const ciDetail = [
+            `${clinicalPipelineResult.entities.length} entidad${clinicalPipelineResult.entities.length !== 1 ? 'es' : ''}`,
+            `${clinicalPipelineResult.relevantMemories.length} memoria${clinicalPipelineResult.relevantMemories.length !== 1 ? 's' : ''}`,
+            `${Math.round(clinicalPipelineResult.latencyMs)}ms`,
+          ].join(', ')
+          emitStep('ci_pipeline', 'Inteligencia clínica completada', 'completed', ciDetail)
+        } catch (err) {
+          // Non-blocking: the pipeline is an enrichment layer, not critical path
+          sessionLogger.warn('⚠️ Clinical intelligence pipeline failed (non-blocking)', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+          emitStep('ci_pipeline', 'Inteligencia clínica omitida', 'completed', 'error no-bloqueante')
+        }
+      }
+
       // PROGRESSIVE CONTEXT: Inject prior session summaries (Level 1 — no message reads)
       const effectiveSummaries = (priorSessionSummaries as any[])?.filter(
         (s: any) => s.sessionSummary
