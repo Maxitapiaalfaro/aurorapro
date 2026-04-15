@@ -89,7 +89,7 @@ REGLAS:
           },
         ],
         config: {
-          temperature: 0.3, // Low temperature for faithful editing
+          temperature: 1.0, // Low temperature for faithful editing
         },
       });
 
