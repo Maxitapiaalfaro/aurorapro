@@ -106,6 +106,18 @@ jobs:
             --role="roles/eventarc.eventReceiver" \
             --condition=None --no-user-output-enabled
 
-      # ── 10. Deploy Cloud Functions ──────────────────────────
+      # ── 10. Delete function whose trigger type changed ──────
+      # calculateTrajectoryDeltas was originally deployed as HTTPS
+      # and is now an onDocumentWritten (Firestore) trigger.
+      # Firebase forbids changing trigger types in-place, so we
+      # delete the old version first. --force skips the prompt;
+      # "|| true" lets the step pass if the function no longer exists.
+      - name: Delete legacy HTTPS function (trigger type migration)
+        run: |
+          firebase functions:delete calculateTrajectoryDeltas \
+            --region us-central1 \
+            --force || true
+
+      # ── 11. Deploy Cloud Functions ──────────────────────────
       - name: Deploy Cloud Functions
         run: firebase deploy --only functions
