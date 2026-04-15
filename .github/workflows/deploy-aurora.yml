@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────
-# Aurora Clinical Intelligence – Automated Deploy Pipeline
+# Aurora  Clinical Intelligence – Automated Deploy Pipeline
 # Fase 5b: GitOps CI/CD con Workload Identity Federation
 # ──────────────────────────────────────────────────────────────
 name: Deploy Aurora (Firebase)
