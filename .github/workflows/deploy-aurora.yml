@@ -67,6 +67,36 @@ jobs:
       - name: Deploy Firestore Indexes
         run: firebase deploy --only firestore:indexes
 
-      # ── 8. Deploy Cloud Functions ──────────────────────────
+      # ── 8. Setup gcloud CLI ─────────────────────────────────
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── 9. Configure IAM bindings for Cloud Functions v2 ────
+      - name: Configure IAM bindings for Cloud Functions
+        run: |
+          PROJECT_ID=$(jq -r '.projects.default' .firebaserc)
+          PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+
+          echo "Configuring IAM bindings for project $PROJECT_ID (number: $PROJECT_NUMBER)"
+
+          # Pub/Sub service agent needs token creator role for authenticated push
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com" \
+            --role="roles/iam.serviceAccountTokenCreator" \
+            --condition=None --quiet
+
+          # Default compute SA needs Cloud Run invoker role
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+            --role="roles/run.invoker" \
+            --condition=None --quiet
+
+          # Default compute SA needs Eventarc event receiver role
+          gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+            --role="roles/eventarc.eventReceiver" \
+            --condition=None --quiet
+
+      # ── 10. Deploy Cloud Functions ──────────────────────────
       - name: Deploy Cloud Functions
         run: firebase deploy --only functions
