@@ -64,8 +64,8 @@ jobs:
 
       # ── 7. Deploy Firestore indexes ────────────────────────
       - name: Deploy Firestore Indexes
-        run: firebase deploy --only firestore:indexes --project ${{ secrets.GCP_PROJECT_ID || 'project-f72e4c83-5347-45b1-bb2' }}
+        run: firebase deploy --only firestore:indexes
 
       # ── 8. Deploy Cloud Functions ──────────────────────────
       - name: Deploy Cloud Functions
-        run: firebase deploy --only functions --project ${{ secrets.GCP_PROJECT_ID || 'project-f72e4c83-5347-45b1-bb2' }}
+        run: firebase deploy --only functions
