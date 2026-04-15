@@ -1,18 +1,17 @@
 /**
  * Parallel AI Search Integration
  *
- * Sistema de búsqueda web avanzada usando Parallel AI para investigación académica.
- * Optimizado para retornar excerpts comprimidos y rankeados específicamente para LLMs.
+ * Motor A del sistema de búsqueda concurrente de evidencia científica.
+ * Utiliza Parallel AI para investigación académica con excerpts optimizados para LLMs.
  *
- * Ventajas sobre Google Search:
+ * Ventajas:
  * - Excerpts optimizados para consumo de LLMs
  * - Búsqueda semántica con objective + search_queries
- * - Control granular de dominios (include/exclude)
- * - Procesadores especializados (base/pro)
+ * - Control granular de dominios (source_policy.include_domains, max 10)
  * - Rate limits generosos (600 req/min)
  *
- * 🧪 MODO PRUEBA: Sin restricción de dominios (source_policy deshabilitado)
- * Last modified: 2025-01-18 - Removed domain restrictions
+ * Dominios: Top 10 globales seleccionados por factor de impacto y rigurosidad (2026).
+ * Last modified: 2026-04-15 — Phase 2 concurrent engine refactor
  */
 
 import Parallel from 'parallel-web'
@@ -30,8 +29,8 @@ export interface ParallelSearchParams {
   objective: string
   searchQueries?: string[]
   maxResults?: number
+  /** Nested under `excerpts` per API v1beta spec. */
   maxCharsPerResult?: number
-  processor?: 'base' | 'pro'
   sourceDomains?: {
     include?: string[]
     exclude?: string[]
@@ -45,7 +44,7 @@ export interface ParallelSearchResult {
 }
 
 // ============================================================================
-// DOMINIOS ACADÉMICOS CONFIABLES
+// DOMINIOS ACADÉMICOS CONFIABLES (TIER SCORING FALLBACK)
 // ============================================================================
 
 const TRUSTED_ACADEMIC_DOMAINS = {
@@ -53,7 +52,7 @@ const TRUSTED_ACADEMIC_DOMAINS = {
     'pubmed.ncbi.nlm.nih.gov',
     'apa.org',
     'psycnet.apa.org',
-    'cochrane.org',
+    'cochranelibrary.com',
     'nature.com',
     'science.org',
     'thelancet.com',
@@ -70,7 +69,7 @@ const TRUSTED_ACADEMIC_DOMAINS = {
     'plos.org',
     'mdpi.com',
     'cambridge.org',
-    'oxford.org'
+    'academic.oup.com'
   ],
   tier3: [
     'researchgate.net',
@@ -84,32 +83,23 @@ const TRUSTED_ACADEMIC_DOMAINS = {
 }
 
 // ============================================================================
-// 🎯 TOP 10 DOMINIOS PARA PSICOLOGÍA CLÍNICA EN ESPAÑOL
+// 🎯 TOP 10 DOMINIOS CLÍNICOS GLOBALES
 // ============================================================================
+// Selección autónoma basada en factor de impacto JCR 2025, cobertura Scopus/WoS,
+// acceso programático y relevancia para psicología clínica y psiquiatría.
 // ⚠️ LÍMITE DE API: Parallel AI permite máximo 10 dominios en include_domains
-// Estrategia: Priorizar fuentes académicas en español y latinoamericanas
-// Documentación: https://docs.parallel.ai/resources/search-api#request-fields
 
-const CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS = [
-  // 🇪🇸 Fuentes españolas de máxima calidad
-  'scielo.org',              // #1 - Red Iberoamericana de revistas científicas (España + Latinoamérica)
-  'redalyc.org',             // #2 - Red de Revistas Científicas de América Latina y el Caribe
-  
-  // 🌎 Bases de datos internacionales con contenido en español
-  'pmc.ncbi.nlm.nih.gov', // #3 - PubMed (incluye journals latinoamericanos)
-  'crossref.org',       // #4 - Elsevier (journals en español)
-  
-  // 🧠 Psicología específica - fuentes profesionales
-  'psycnet.apa.org',         // #5 - American Psychological Association (contenido bilingüe)
-  'semanticscholar.org',              // #6 - Consejo General de la Psicología de España
-  
-  // 📚 Repositorios académicos iberoamericanos
-  'doaj.org',     // #7 - Portal bibliográfico hispano (España)
-  'revistasaludpublica.uchile.cl',      // #8 - Periódicos Electrónicos en Psicología (Brasil + Latinoamérica)
-  
-  // 🏛️ Instituciones académicas de referencia
-  'revista.ispch.gob.cl',            // #9 - Cochrane Library (revisiones sistemáticas, contenido en español)
-  'minsal.cl'              // #10 - Biblioteca Virtual en Salud (OPS/OMS - multilingüe con español)
+export const TOP_10_GLOBAL_CLINICAL_DOMAINS = [
+  'pubmed.ncbi.nlm.nih.gov', // #1  — PubMed/MEDLINE: >35M records, gold standard biomédico
+  'cochranelibrary.com',      // #2  — Cochrane: revisiones sistemáticas, máxima rigurosidad GRADE
+  'jamanetwork.com',          // #3  — JAMA Psychiatry (IF ~17.1), JAMA Network Open
+  'nature.com',               // #4  — Molecular Psychiatry (IF ~11.0), Nature Mental Health
+  'thelancet.com',            // #5  — The Lancet Psychiatry (IF ~24.8), ensayos multicéntricos
+  'psycnet.apa.org',          // #6  — APA: Annual Review of Clin. Psych. (IF ~18.98), PsycINFO
+  'sciencedirect.com',        // #7  — Elsevier: Biological Psychiatry (IF ~9.0), RCTs
+  'frontiersin.org',          // #8  — Frontiers in Psychiatry/Psychology, open-access, IF creciente
+  'bmj.com',                  // #9  — Evidence-Based Mental Health (IF ~11.4), BMJ Open
+  'springer.com',             // #10 — World Psychiatry (IF ~65.8), Psychotherapy & Psychosomatics
 ]
 
 // Dominios a excluir por defecto
@@ -156,7 +146,7 @@ export class ParallelAISearch {
   }
 
   /**
-   * Búsqueda académica usando Parallel AI
+   * Búsqueda académica usando Parallel AI (Motor A)
    */
   async searchAcademic(params: ParallelSearchParams): Promise<ValidatedAcademicSource[]> {
     if (!this.client) {
@@ -168,8 +158,7 @@ export class ParallelAISearch {
       objective,
       searchQueries = [],
       maxResults = 10,
-      maxCharsPerResult = 15000, // Aumentado de 6000 a 15000 para mayor contexto académico
-      processor = 'base', // Usar 'base' por defecto para velocidad (cambiar a 'pro' cuando esté disponible)
+      maxCharsPerResult = 15000,
       sourceDomains
     } = params
 
@@ -182,26 +171,20 @@ export class ParallelAISearch {
     }
 
     try {
-      logger.info('🔍 [ParallelAI] === INICIANDO BÚSQUEDA ACADÉMICA ===')
+      logger.info('🔍 [ParallelAI] === MOTOR A: INICIANDO BÚSQUEDA ACADÉMICA ===')
       logger.info(`  📝 Objective: ${objective.substring(0, 100)}...`)
       logger.info(`  🔎 Queries: ${searchQueries.join(', ')}`)
-      logger.info(`  ⚙️  Processor: ${processor}`)
+      logger.info(`  📚 Dominios: Top 10 clínicos globales`)
 
-      // 🎯 CONFIGURACIÓN DE DOMINIOS: Top 10 fuentes académicas en español
-      logger.info('🎯 [ParallelAI] Usando dominios académicos en español (Top 10)')
-      logger.info(`  📚 Dominios incluidos: ${CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.join(', ')}`)
-
-      // Ejecutar búsqueda con Parallel AI CON source_policy optimizado
+      // Build search payload — uses `max_chars_per_result` at root level
+      // (current SDK v0.1.x param name; maps to excerpts config internally)
       const search = await this.client.beta.search({
         objective,
         search_queries: searchQueries.length > 0 ? searchQueries : undefined,
-        processor,
         max_results: maxResults,
         max_chars_per_result: maxCharsPerResult,
-        // 🎯 RESTRICCIÓN: Solo los 10 dominios académicos más relevantes para psicología clínica en español
         source_policy: {
-          include_domains: CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS
-          // No usamos exclude_domains para maximizar el uso de los 10 slots disponibles
+          include_domains: sourceDomains?.include ?? TOP_10_GLOBAL_CLINICAL_DOMAINS,
         }
       })
 
@@ -415,27 +398,33 @@ export class ParallelAISearch {
 
     try {
       const hostname = new URL(result.url).hostname.toLowerCase()
+
+      /**
+       * Checks if hostname matches a domain (exact or subdomain).
+       * E.g. matchesDomain("www.thelancet.com", "thelancet.com") → true
+       *      matchesDomain("notthelancet.com", "thelancet.com") → false
+       */
+      const matchesDomain = (host: string, domain: string): boolean =>
+        host === domain || host.endsWith(`.${domain}`)
       
-      // 🎯 Factor 1: Dominios académicos en español (PRIORIDAD MÁXIMA)
-      const isSpanishAcademicDomain = CLINICAL_PSYCHOLOGY_SPANISH_DOMAINS.some(domain => 
-        hostname.includes(domain.toLowerCase())
+      // Factor 1: Dominios clínicos globales de alto impacto (PRIORIDAD MÁXIMA)
+      const isTopGlobalDomain = TOP_10_GLOBAL_CLINICAL_DOMAINS.some(domain => 
+        matchesDomain(hostname, domain.toLowerCase())
       )
       
-      if (isSpanishAcademicDomain) {
-        // Bonus especial para dominios configurados
+      if (isTopGlobalDomain) {
         score += 35
-        
-        // Bonus adicional para fuentes iberoamericanas de élite
-        if (hostname.includes('scielo.org') || hostname.includes('redalyc.org')) {
-          score += 5 // Total: +40 para SciELO y Redalyc
+        // Bonus adicional para fuentes de máximo factor de impacto
+        if (matchesDomain(hostname, 'cochranelibrary.com') || matchesDomain(hostname, 'thelancet.com')) {
+          score += 5 // Total: +40
         }
       } else {
-        // Fallback a sistema de tiers original (para resultados fuera de los 10 dominios)
-        if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => hostname.includes(domain))) {
+        // Fallback a sistema de tiers (para resultados fuera de los 10 dominios)
+        if (TRUSTED_ACADEMIC_DOMAINS.tier1.some(domain => matchesDomain(hostname, domain))) {
           score += 30
-        } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => hostname.includes(domain))) {
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier2.some(domain => matchesDomain(hostname, domain))) {
           score += 20
-        } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => hostname.includes(domain))) {
+        } else if (TRUSTED_ACADEMIC_DOMAINS.tier3.some(domain => matchesDomain(hostname, domain))) {
           score += 10
         }
       }
