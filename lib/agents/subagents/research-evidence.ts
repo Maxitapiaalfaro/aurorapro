@@ -192,13 +192,13 @@ TONO: Cauteloso, científicamente riguroso
 
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
+      model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
       config: {
         systemInstruction:
           'Eres un farmacólogo clínico especializado en psicofarmacología. Proporcionas análisis basados en principios farmacológicos generales cuando no existe evidencia específica. Eres cauteloso y transparente sobre las limitaciones.',
-        temperature: 0.7,
-        maxOutputTokens: 1024,
+        temperature: 1.0,
+        maxOutputTokens: 2048,
       },
     });
 
