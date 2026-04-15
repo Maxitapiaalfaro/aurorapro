@@ -120,4 +120,4 @@ jobs:
 
       # ── 11. Deploy Cloud Functions ──────────────────────────
       - name: Deploy Cloud Functions
-        run: firebase deploy --only functions
+        run: firebase-tools deploy --only functions --force
