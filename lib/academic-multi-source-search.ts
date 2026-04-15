@@ -66,7 +66,7 @@ export interface AcademicSearchResult {
 // GEMINI GROUNDING MODEL (Motor B)
 // ============================================================================
 
-const GEMINI_GROUNDING_MODEL = 'gemini-2.5-flash'
+const GEMINI_GROUNDING_MODEL = 'gemini-3.1-flash-lite-preview'
 
 // ============================================================================
 // DEDUPLICATION HELPERS
