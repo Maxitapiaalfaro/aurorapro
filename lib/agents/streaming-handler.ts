@@ -1303,24 +1303,35 @@ async function generatePharmacologyFallbackResponse(
   const { ai } = await import('../google-genai-config')
   const SUBAGENT_MODEL = 'gemini-3.1-flash-lite'  // Fast, cost-effective model for fallback responses
 
-  const prompt = `Eres un asistente de farmacología clínica. El usuario investigó sobre:
-"${query}"
+  const prompt = `<clinical_query>
+${query}
+</clinical_query>
 
-No se encontraron estudios académicos específicos en bases de datos. Sin embargo, proporciona una síntesis basada en:
+<context>
+No se encontraron estudios académicos específicos en bases de datos para la consulta anterior. Provee una síntesis clínica basada en principios farmacológicos generales.
+</context>
 
-1. **Principios farmacológicos generales** relevantes al tema
-2. **Mecanismos de acción** de los fármacos mencionados (si aplica)
-3. **Consideraciones clínicas estándar** basadas en farmacología básica
+<task>
+Proporciona una síntesis breve que cubra:
+1. **Principios farmacológicos generales** relevantes al tema.
+2. **Mecanismos de acción** de los fármacos mencionados (si aplica).
+3. **Consideraciones clínicas estándar** basadas en farmacología básica.
 4. **Advertencia clara**: Esta respuesta se basa en principios farmacológicos generales, no en estudios específicos. Se recomienda consultar literatura actualizada y guías clínicas oficiales para el caso particular.
+</task>
 
-**Formato**: Profesional, conciso (máximo 200 palabras), en español clínico.
-**Tono**: Informativo pero cauteloso, reconociendo la limitación de evidencia específica.`
+<output_format>
+- Profesional, conciso (máximo 200 palabras), en español clínico.
+- Tono informativo pero cauteloso, reconociendo la limitación de evidencia específica.
+</output_format>`
 
   try {
     const result = await ai.models.generateContent({
       model: SUBAGENT_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
+        systemInstruction: `<role>
+Eres un asistente de farmacología clínica. Ayudas al terapeuta cuando no hay evidencia específica disponible aportando razonamiento basado en principios farmacológicos establecidos, sin inventar estudios.
+</role>`,
         temperature: 1.0,
         maxOutputTokens: 400, // ~200 words
       },
