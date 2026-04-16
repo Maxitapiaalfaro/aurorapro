@@ -204,7 +204,7 @@ Responde con un resumen estructurado de las fuentes encontradas, incluyendo DOI 
       config: {
         tools: [{ googleSearch: {} }],
         maxOutputTokens: 8000,
-        temperature: 0.1,
+        temperature: 1.0, // Normalized to 1.0 per Google Gen AI SDK best practices for Gemini 3.X
       },
     })
 

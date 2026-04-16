@@ -33,18 +33,4 @@ export function createUnifiedAgentConfig(): AgentConfig {
   }
 }
 
-/**
- * @deprecated Legacy 3-agent definitions — kept for reference during migration.
- * Will be removed after unified agent is validated.
- */
-export function createAgentDefinitions(): Map<AgentType, AgentConfig> {
-  const agents = new Map<AgentType, AgentConfig>()
-  const unified = createUnifiedAgentConfig()
 
-  // All legacy agent types now map to the unified agent
-  agents.set("socratico", { ...unified, name: "Aurora", color: "blue" })
-  agents.set("clinico", { ...unified, name: "Aurora", color: "blue" })
-  agents.set("academico", { ...unified, name: "Aurora", color: "blue" })
-
-  return agents
-}

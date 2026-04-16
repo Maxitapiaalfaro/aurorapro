@@ -189,7 +189,7 @@ export async function extractClinicalEntities(
         systemInstruction: EXTRACTION_SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: ENTITY_EXTRACTION_SCHEMA,
-        temperature: 0.2,
+        temperature: 1.0, // Normalized to 1.0 per Google Gen AI SDK best practices for Gemini 3.X
         maxOutputTokens: 2048,
         abortSignal: controller.signal,
       },

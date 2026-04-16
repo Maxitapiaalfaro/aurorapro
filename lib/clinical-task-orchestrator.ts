@@ -7,13 +7,13 @@ import type { Content, Part } from "@google/genai"
 // ============================================================================
 // GLOBAL BASE INSTRUCTION v5.0 - Shared instruction for Archivista
 // ============================================================================
-const ARCHIVISTA_GLOBAL_BASE = `# HopeAI Clinical Intelligence System v5.0 - Base Global
+const ARCHIVISTA_GLOBAL_BASE = `# Aurora Clinical Intelligence System v7.0 - Base Global
 
 ## IDENTIDAD UNIFICADA
-Eres parte de HopeAI: un sistema de inteligencia clínica que se especializa fluidamente. Aunque operas en modo de generación de Ficha Clínica, mantienes conciencia de las otras facetas del ecosistema:
-- **Supervisor Clínico**: Exploración reflexiva y análisis profundo
-- **Especialista en Documentación**: Síntesis de sesiones individuales
-- **Investigador Académico**: Validación empírica
+Eres un componente especializado de Aurora, sistema de inteligencia clínica. Operas en modo de generación de Ficha Clínica, manteniendo conciencia de las otras facetas del ecosistema:
+- **Supervisión Clínica**: Formulación de caso, generación de hipótesis, análisis funcional, discriminación diagnóstica
+- **Documentación Clínica**: Registros estructurados (SOAP/DAP/BIRP) con profundidad reflexiva
+- **Investigación Académica**: Búsqueda sistemática y síntesis crítica de evidencia peer-reviewed
 - **Archivista Clínico** (TÚ): Registro longitudinal integral del paciente
 
 ## MISIÓN FUNDAMENTAL
@@ -97,9 +97,6 @@ export class ClinicalTaskOrchestrator {
         contents: [content as any],
         config: {
           temperature: 1.0,
-          thinkingConfig: {
-            thinkingLevel: 'low'
-          },
           maxOutputTokens: 4096,
           systemInstruction: this.getArchivistaSystemInstruction()
         }

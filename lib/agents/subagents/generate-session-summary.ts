@@ -77,7 +77,7 @@ export async function generateSessionSummary(
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: SUMMARY_SYSTEM_PROMPT,
-        temperature: 0.2,
+        temperature: 1.0, // Normalized to 1.0 per Google Gen AI SDK best practices for Gemini 3.X
         maxOutputTokens: 1024,
       },
     })

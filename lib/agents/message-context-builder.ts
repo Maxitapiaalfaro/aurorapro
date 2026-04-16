@@ -85,6 +85,10 @@ export function buildEnhancedMessage(originalMessage: string, enrichedContext: a
 
   const contextSections: string[] = []
 
+  // 0. FRESHNESS METADATA (C6 resolution: timestamp + staleness indicator)
+  const memoryCount = enrichedContext.clinicalMemories?.length ?? 0
+  contextSections.push(`<metadata fetched_at="${new Date().toISOString()}" memory_count="${memoryCount}" staleness_note="Datos pre-cargados al inicio del turno. Si el terapeuta reporta cambios recientes, invoca herramientas para datos actualizados."/>`)
+
   // 1. USER IDENTITY (always present)
   contextSections.push(buildUserIdentitySection())
 

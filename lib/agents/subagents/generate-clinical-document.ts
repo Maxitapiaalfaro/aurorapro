@@ -10,7 +10,6 @@
  */
 
 import { ai } from '../../google-genai-config';
-import { ThinkingLevel } from '@google/genai';
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
 import type { DocumentSection, DocumentSectionId } from '@/types/clinical-types';
@@ -158,9 +157,6 @@ export async function executeGenerateClinicalDocument(
       config: {
         systemInstruction: SYSTEM_PROMPT,
         temperature: 1.0,
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.LOW,
-        },
         maxOutputTokens: 8192,
       },
     });
