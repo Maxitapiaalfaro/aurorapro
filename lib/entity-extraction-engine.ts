@@ -533,38 +533,37 @@ export class EntityExtractionEngine {
   }
 
   private buildContextualPrompt(text: string, sessionContext?: any): string {
-    let prompt = `Analiza el siguiente texto y extrae todas las entidades clínicas relevantes:\n\n"${text}"\n\n`
-    
+    // Gemini 3.X SOTA: data-first, instruction-last, XML-delimited.
+    // Context block is optional; omitted when no session context is available.
+    const contextLines: string[] = []
+
     if (sessionContext && this.config.enableContextualAnalysis) {
-      prompt += `Contexto de la sesión:\n`
       if (sessionContext.currentAgent) {
-        prompt += `- Agente actual: ${sessionContext.currentAgent}\n`
+        contextLines.push(`- Agente actual: ${sessionContext.currentAgent}`)
       }
       if (sessionContext.previousEntities) {
-        prompt += `- Entidades previas: ${sessionContext.previousEntities.join(', ')}\n`
+        contextLines.push(`- Entidades previas: ${sessionContext.previousEntities.join(', ')}`)
       }
-      // Patient context biasing for enhanced extraction
       if (sessionContext.patient_reference) {
-        prompt += `- Paciente de referencia: ${sessionContext.patient_reference}\n`
-        prompt += `- IMPORTANTE: Prioriza entidades relacionadas con el contexto específico de este paciente\n`
+        contextLines.push(`- Paciente de referencia: ${sessionContext.patient_reference}`)
       }
       if (sessionContext.clinicalMode) {
-        prompt += `- Modo clínico: ${sessionContext.clinicalMode}\n`
+        contextLines.push(`- Modo clínico: ${sessionContext.clinicalMode}`)
       }
       if (sessionContext.activeAgent) {
-        prompt += `- Especialista activo: ${sessionContext.activeAgent}\n`
+        contextLines.push(`- Especialista activo: ${sessionContext.activeAgent}`)
       }
-      prompt += `\n`
     }
-    
-    prompt += `Extrae y clasifica todas las entidades relevantes con alta precisión. Prioriza entidades específicas y técnicas sobre conceptos generales.`
-    
-    // Enhanced instruction for patient-scoped conversations
-    if (sessionContext?.patient_reference) {
-      prompt += ` Cuando hay un paciente de referencia, enfócate especialmente en entidades que puedan ser relevantes para el contexto clínico específico de ese paciente.`
-    }
-    
-    return prompt
+
+    const contextBlock = contextLines.length > 0
+      ? `\n\n<session_context>\n${contextLines.join('\n')}\n</session_context>`
+      : ''
+
+    const patientBias = sessionContext?.patient_reference
+      ? `\n- Hay un paciente de referencia: prioriza entidades relacionadas con su contexto clínico específico.`
+      : ''
+
+    return `<input_text>\n${text}\n</input_text>${contextBlock}\n\n<task>\nExtrae y clasifica todas las entidades clínicas presentes en <input_text>.\n</task>\n\n<rules>\n- Alta precisión: solo entidades sustentadas por el texto.\n- Prioriza entidades específicas y técnicas sobre conceptos generales.${patientBias}\n</rules>`
   }
 
   private async processFunctionCalls(functionCalls: any[]): Promise<ExtractedEntity[]> {

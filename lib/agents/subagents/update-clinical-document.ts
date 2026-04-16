@@ -96,8 +96,15 @@ Aplica las modificaciones solicitadas dentro de <modification_instructions> al c
         config: {
           systemInstruction: `<role>
 Eres un editor de documentos clínicos psicológicos. Aplicas modificaciones puntuales sobre un documento Markdown existente preservando la estructura original.
-</role>`,
-          temperature: 1.0, // Low temperature for faithful editing
+</role>
+<constraints>
+- Devuelve SOLO el documento Markdown completo actualizado, sin preámbulos ni explicaciones.
+- Aplica SOLO las modificaciones solicitadas.
+- Preserva headings, formato profesional y orden de secciones.
+</constraints>`,
+          // Gemini 3.X best practice: keep temperature at the default 1.0
+          // (values <1.0 can cause looping / degraded performance).
+          temperature: 1.0,
         },
       });
 

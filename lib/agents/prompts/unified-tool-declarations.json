@@ -29,7 +29,7 @@
           "properties": {
             "patientId": {
               "type": "string",
-              "description": "ID del paciente en Firestore"
+              "description": "ID técnico del paciente en Firestore. DEBE provenir de <contexto_sistema>, list_patients, get_patient_record o create_patient en esta conversación. NUNCA lo construyas a partir del nombre (ej: \"pedro-pablo\"); eso crea pacientes fantasma en Firestore. Si no tienes el ID resuelto, emite list_patients primero."
             },
             "category": {
               "type": "string",
@@ -60,7 +60,7 @@
           "properties": {
             "patientId": {
               "type": "string",
-              "description": "ID del paciente en Firestore"
+              "description": "ID técnico del paciente en Firestore. DEBE provenir de <contexto_sistema>, list_patients, get_patient_record o create_patient en esta conversación. NUNCA lo construyas a partir del nombre (ej: \"pedro-pablo\"); eso crea pacientes fantasma en Firestore. Si no tienes el ID resuelto, emite list_patients primero."
             }
           },
           "required": [
@@ -76,7 +76,7 @@
           "properties": {
             "patientId": {
               "type": "string",
-              "description": "ID del paciente en Firestore"
+              "description": "ID técnico del paciente en Firestore. DEBE provenir de <contexto_sistema>, list_patients, get_patient_record o create_patient en esta conversación. NUNCA lo construyas a partir del nombre (ej: \"pedro-pablo\"); eso crea pacientes fantasma en Firestore. Si no tienes el ID resuelto, emite list_patients primero."
             },
             "category": {
               "type": "string",
@@ -115,13 +115,13 @@
       },
       {
         "name": "create_patient",
-        "description": "Crea un nuevo registro de paciente en la base de datos del terapeuta.\n\nUSA CUANDO:\n- El terapeuta menciona un paciente nuevo que quiere registrar\n- El terapeuta pide explícitamente crear un registro de paciente\n- Se inicia un caso nuevo y no existe registro previo\n\nNO USES CUANDO:\n- El paciente ya existe — usa get_patient_record\n- El terapeuta solo menciona un nombre casualmente sin pedir registrarlo",
+        "description": "Crea un nuevo registro de paciente en la base de datos del terapeuta.\n\nUSA CUANDO:\n- El terapeuta menciona un paciente nuevo que quiere registrar\n- El terapeuta pide explícitamente crear un registro de paciente\n- Se inicia un caso nuevo y no existe registro previo (confirmado vía list_patients)\n\nNO USES CUANDO:\n- El paciente ya existe — usa get_patient_record\n- El terapeuta solo menciona un nombre casualmente sin pedir registrarlo\n- No tienes consentimiento explícito del terapeuta sobre la convención de seudónimo a usar\n\nPOLÍTICA DE ANONIMIZACIÓN (ver §8.3.1 del system prompt):\nAntes de invocar create_patient para un paciente nuevo, el terapeuta DEBE confirmar la convención de seudónimo. Proponle 3 opciones (INICIALES, CÓDIGO_ALFANUMÉRICO, ALIAS_TEMÁTICO) o usa la convención ya guardada como therapeutic-preference. Nunca persistas el nombre real completo salvo que el terapeuta lo declare explícitamente. Nunca incluyas identificadores directos (DNI/RUT, dirección, teléfono, email) en displayName/notes/tags. Los pacientes YA EXISTENTES no se renombran: respeta su displayName actual.",
         "parametersJsonSchema": {
           "type": "object",
           "properties": {
             "displayName": {
               "type": "string",
-              "description": "Nombre o seudónimo del paciente"
+              "description": "Seudónimo acordado con el terapeuta según la política de anonimización (ej: \"P.P.\", \"Paciente A-07\", \"Cliente-Ansiedad-03\"). NO uses el nombre real completo salvo consentimiento explícito del terapeuta registrado en esta conversación. NO incluyas identificadores directos (DNI/RUT, dirección, teléfono)."
             },
             "demographics": {
               "type": "object",
@@ -187,7 +187,7 @@
           "properties": {
             "patientId": {
               "type": "string",
-              "description": "ID del paciente en Firestore"
+              "description": "ID técnico del paciente en Firestore. DEBE provenir de <contexto_sistema>, list_patients, get_patient_record o create_patient en esta conversación. NUNCA lo construyas a partir del nombre (ej: \"pedro-pablo\"); eso crea pacientes fantasma en Firestore. Si no tienes el ID resuelto, emite list_patients primero."
             },
             "context_hint": {
               "type": "string",
