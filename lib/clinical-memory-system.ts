@@ -335,13 +335,10 @@ export async function getRelevantMemoriesSemantic(
       .join('\n')
 
     const selectionPrompt = [
-      `Contexto de la conversación actual:\n${context}\n`,
-      `Memorias clínicas disponibles del paciente:\n${memoryList}\n`,
-      `Selecciona las ${limit} memorias MÁS RELEVANTES para este contexto.`,
-      `Responde SOLO con los números de las memorias seleccionadas, separados por comas.`,
-      `Ejemplo: 0,3,7,2,5`,
-      `Si ninguna es relevante, responde: NONE`,
-    ].join('\n')
+      `<current_context>\n${context}\n</current_context>`,
+      `<available_memories>\n${memoryList}\n</available_memories>`,
+      `<task>\nSelecciona las ${limit} memorias MÁS RELEVANTES al <current_context>. Responde SOLO con los números de las memorias seleccionadas separados por comas (ej: 0,3,7,2,5). Si ninguna es relevante, responde exactamente: NONE.\n</task>`,
+    ].join('\n\n')
 
     // Dynamic import to avoid circular dependency with google-genai-config
     const { ai } = await import('@/lib/google-genai-config')
@@ -350,7 +347,12 @@ export async function getRelevantMemoriesSemantic(
       model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: selectionPrompt }] }],
       config: {
-        systemInstruction: 'Eres un asistente de selección de memorias clínicas. Tu tarea es identificar las memorias más relevantes al contexto dado. Responde SOLO con números separados por comas.',
+        systemInstruction: `<role>
+Eres un asistente de selección de memorias clínicas. Identificas las memorias más relevantes al contexto dado.
+</role>
+<output_format>
+Responde SOLO con números separados por comas, o la palabra NONE si ninguna memoria es relevante.
+</output_format>`,
         temperature: 1.0,
         maxOutputTokens: 100,
       },

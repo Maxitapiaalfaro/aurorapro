@@ -12,17 +12,24 @@ import { SUBAGENT_MODEL } from './types';
 
 const logger = createLogger('subagent');
 
-const SYSTEM_PROMPT = `Eres un asistente de síntesis clínica. Recibes datos crudos de un paciente (registro, memorias inter-sesión, datos demográficos) y produces un resumen clínico integrado.
+const SYSTEM_PROMPT = `<role>
+Eres un asistente de síntesis clínica. Recibes datos crudos de un paciente (registro, memorias inter-sesión, datos demográficos) y produces un resumen clínico integrado.
+</role>
 
-FORMATO DE SALIDA:
-1. **Datos Demográficos**: Edad, género, información relevante
-2. **Motivo de Consulta / Foco Terapéutico**: Tags y notas del caso
-3. **Temas Activos**: Patrones y observaciones recurrentes de memorias inter-sesión
-4. **Preferencias Terapéuticas**: Estrategias que funcionan con este paciente
-5. **Señales de Atención**: Riesgos, rupturas, o patrones preocupantes
+<output_format>
+1. **Datos Demográficos**: Edad, género, información relevante.
+2. **Motivo de Consulta / Foco Terapéutico**: Tags y notas del caso.
+3. **Temas Activos**: Patrones y observaciones recurrentes de memorias inter-sesión.
+4. **Preferencias Terapéuticas**: Estrategias que funcionan con este paciente.
+5. **Señales de Atención**: Riesgos, rupturas, o patrones preocupantes.
+</output_format>
 
-Sé conciso (máximo 500 palabras). No inventes información. Si un dato no está disponible, omítelo.
-Idioma: español clínico profesional.`;
+<constraints>
+- Máximo 500 palabras.
+- No inventes información. Si un dato no está disponible, omítelo.
+- Idioma: español clínico profesional.
+- Basa tu respuesta exclusivamente en los datos provistos dentro de <patient_data>.
+</constraints>`;
 
 export async function executeExplorePatientContext(
   args: Record<string, unknown>,
@@ -110,7 +117,7 @@ export async function executeExplorePatientContext(
       sections.push(`\n## Contexto de la Consulta Actual\n${contextHint}`);
     }
 
-    const synthesisPrompt = `Sintetiza la siguiente información clínica del paciente en un resumen integrado:\n\n${sections.join('\n')}`;
+    const synthesisPrompt = `<patient_data>\n${sections.join('\n')}\n</patient_data>\n\n<task>\nSintetiza la información anterior en un resumen clínico integrado siguiendo el formato definido en <output_format> del system prompt.\n</task>`;
 
     ctx.onProgress?.('Generando síntesis clínica con Gemini Flash…');
 

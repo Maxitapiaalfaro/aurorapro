@@ -192,11 +192,17 @@ function mapGroundingChunksToSources(
  */
 async function executeGeminiGroundingSearch(query: string): Promise<ValidatedAcademicSource[]> {
   try {
-    const prompt = `Busca evidencia científica reciente y revisada por pares sobre el siguiente tema clínico. Proporciona URLs, títulos, autores y hallazgos clave de las fuentes más relevantes. Prioriza meta-análisis, revisiones sistemáticas y ensayos controlados aleatorizados de los últimos 5 años.
+    const prompt = `<task>
+Busca evidencia científica reciente y revisada por pares sobre el tema clínico dentro de <topic>. Proporciona URLs, títulos, autores y hallazgos clave de las fuentes más relevantes. Prioriza meta-análisis, revisiones sistemáticas y ensayos controlados aleatorizados de los últimos 5 años.
+</task>
 
-Tema: ${query}
+<topic>
+${query}
+</topic>
 
-Responde con un resumen estructurado de las fuentes encontradas, incluyendo DOI cuando esté disponible.`
+<output_format>
+Resumen estructurado de las fuentes encontradas, incluyendo DOI cuando esté disponible.
+</output_format>`
 
     const response = await ai.models.generateContent({
       model: GEMINI_GROUNDING_MODEL,

@@ -21,24 +21,31 @@ const logger = createLogger('subagent');
 // System Prompt
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `Eres un especialista en documentación clínica psicológica. Generas documentos estructurados profesionales.
+const SYSTEM_PROMPT = `<role>
+Eres un especialista en documentación clínica psicológica. Generas documentos estructurados profesionales.
+</role>
 
-FORMATOS SOPORTADOS:
-- **SOAP**: Subjetivo (reporte del paciente, citas textuales) / Objetivo (observaciones clínicas, conducta no verbal, estado mental) / Análisis (formulación clínica, hipótesis, conexiones con sesiones previas) / Plan (intervenciones propuestas, tareas, próxima sesión)
-- **DAP**: Datos (hechos reportados y observados) / Análisis (interpretación clínica) / Plan (siguientes pasos)
-- **BIRP**: Comportamiento (conductas observadas) / Intervención (técnicas aplicadas) / Respuesta (reacción del paciente) / Plan (continuidad)
-- **plan_tratamiento**: Objetivos terapéuticos, intervenciones, timeline, indicadores de progreso
-- **resumen_caso**: Resumen clínico integral del caso con evolución
+<supported_formats>
+- **SOAP**: Subjetivo (reporte del paciente, citas textuales) / Objetivo (observaciones clínicas, conducta no verbal, estado mental) / Análisis (formulación clínica, hipótesis, conexiones con sesiones previas) / Plan (intervenciones propuestas, tareas, próxima sesión).
+- **DAP**: Datos (hechos reportados y observados) / Análisis (interpretación clínica) / Plan (siguientes pasos).
+- **BIRP**: Comportamiento (conductas observadas) / Intervención (técnicas aplicadas) / Respuesta (reacción del paciente) / Plan (continuidad).
+- **plan_tratamiento**: Objetivos terapéuticos, intervenciones, timeline, indicadores de progreso.
+- **resumen_caso**: Resumen clínico integral del caso con evolución.
+</supported_formats>
 
-REGLAS:
-- NUNCA inventes información ausente del material fuente
-- Marca información faltante como "[Requiere clarificación]"
-- Distingue observaciones objetivas de interpretaciones clínicas
-- Usa citas textuales del paciente cuando preserven precisión clínica
-- Extensión: 200-400 palabras (sesión estándar), 400-800 (sesión compleja o plan de tratamiento)
-- Cada sección DEBE empezar con un heading markdown nivel 2 (## Nombre de Sección)
+<rules>
+- NUNCA inventes información ausente del material fuente.
+- Marca información faltante como "[Requiere clarificación]".
+- Distingue observaciones objetivas de interpretaciones clínicas.
+- Usa citas textuales del paciente cuando preserven precisión clínica.
+- Extensión: 200-400 palabras (sesión estándar), 400-800 (sesión compleja o plan de tratamiento).
+- Cada sección DEBE empezar con un heading markdown nivel 2 (## Nombre de Sección).
+- Basa el contenido exclusivamente en los datos entregados dentro de <session_content> y <patient_data>.
+</rules>
 
-Idioma: español clínico profesional apropiado para expedientes psicológicos.`;
+<output_format>
+Markdown profesional. Idioma: español clínico apropiado para expedientes psicológicos. Sin preámbulos ni explicaciones fuera del documento.
+</output_format>`;
 
 // ---------------------------------------------------------------------------
 // Section Detection Helpers
@@ -123,9 +130,10 @@ export async function executeGenerateClinicalDocument(
         const record = await loadPatientFromFirestore(ctx.psychologistId, patientId);
 
         if (record) {
-          patientContext = `\n\n## Datos del Paciente\n- Nombre: ${record.displayName || 'No especificado'}`;
+          patientContext = `\n\n<patient_data>\n- Nombre: ${record.displayName || 'No especificado'}`;
           if (record.tags?.length) patientContext += `\n- Tags: ${record.tags.join(', ')}`;
           if (record.notes) patientContext += `\n- Notas: ${record.notes}`;
+          patientContext += `\n</patient_data>`;
           ctx.onProgress?.(`Registro cargado: ${record.displayName || patientId}`);
         } else {
           ctx.onProgress?.('Paciente no encontrado, continuando sin contexto');
@@ -139,10 +147,10 @@ export async function executeGenerateClinicalDocument(
     ctx.onProgress?.('Preparando contenido de sesión…');
 
     const prompt = [
-      `Genera un documento clínico tipo **${documentType}** basado en el siguiente contenido de sesión.`,
-      `\n## Contenido de la Sesión\n${conversationContext}`,
+      `<session_content>\n${conversationContext}\n</session_content>`,
       patientContext,
-      additionalInstructions ? `\n## Instrucciones Adicionales\n${additionalInstructions}` : '',
+      additionalInstructions ? `\n<additional_instructions>\n${additionalInstructions}\n</additional_instructions>` : '',
+      `\n<task>\nGenera un documento clínico tipo **${documentType}** basándote exclusivamente en los datos anteriores. Respeta <rules>, <output_format> y el esquema de secciones correspondiente al tipo solicitado.\n</task>`,
     ].filter(Boolean).join('\n');
 
     ctx.onProgress?.(`Generando documento ${documentType} con Gemini Flash…`);

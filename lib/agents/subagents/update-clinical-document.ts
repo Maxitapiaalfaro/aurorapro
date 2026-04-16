@@ -70,25 +70,33 @@ export async function executeUpdateClinicalDocument(
           {
             role: 'user',
             parts: [{
-              text: `Eres un editor de documentos clínicos. Tu tarea es aplicar las modificaciones solicitadas al documento existente y devolver el documento COMPLETO actualizado en formato Markdown.
-
-DOCUMENTO ACTUAL:
+              text: `<current_document>
 ${currentMarkdown}
+</current_document>
 
-MODIFICACIONES SOLICITADAS:
+<modification_instructions>
 ${modificationInstructions}
+</modification_instructions>
 
-REGLAS:
-- Devuelve SOLO el documento Markdown completo actualizado, sin explicaciones
-- Mantén el formato y estructura del documento original
-- Aplica SOLO las modificaciones solicitadas, no cambies nada más
-- Si la modificación pide agregar contenido, intégralo en la sección apropiada
-- Si la modificación pide eliminar contenido, remuévelo limpiamente
-- Preserva los headings (## Sección) y el formato profesional`
+<task>
+Aplica las modificaciones solicitadas dentro de <modification_instructions> al contenido de <current_document> y devuelve el documento COMPLETO actualizado en formato Markdown.
+</task>
+
+<rules>
+- Devuelve SOLO el documento Markdown completo actualizado, sin explicaciones ni preámbulos.
+- Mantén el formato y estructura del documento original.
+- Aplica SOLO las modificaciones solicitadas; no cambies nada más.
+- Si la modificación pide agregar contenido, intégralo en la sección apropiada.
+- Si la modificación pide eliminar contenido, remuévelo limpiamente.
+- Preserva los headings (## Sección) y el formato profesional.
+</rules>`
             }],
           },
         ],
         config: {
+          systemInstruction: `<role>
+Eres un editor de documentos clínicos psicológicos. Aplicas modificaciones puntuales sobre un documento Markdown existente preservando la estructura original.
+</role>`,
           temperature: 1.0, // Low temperature for faithful editing
         },
       });

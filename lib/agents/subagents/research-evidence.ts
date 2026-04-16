@@ -12,18 +12,24 @@ import { SUBAGENT_MODEL } from './types';
 
 const logger = createLogger('subagent');
 
-const SYNTHESIS_SYSTEM_PROMPT = `Eres un investigador académico especializado en psicología clínica. Recibes resultados de múltiples búsquedas académicas y produces una síntesis de evidencia integrada.
+const SYNTHESIS_SYSTEM_PROMPT = `<role>
+Eres un investigador académico especializado en psicología clínica. Recibes resultados de múltiples búsquedas académicas y produces una síntesis de evidencia integrada.
+</role>
 
-FORMATO DE SALIDA:
-1. **Síntesis de Evidencia**: Hallazgos principales convergentes entre fuentes
-2. **Nivel de Evidencia**: Para cada hallazgo, indica calidad (meta-análisis > RCT > observacional > caso clínico)
-3. **Controversias**: Donde las fuentes divergen o evidencia es contradictoria
-4. **Aplicabilidad Clínica**: Cómo traducir los hallazgos a la práctica terapéutica
-5. **Limitaciones**: Gaps en la evidencia, poblaciones no representadas, sesgos metodológicos
-6. **Referencias**: Lista numerada de fuentes citadas con DOI cuando esté disponible
+<output_format>
+1. **Síntesis de Evidencia**: Hallazgos principales convergentes entre fuentes.
+2. **Nivel de Evidencia**: Para cada hallazgo, indica calidad (meta-análisis > RCT > observacional > caso clínico).
+3. **Controversias**: Donde las fuentes divergen o la evidencia es contradictoria.
+4. **Aplicabilidad Clínica**: Cómo traducir los hallazgos a la práctica terapéutica.
+5. **Limitaciones**: Gaps en la evidencia, poblaciones no representadas, sesgos metodológicos.
+6. **Referencias**: Lista numerada de fuentes citadas con DOI cuando esté disponible.
+</output_format>
 
-Sé riguroso. Distingue evidencia robusta de exploratoria. No inventes citas.
-Idioma: español académico profesional.`;
+<constraints>
+- Sé riguroso. Distingue evidencia robusta de exploratoria.
+- No inventes citas: toda referencia debe provenir de <sources>.
+- Idioma: español académico profesional.
+</constraints>`;
 
 /**
  * Detects polypharmacy queries (multiple drug names)
@@ -168,35 +174,39 @@ async function generatePharmacologicalFallback(query: string, drugs: string[]): 
   const logger = createLogger('subagent');
   logger.info(`[subagent:research_evidence] Generating pharmacological fallback for ${drugs.length} drugs`);
 
-  const fallbackPrompt = `
-CONTEXTO CLÍNICO:
-El clínico preguntó: "${query}"
-
+  const fallbackPrompt = `<clinical_context>
+Pregunta del clínico: "${query}"
 Fármacos detectados: ${drugs.join(', ')}
+Estado de evidencia: NO se encontró literatura específica para esta combinación exacta.
+</clinical_context>
 
-NO SE ENCONTRÓ LITERATURA ESPECÍFICA para esta combinación exacta.
-
-TAREA:
+<task>
 Como farmacólogo clínico, proporciona un análisis basado en principios farmacológicos generales:
+1. **Mecanismos de Acción**: Para cada fármaco, describe brevemente su mecanismo principal (receptores, neurotransmisores).
+2. **Interacciones Teóricas**: Basándote en farmacología, identifica posibles interacciones farmacodinámicas o farmacocinéticas.
+3. **Consideraciones Clínicas**: Qué monitorear en un paciente con esta combinación.
+4. **Recomendaciones de Evidencia**: Sugiere búsquedas alternativas (ej: interacciones por pares, estudios de mecanismos individuales).
+5. **ADVERTENCIA EXPLÍCITA**: Indica claramente que este análisis es teórico, no basado en estudios específicos de esta combinación.
+</task>
 
-1. **Mecanismos de Acción**: Para cada fármaco, describe brevemente su mecanismo principal (receptores, neurotransmisores)
-2. **Interacciones Teóricas**: Basándote en farmacología, identifica posibles interacciones farmacodinámicas o farmacocinéticas
-3. **Consideraciones Clínicas**: Qué monitorear en un paciente con esta combinación
-4. **Recomendaciones de Evidencia**: Sugiere búsquedas alternativas (ej: interacciones por pares, estudios de mecanismos individuales)
-5. **ADVERTENCIA EXPLÍCITA**: Indica claramente que este análisis es teórico, no basado en estudios específicos de esta combinación
-
-FORMATO: Profesional, estructurado, breve (máx 600 palabras)
-IDIOMA: Español académico
-TONO: Cauteloso, científicamente riguroso
-`.trim();
+<output_format>
+- Formato: profesional, estructurado, breve (máx 600 palabras).
+- Idioma: español académico.
+- Tono: cauteloso, científicamente riguroso.
+</output_format>`.trim();
 
   try {
     const result = await ai.models.generateContent({
       model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
       config: {
-        systemInstruction:
-          'Eres un farmacólogo clínico especializado en psicofarmacología. Proporcionas análisis basados en principios farmacológicos generales cuando no existe evidencia específica. Eres cauteloso y transparente sobre las limitaciones.',
+        systemInstruction: `<role>
+Eres un farmacólogo clínico especializado en psicofarmacología. Proporcionas análisis basados en principios farmacológicos generales cuando no existe evidencia específica.
+</role>
+<constraints>
+- Eres cauteloso y transparente sobre las limitaciones de la evidencia.
+- No inventes estudios ni citas.
+</constraints>`,
         temperature: 1.0,
         maxOutputTokens: 2048,
       },
@@ -357,10 +367,10 @@ export async function executeResearchEvidence(
       .join('\n\n');
 
     const synthesisPrompt = [
-      `Pregunta de investigación: ${researchQuestion}`,
-      focusArea ? `Área de enfoque: ${focusArea}` : '',
-      `\n## Fuentes Encontradas (${allResults.length}):\n\n${sourceSummaries}`,
-      `\nSintetiza estos hallazgos en una revisión de evidencia integrada.`,
+      `<research_question>${researchQuestion}</research_question>`,
+      focusArea ? `<focus_area>${focusArea}</focus_area>` : '',
+      `\n<sources count="${allResults.length}">\n${sourceSummaries}\n</sources>`,
+      `\n<task>\nBasándote exclusivamente en las fuentes anteriores, sintetiza los hallazgos en una revisión de evidencia integrada siguiendo <output_format>.\n</task>`,
     ].filter(Boolean).join('\n');
 
     ctx.onProgress?.(`Sintetizando ${allResults.length} fuentes con Gemini Flash…`);

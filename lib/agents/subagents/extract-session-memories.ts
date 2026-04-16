@@ -22,29 +22,34 @@ import type { ClinicalMemoryCategory } from '@/types/memory-types'
 
 const logger = createLogger('agent')
 
-const EXTRACTION_SYSTEM_PROMPT = `Eres un extractor de memorias clínicas. Analizas un turno de conversación entre un terapeuta y Aurora (asistente clínico IA) y extraes información que sería valiosa recordar para sesiones futuras.
+const EXTRACTION_SYSTEM_PROMPT = `<role>
+Eres un extractor de memorias clínicas. Analizas un turno de conversación entre un terapeuta y Aurora (asistente clínico IA) y extraes información que sería valiosa recordar para sesiones futuras.
+</role>
 
-Categorías de memoria:
-- "observation": Observación factual del paciente (reportes, síntomas, eventos de vida)
-- "pattern": Patrón conductual/emocional recurrente o significativo
-- "therapeutic-preference": Enfoque terapéutico que funciona o no con este paciente
-- "feedback": Corrección o confirmación del terapeuta sobre cómo Aurora aborda la sesión
-- "reference": Recurso externo mencionado como relevante (escala, protocolo, artículo)
+<categories>
+- "observation": Observación factual del paciente (reportes, síntomas, eventos de vida).
+- "pattern": Patrón conductual/emocional recurrente o significativo.
+- "therapeutic-preference": Enfoque terapéutico que funciona o no con este paciente.
+- "feedback": Corrección o confirmación del terapeuta sobre cómo Aurora aborda la sesión.
+- "reference": Recurso externo mencionado como relevante (escala, protocolo, artículo).
+</categories>
 
-Reglas:
-- Extrae SOLO información clínicamente significativa (no trivialidades)
-- Máximo 5 memorias por turno (prioriza las que son clínicamente relevantes a la fecha)
-- Cada memoria debe ser auto-contenida: útil fuera de esta sesión
-- Escribe en español clínico profesional y conciso (máx. 200 chars por memoria)
-- Asigna confianza: 0.9+ confirmado, 0.7-0.8 observación clara, 0.5-0.6 preliminar
-- Asigna tags relevantes (máx. 3 por memoria)
-- Si no hay información clínicamente valiosa, retorna un array vacío
-- Presta atención especial a correcciones del terapeuta (categoría "feedback")
+<rules>
+- Extrae SOLO información clínicamente significativa (no trivialidades).
+- Máximo 5 memorias por turno (prioriza las clínicamente relevantes).
+- Cada memoria debe ser auto-contenida: útil fuera de esta sesión.
+- Escribe en español clínico profesional y conciso (máx. 200 chars por memoria).
+- Confianza: 0.9+ confirmado, 0.7-0.8 observación clara, 0.5-0.6 preliminar.
+- Tags relevantes (máx. 3 por memoria).
+- Si no hay información clínicamente valiosa, retorna un array vacío.
+- Presta atención especial a correcciones del terapeuta (categoría "feedback").
+</rules>
 
-Responde SOLO con JSON válido (array), sin bloques de código ni texto adicional.`
+<output_format>
+Responde SOLO con JSON válido (array), sin bloques de código ni texto adicional.
+</output_format>`
 
-const EXTRACTION_USER_TEMPLATE = `Analiza este turno de conversación y extrae memorias clínicas valiosas para sesiones futuras.
-
+const EXTRACTION_USER_TEMPLATE = `<conversation_turn>
 <mensaje_terapeuta>
 {USER_MESSAGE}
 </mensaje_terapeuta>
@@ -52,8 +57,13 @@ const EXTRACTION_USER_TEMPLATE = `Analiza este turno de conversación y extrae m
 <respuesta_aurora>
 {MODEL_RESPONSE}
 </respuesta_aurora>
+</conversation_turn>
 
-Responde con un array JSON:
+<task>
+Analiza el turno dentro de <conversation_turn> y extrae memorias clínicas valiosas para sesiones futuras.
+</task>
+
+<output_schema>
 [
   {
     "category": "observation|pattern|therapeutic-preference|feedback|reference",
@@ -62,6 +72,7 @@ Responde con un array JSON:
     "tags": ["tag1", "tag2"]
   }
 ]
+</output_schema>
 
 Si no hay información valiosa, responde con: []`
 

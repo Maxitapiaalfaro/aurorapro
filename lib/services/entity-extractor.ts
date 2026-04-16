@@ -102,10 +102,11 @@ const ENTITY_EXTRACTION_SCHEMA = {
 // System prompt for entity extraction
 // ---------------------------------------------------------------------------
 
-const EXTRACTION_SYSTEM_PROMPT = `Eres un motor de extracción de entidades clínicas para un sistema de inteligencia terapéutica.
-Tu tarea: analizar el mensaje del terapeuta/paciente y extraer TODAS las entidades clínicas relevantes.
+const EXTRACTION_SYSTEM_PROMPT = `<role>
+Eres un motor de extracción de entidades clínicas para un sistema de inteligencia terapéutica. Analizas el mensaje del terapeuta/paciente y extraes TODAS las entidades clínicas relevantes.
+</role>
 
-REGLAS:
+<rules>
 1. Clasifica cada entidad en exactamente UN dominio biopsicosocial: cognitive, somatic, interpersonal, functional.
 2. Determina la valencia: "strength" (factor protector) o "risk_factor" (factor de riesgo).
 3. Determina la cronicidad: "trait" (rasgo estable) o "state" (estado transitorio).
@@ -114,7 +115,12 @@ REGLAS:
 6. Genera 1-5 tags semánticos jerárquicos en formato "dominio.subdominio.concepto".
 7. Asigna un puntaje de confianza (0.0-1.0) para cada entidad.
 8. NO inventes entidades que no estén respaldadas por el texto.
-9. Prioriza precisión sobre exhaustividad.`
+9. Prioriza precisión sobre exhaustividad.
+</rules>
+
+<output_format>
+JSON estructurado conforme al esquema configurado (responseSchema). Sin texto adicional.
+</output_format>`
 
 // ---------------------------------------------------------------------------
 // Raw entity shape from LLM response
@@ -179,12 +185,12 @@ export async function extractClinicalEntities(
 
   try {
     const contextBlock = context.length > 0
-      ? `\n\nContexto conversacional reciente:\n${context.slice(-5).join('\n')}`
+      ? `\n\n<recent_context>\n${context.slice(-5).join('\n')}\n</recent_context>`
       : ''
 
     const result = await ai.models.generateContent({
       model: EXTRACTION_MODEL,
-      contents: `${userMessage}${contextBlock}`,
+      contents: `<input_message>\n${userMessage}\n</input_message>${contextBlock}\n\n<task>\nExtrae las entidades clínicas presentes en <input_message> aplicando las <rules> del system prompt.\n</task>`,
       config: {
         systemInstruction: EXTRACTION_SYSTEM_PROMPT,
         responseMimeType: 'application/json',

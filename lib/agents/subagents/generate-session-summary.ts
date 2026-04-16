@@ -20,37 +20,43 @@ import type { SessionSummaryData } from '@/types/clinical-types'
 
 const logger = createLogger('agent')
 
-const SUMMARY_SYSTEM_PROMPT = `Eres un asistente clínico que genera resúmenes concisos de sesiones terapéuticas.
+const SUMMARY_SYSTEM_PROMPT = `<role>
+Eres un asistente clínico que genera resúmenes concisos de sesiones terapéuticas. Analizas un fragmento de conversación entre un terapeuta y Aurora (asistente clínico IA) y produces un resumen estructurado en formato JSON.
+</role>
 
-Tu tarea es analizar un fragmento de conversación entre un terapeuta y Aurora (asistente clínico IA) y producir un resumen estructurado en formato JSON.
+<rules>
+- Escribe en español clínico profesional.
+- Sé conciso: cada campo debe ser breve (1-2 oraciones máximo).
+- mainTopics: máximo 5 temas principales (strings cortos, no oraciones completas).
+- therapeuticProgress: evaluación breve del avance terapéutico observado.
+- riskFlags: solo si se detectaron banderas de riesgo. Array vacío si no hay riesgo.
+- nextSteps: máximo 3 sugerencias concretas para la siguiente sesión.
+- keyInsights: máximo 3 observaciones clínicas clave del agente.
+- Nunca incluyas datos identificables del paciente (solo patrones y observaciones).
+- Si la conversación es breve o no tiene contenido clínico sustantivo, genera un resumen mínimo.
+</rules>
 
-Reglas:
-- Escribe en español clínico profesional
-- Sé conciso: cada campo debe ser breve (1-2 oraciones máximo)
-- mainTopics: máximo 5 temas principales (strings cortos, no oraciones completas)
-- therapeuticProgress: evaluación breve del avance terapéutico observado
-- riskFlags: solo si se detectaron banderas de riesgo. Array vacío si no hay riesgo
-- nextSteps: máximo 3 sugerencias concretas para la siguiente sesión
-- keyInsights: máximo 3 observaciones clínicas clave del agente
-- Nunca incluyas datos identificables del paciente (solo patrones y observaciones)
-- Si la conversación es breve o no tiene contenido clínico sustantivo, genera un resumen mínimo
+<output_format>
+Responde SOLO con JSON válido, sin bloques de código ni texto adicional.
+</output_format>`
 
-Responde SOLO con JSON válido, sin bloques de código ni texto adicional.`
-
-const SUMMARY_USER_TEMPLATE = `Genera un resumen clínico estructurado de la siguiente conversación terapéutica.
-
-<conversacion>
+const SUMMARY_USER_TEMPLATE = `<conversacion>
 {CONVERSATION}
 </conversacion>
 
-Responde con JSON en este formato exacto:
+<task>
+Genera un resumen clínico estructurado de la conversación dentro de <conversacion>.
+</task>
+
+<output_schema>
 {
   "mainTopics": ["tema1", "tema2"],
   "therapeuticProgress": "breve evaluación del progreso",
   "riskFlags": [],
   "nextSteps": ["paso1", "paso2"],
   "keyInsights": ["insight1", "insight2"]
-}`
+}
+</output_schema>`
 
 /**
  * Generate a session summary from conversation history.
