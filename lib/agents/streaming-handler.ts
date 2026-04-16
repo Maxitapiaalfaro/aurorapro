@@ -719,16 +719,24 @@ export async function handleStreamingWithTools(
         const validResponses = functionResponses.filter(response => response !== null)
 
         // 🎨 UX: Emit tool_call_complete for EVERY tool
+        const SOURCE_TOOLS = new Set([
+          'search_academic_literature', 'research_evidence',
+          'search_evidence_for_reflection', 'search_evidence_for_documentation',
+        ]);
         for (const resp of validResponses) {
           const responseData = resp.response as any;
+          const isSourceTool = SOURCE_TOOLS.has(resp.name);
           yield {
             text: "",
             metadata: {
               type: "tool_call_complete",
               toolName: resp.name,
-              sourcesFound: responseData?.total_found || responseData?.sourcesCount || responseData?.count || 0,
-              sourcesValidated: responseData?.validated_count || responseData?.sourcesCount || 0,
-              academicSources: (resp.name === 'search_academic_literature' || resp.name === 'research_evidence')
+              // Only set sourcesFound/Validated for tools that actually search sources
+              ...(isSourceTool ? {
+                sourcesFound: responseData?.total_found || responseData?.sourcesCount || responseData?.count || 0,
+                sourcesValidated: responseData?.validated_count || responseData?.sourcesCount || 0,
+              } : {}),
+              academicSources: isSourceTool
                 ? (academicReferences.length > 0 ? academicReferences : undefined)
                 : undefined,
               completionDetail: extractCompletionDetail(resp),
@@ -769,6 +777,7 @@ export async function handleStreamingWithTools(
               const extractedText = extractTextFromChunk(chunk)
               if (extractedText) {
                 hasYieldedContent = true
+                accumulatedText += extractedText
 
                 // Convertir vertex links en el texto antes de enviar
                 let processedText = extractedText
@@ -794,6 +803,11 @@ export async function handleStreamingWithTools(
               // Collect any recursive function calls from the follow-up
               if (chunk.functionCalls) {
                 followUpFunctionCalls.push(...chunk.functionCalls)
+              }
+
+              // 📊 Capture finalResponse from follow-up (overrides initial — this has the real output tokens)
+              if (chunk.candidates && chunk.candidates[0]) {
+                finalResponse = chunk
               }
 
               // Extract and yield grounding metadata with URLs if available
@@ -927,10 +941,59 @@ export async function handleStreamingWithTools(
         }
       }
 
-      // If no content was yielded at all, yield a visible warning to prevent silent failure
+      // If no content was yielded after tool execution, retry with compacted tool results
+      if (!hasYieldedContent && functionCalls.length > 0) {
+        logger.warn(`⚠️ No content yielded after ${functionCalls.length} tool calls — attempting retry with compacted context`)
+
+        try {
+          // Build a compact summary of what tools returned, asking the model to respond
+          const retryPrompt = [
+            'Las herramientas se ejecutaron correctamente pero no generaste una respuesta de texto.',
+            'Por favor, sintetiza los resultados de las herramientas anteriores y responde la consulta del terapeuta.',
+            'Responde directamente con tu análisis — NO invoques herramientas adicionales.',
+          ].join(' ')
+
+          const retryResult = await sessionData.chat.sendMessageStream({
+            message: [{ text: retryPrompt }],
+            config: {
+              // Disable tool calls on retry to force text generation
+              toolConfig: { functionCallingConfig: { mode: 'NONE' as any } },
+            },
+          })
+          const retryStream = retryResult.stream || retryResult
+
+          let retryFunctionCalls = false
+          for await (const chunk of retryStream) {
+            const extractedText = extractTextFromChunk(chunk)
+            if (extractedText) {
+              accumulatedText += extractedText
+              hasYieldedContent = true
+              yield { text: extractedText }
+            }
+            // Track if retry also returned function calls (should not happen with NONE mode)
+            if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+              retryFunctionCalls = true
+            }
+            // Capture finalResponse from retry for metrics
+            if (chunk.candidates && chunk.candidates[0]) {
+              finalResponse = chunk
+            }
+          }
+
+          if (hasYieldedContent) {
+            logger.info(`✅ Retry succeeded — yielded ${accumulatedText.length} chars`)
+          } else {
+            logger.warn(`⚠️ Retry also produced no text content`, { retryFunctionCalls })
+          }
+        } catch (retryError) {
+          logger.error('❌ Retry after empty tool response failed:', { error: retryError instanceof Error ? retryError.message : String(retryError) })
+        }
+      }
+
+      // Final fallback if still no content after retry
       if (!hasYieldedContent) {
-        logger.warn('⚠️ No content yielded from AI — providing visible fallback message')
-        yield { text: "\n\n> ⚠️ La IA no produjo una respuesta. Esto puede ocurrir si los archivos adjuntos no estuvieron disponibles durante el procesamiento. Intenta reenviar el mensaje o subir los archivos nuevamente.\n" }
+        logger.warn('⚠️ No content yielded from AI (including retry) — providing visible fallback message')
+        yield { text: "\n\n> ⚠️ La IA no produjo una respuesta. Esto puede ocurrir cuando la consulta requiere demasiado contexto. Intenta ser más específico sobre qué paciente o tema te interesa.\n" }
       }
 
       // 📊 CAPTURE METRICS AFTER STREAM COMPLETION (with tools)
@@ -987,8 +1050,23 @@ export async function handleStreamingWithTools(
             }
           }
         } catch (error) {
-          logger.warn(`Could not extract streaming with tools token usage:`, error);
+          // Still record estimated metrics so the interaction is not lost
+          logger.warn(`Could not extract streaming with tools token usage:`, { error: error instanceof Error ? error.message : String(error) });
+          try {
+            const inputTokens = Math.ceil(enhancedMessage.length / 4);
+            const outputTokens = Math.ceil(accumulatedText.length / 4);
+            sessionMetricsTracker.recordModelCallComplete(interactionId!, inputTokens, outputTokens, accumulatedText);
+            sessionMetricsTracker.completeInteraction(interactionId!);
+          } catch { /* best effort */ }
         }
+      } else if (interactionId) {
+        // No finalResponse at all — still finalize with estimated tokens
+        try {
+          const inputTokens = Math.ceil(enhancedMessage.length / 4);
+          const outputTokens = Math.ceil(accumulatedText.length / 4);
+          sessionMetricsTracker.recordModelCallComplete(interactionId, inputTokens, outputTokens, accumulatedText);
+          sessionMetricsTracker.completeInteraction(interactionId);
+        } catch { /* best effort */ }
       }
 
     } catch (error) {

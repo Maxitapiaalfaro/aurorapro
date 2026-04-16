@@ -89,7 +89,7 @@ function reviveDates(obj: any): any {
   return obj
 }
 
-/** Serialize Dates to Firestore Timestamps for storage. */
+/** Serialize Dates to Firestore Timestamps and strip undefined values. */
 function serializeDates(obj: any): any {
   if (obj == null) return obj
   if (obj instanceof Date) return Timestamp.fromDate(obj)
@@ -98,7 +98,9 @@ function serializeDates(obj: any): any {
   if (typeof obj === 'object') {
     const result: any = {}
     for (const [key, value] of Object.entries(obj)) {
-      result[key] = serializeDates(value)
+      if (value !== undefined) {
+        result[key] = serializeDates(value)
+      }
     }
     return result
   }

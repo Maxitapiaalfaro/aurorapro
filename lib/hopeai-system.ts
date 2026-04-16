@@ -1084,6 +1084,9 @@ export class HopeAISystem {
 
       emitStep('model_call', 'Conectando con modelo de análisis…', 'active')
 
+      // 📊 Record orchestration complete — agent type + tools used
+      sessionMetricsTracker.recordOrchestrationComplete(interactionId, 'aurora', [], undefined)
+
       // 📊 PHASE 5: Measure routing latency (happens inside sendMessage)
       const routingStart = performance.now()
       const response = await clinicalAgentRouter.sendMessage(

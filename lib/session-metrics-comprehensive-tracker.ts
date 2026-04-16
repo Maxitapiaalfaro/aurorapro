@@ -132,6 +132,11 @@ export class SessionMetricsComprehensiveTracker {
       inputCostPer1KTokens: 0.00010,      // $0.10 per 1M tokens = $0.0001 per 1K (preview pricing)
       outputCostPer1KTokens: 0.00040,     // $0.40 per 1M tokens = $0.0004 per 1K (preview pricing)
       displayName: 'Gemini 3.1 Flash-Lite Preview'
+    },
+    'gemini-3.1-pro-preview': {
+      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K (preview pricing, estimated from 2.5 Pro)
+      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K (preview pricing, estimated from 2.5 Pro)
+      displayName: 'Gemini 3.1 Pro Preview'
     }
   };
 

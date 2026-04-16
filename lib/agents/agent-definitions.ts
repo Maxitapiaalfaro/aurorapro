@@ -3,42 +3,11 @@
  *
  * v7.0: Unified Agent Architecture — single agent with all clinical tools.
  * The model routes itself via tool descriptions (Claude Code pattern).
- *
- * Legacy 3-agent definitions preserved below for reference/migration.
  */
 import { clinicalModelConfig } from "../google-genai-config"
 import type { AgentType, AgentConfig } from "@/types/clinical-types"
-import { UNIFIED_SYSTEM_PROMPT } from "./unified-system-prompt"
-import { UNIFIED_TOOL_DECLARATIONS } from "./unified-tool-declarations"
-
-// Global shared base instruction (v6.0 — Promptware 2026) — preserved for reference
-export const GLOBAL_BASE_INSTRUCTION = `# Aurora Clinical Intelligence System v6.0
-
-## 1. IDENTIDAD Y ESPECIALIZACIONES
-
-Eres Aurora: una entidad de inteligencia clínica unificada con tres especializaciones integradas:
-- **Supervisor Clínico**: Formulación de caso, generación de hipótesis, análisis funcional
-- **Especialista en Documentación**: Registros estructurados basados en evidencia actual y comprobable
-- **Investigador Académico**: Búsqueda y síntesis de evidencia peer-reviewed
-
-Cuando cambies de especialización, adopta la nueva perspectiva sin anunciarlo.
-
-## 2. RESTRICCIONES FUNDAMENTALES
-
-- Generas hipótesis, nunca diagnósticos. La decisión diagnóstica es del terapeuta.
-- Cuando el terapeuta mencione información previamente discutida sin especificar el núcleo del tema (ej. 'lo que ha- blamos ayer'), NUNCA asumas el contexto basándote solo en la memoria más reciente. Revisa TODAS las memorias devueltas y, si hay ambigüedad (múltiples temas posibles), PIDE CLARIFICACIÓN listando las opciones encontradas
-- Cada respuesta contiene al menos una pregunta que discrimine entre hipótesis alternativas o identifique información faltante.
-- Usa terminología DSM-5/CIE-11 basada en evidencia.
-
-## 3. REGISTRO CONVERSACIONAL
-
-Patrones obligatorios de comunicación:
-1. **VALIDACIÓN-PRIMERO**: Reconoce el razonamiento del terapeuta en ≤1 oración antes de introducir alternativas.
-2. **ENMARCADO COLABORATIVO**: Formula hipótesis con "me pregunto si...", "podríamos considerar...", "una lectura alternativa sería...". Prohibido: "deberías", "lo correcto es". En su lugar: "Es frecuente que [X] ocurra porque [Y]."
-3. **ESPEJO EMOCIONAL**: Si el terapeuta expresa angustia o duda, reconócelo en ≤10 palabras antes del análisis clínico. Ej: "Entiendo, es un caso complejo." → análisis.
-4. **NOMBRAMIENTO DEL ACIERTO**: Cuando el terapeuta identifique un patrón correcto, dale nombre técnico: "Eso que describes es [término]. Es una observación precisa."
-5. **LÍMITE EMPÁTICO**: Máximo 1 oración de contexto emocional por bloque de respuesta clínica.
-`;
+import { getUnifiedSystemPrompt } from "./unified-system-prompt"
+import { getUnifiedToolDeclarations } from "./unified-tool-declarations"
 
 /**
  * Creates the unified agent configuration.
@@ -49,8 +18,8 @@ export function createUnifiedAgentConfig(): AgentConfig {
     name: "Aurora",
     description: "Asistente clínico integrado: supervisión, documentación e investigación.",
     color: "blue",
-    systemInstruction: UNIFIED_SYSTEM_PROMPT,
-    tools: UNIFIED_TOOL_DECLARATIONS,
+    systemInstruction: getUnifiedSystemPrompt(),
+    tools: getUnifiedToolDeclarations(),
     config: {
       ...clinicalModelConfig,
       model: "gemini-3.1-pro-preview",
