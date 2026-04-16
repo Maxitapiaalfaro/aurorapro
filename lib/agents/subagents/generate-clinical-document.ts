@@ -10,6 +10,7 @@
  */
 
 import { ai } from '../../google-genai-config';
+import { ThinkingLevel } from '@google/genai';
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
 import type { DocumentSection, DocumentSectionId } from '@/types/clinical-types';
@@ -158,7 +159,7 @@ export async function executeGenerateClinicalDocument(
         systemInstruction: SYSTEM_PROMPT,
         temperature: 1.0,
         thinkingConfig: {
-          thinkingLevel: 'low',
+          thinkingLevel: ThinkingLevel.LOW,
         },
         maxOutputTokens: 8192,
       },
@@ -166,9 +167,9 @@ export async function executeGenerateClinicalDocument(
 
     // Defensive: handle both direct async-iterable and object with .stream property
     // (matches pattern used in streaming-handler.ts for chat.sendMessageStream)
-    const stream: AsyncIterable<any> = 'stream' in streamResult && streamResult.stream
+    const stream = ('stream' in streamResult && streamResult.stream
       ? streamResult.stream
-      : streamResult;
+      : streamResult) as AsyncIterable<any>;
 
     // Accumulate full document + detect sections in real-time
     let accumulatedMarkdown = '';

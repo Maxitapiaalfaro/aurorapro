@@ -347,3 +347,11 @@ Si identificas indicadores de riesgo (ideación suicida, abuso, negligencia, des
 2. Incluye citas textuales que fundamenten la identificación
 3. Agrega recomendaciones específicas de seguimiento
 `;
+
+/**
+ * Returns the unified system prompt string.
+ * Wrapper function consumed by agent-definitions.ts.
+ */
+export function getUnifiedSystemPrompt(): string {
+  return UNIFIED_SYSTEM_PROMPT
+}

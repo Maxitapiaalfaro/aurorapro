@@ -347,11 +347,11 @@ export async function getRelevantMemoriesSemantic(
     const { ai } = await import('@/lib/google-genai-config')
 
     const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: selectionPrompt }] }],
       config: {
         systemInstruction: 'Eres un asistente de selección de memorias clínicas. Tu tarea es identificar las memorias más relevantes al contexto dado. Responde SOLO con números separados por comas.',
-        temperature: 0.1,
+        temperature: 1.0,
         maxOutputTokens: 100,
       },
     })

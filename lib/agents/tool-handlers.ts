@@ -89,13 +89,13 @@ registerToolHandler('search_academic_literature', async (args, ctx) => {
     });
 
     // Populate shared academic references for grounding metadata
-    if (results?.results) {
-      for (const r of results.results) {
+    if (results?.sources) {
+      for (const r of results.sources) {
         ctx.academicReferences.push({
           title: r.title || 'Sin título',
           url: r.url || '',
           doi: r.doi,
-          authors: r.authors,
+          authors: r.authors?.join(', '),
           year: r.year,
           journal: r.journal,
         });

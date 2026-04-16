@@ -283,11 +283,18 @@ export class AcademicMultiSourceSearch {
         const academicQueries = this.generateAcademicQueries(query)
         const objective = this.buildSearchObjective(query)
 
+        const fiveYearsAgo = new Date()
+        fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5)
+        const afterDate = fiveYearsAgo.toISOString().slice(0, 10)
+
         const results = await parallelAISearch.searchAcademic({
           objective,
           searchQueries: academicQueries,
           maxResults,
           maxCharsPerResult: 15000,
+          maxCharsTotal: 50000,
+          afterDate,
+          fetchPolicy: { timeoutSeconds: 15, maxAgeSeconds: 3600 },
         })
         logger.info(`[AcademicSearch] Motor A completado: ${results.length} resultados`)
         return results

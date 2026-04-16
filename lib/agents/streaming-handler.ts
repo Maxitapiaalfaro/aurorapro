@@ -1301,7 +1301,7 @@ async function generatePharmacologyFallbackResponse(
 
   // Use Gemini Flash-Lite for fast, low-cost fallback generation
   const { ai } = await import('../google-genai-config')
-  const SUBAGENT_MODEL = 'gemini-2.0-flash-lite'
+  const SUBAGENT_MODEL = 'gemini-3.1-flash-lite'  // Fast, cost-effective model for fallback responses
 
   const prompt = `Eres un asistente de farmacología clínica. El usuario investigó sobre:
 "${query}"
@@ -1321,7 +1321,7 @@ No se encontraron estudios académicos específicos en bases de datos. Sin embar
       model: SUBAGENT_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
-        temperature: 0.7,
+        temperature: 1.0,
         maxOutputTokens: 400, // ~200 words
       },
     })

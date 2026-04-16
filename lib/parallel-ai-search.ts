@@ -29,11 +29,20 @@ export interface ParallelSearchParams {
   objective: string
   searchQueries?: string[]
   maxResults?: number
-  /** Nested under `excerpts` per API v1beta spec. */
+  /** Max characters per individual result excerpt. */
   maxCharsPerResult?: number
+  /** Budget cap: max characters across all excerpts combined. */
+  maxCharsTotal?: number
   sourceDomains?: {
     include?: string[]
     exclude?: string[]
+  }
+  /** RFC 3339 date string (YYYY-MM-DD). Only return results published on or after this date. */
+  afterDate?: string
+  /** Fetch policy: controls cache and timeout behavior. */
+  fetchPolicy?: {
+    timeoutSeconds?: number
+    maxAgeSeconds?: number
   }
 }
 
@@ -159,7 +168,10 @@ export class ParallelAISearch {
       searchQueries = [],
       maxResults = 10,
       maxCharsPerResult = 15000,
-      sourceDomains
+      maxCharsTotal = 50000,
+      sourceDomains,
+      afterDate,
+      fetchPolicy,
     } = params
 
     // Verificar caché
@@ -176,16 +188,24 @@ export class ParallelAISearch {
       logger.info(`  🔎 Queries: ${searchQueries.join(', ')}`)
       logger.info(`  📚 Dominios: Top 10 clínicos globales`)
 
-      // Build search payload — uses `max_chars_per_result` at root level
-      // (current SDK v0.1.x param name; maps to excerpts config internally)
       const search = await this.client.beta.search({
         objective,
         search_queries: searchQueries.length > 0 ? searchQueries : undefined,
         max_results: maxResults,
-        max_chars_per_result: maxCharsPerResult,
+        excerpts: {
+          max_chars_per_result: maxCharsPerResult,
+          max_chars_total: maxCharsTotal,
+        },
         source_policy: {
           include_domains: sourceDomains?.include ?? TOP_10_GLOBAL_CLINICAL_DOMAINS,
-        }
+          ...(afterDate ? { after_date: afterDate } : {}),
+        },
+        ...(fetchPolicy ? {
+          fetch_policy: {
+            timeout_seconds: fetchPolicy.timeoutSeconds,
+            max_age_seconds: fetchPolicy.maxAgeSeconds,
+          },
+        } : {}),
       })
 
       logger.info(`[ParallelAI] Encontrados ${search.results?.length || 0} resultados`)

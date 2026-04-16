@@ -6,6 +6,7 @@
  */
 
 import { ai } from '../../google-genai-config';
+import { ThinkingLevel } from '@google/genai';
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
 import { SUBAGENT_MODEL } from './types';
@@ -306,7 +307,7 @@ export async function executeResearchEvidence(
             title: r.title || 'Sin título',
             url: r.url || '',
             doi: r.doi,
-            authors: r.authors,
+            authors: r.authors?.join(', '),
             year: r.year,
             journal: r.journal,
           });
@@ -372,7 +373,7 @@ export async function executeResearchEvidence(
         systemInstruction: SYNTHESIS_SYSTEM_PROMPT,
         temperature: 1.0,
         thinkingConfig: {
-          thinkingLevel: 'low'
+          thinkingLevel: ThinkingLevel.LOW
         },
         maxOutputTokens: 8192,
       },

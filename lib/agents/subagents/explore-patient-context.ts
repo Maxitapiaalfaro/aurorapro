@@ -6,6 +6,7 @@
  */
 
 import { ai } from '../../google-genai-config';
+import { ThinkingLevel } from '@google/genai';
 import { createLogger } from '../../logger';
 import type { ToolCallResult, ToolExecutionContext } from '../tool-handlers';
 import { SUBAGENT_MODEL } from './types';
@@ -121,7 +122,7 @@ export async function executeExplorePatientContext(
         systemInstruction: SYSTEM_PROMPT,
         temperature: 1.0,
         thinkingConfig: {
-          thinkingLevel: 'low'
+          thinkingLevel: ThinkingLevel.LOW
         },
         maxOutputTokens: 4096,
       },
