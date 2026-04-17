@@ -107,35 +107,42 @@ export class SessionMetricsComprehensiveTracker {
   private interactions: Map<string, ComprehensiveSessionMetrics[]> = new Map();
   
   // Model pricing (per 1K tokens in USD) - Based on official Google AI pricing
-  // Reference: https://ai.google.dev/gemini-api/docs/pricing
-  private readonly MODEL_PRICING: Record<string, { 
-    inputCostPer1KTokens: number; 
+  // Reference: https://ai.google.dev/gemini-api/docs/pricing (verified 2026-04-15)
+  // NOTE: Rates are for Standard tier, text input, prompts <=200k tokens.
+  // For prompts >200k tokens, Gemini 2.5 Pro and 3.1 Pro Preview charge ~2x.
+  private readonly MODEL_PRICING: Record<string, {
+    inputCostPer1KTokens: number;
     outputCostPer1KTokens: number;
     displayName: string;
   }> = {
     'gemini-2.5-pro': {
-      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K
-      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K
+      inputCostPer1KTokens: 0.00125,      // $1.25 per 1M tokens (<=200k)
+      outputCostPer1KTokens: 0.01000,     // $10.00 per 1M tokens (<=200k)
       displayName: 'Gemini 2.5 Pro'
     },
     'gemini-2.5-flash': {
-      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K
-      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K
+      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens (text/image/video)
+      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens (incluye thinking)
       displayName: 'Gemini 2.5 Flash'
     },
     'gemini-2.5-flash-lite': {
-      inputCostPer1KTokens: 0.00010,      // $0.10 per 1M tokens = $0.0001 per 1K
-      outputCostPer1KTokens: 0.00040,     // $0.40 per 1M tokens = $0.0004 per 1K
+      inputCostPer1KTokens: 0.00010,      // $0.10 per 1M tokens (text/image/video)
+      outputCostPer1KTokens: 0.00040,     // $0.40 per 1M tokens
       displayName: 'Gemini 2.5 Flash-Lite'
     },
+    'gemini-3-flash-preview': {
+      inputCostPer1KTokens: 0.00050,      // $0.50 per 1M tokens (text/image/video)
+      outputCostPer1KTokens: 0.00300,     // $3.00 per 1M tokens (incluye thinking)
+      displayName: 'Gemini 3 Flash Preview'
+    },
     'gemini-3.1-flash-lite-preview': {
-      inputCostPer1KTokens: 0.00010,      // $0.10 per 1M tokens = $0.0001 per 1K (preview pricing)
-      outputCostPer1KTokens: 0.00040,     // $0.40 per 1M tokens = $0.0004 per 1K (preview pricing)
+      inputCostPer1KTokens: 0.00025,      // $0.25 per 1M tokens (text/image/video)
+      outputCostPer1KTokens: 0.00150,     // $1.50 per 1M tokens (incluye thinking)
       displayName: 'Gemini 3.1 Flash-Lite Preview'
     },
     'gemini-3.1-pro-preview': {
-      inputCostPer1KTokens: 0.00030,      // $0.30 per 1M tokens = $0.0003 per 1K (preview pricing, estimated from 2.5 Pro)
-      outputCostPer1KTokens: 0.00250,     // $2.50 per 1M tokens = $0.0025 per 1K (preview pricing, estimated from 2.5 Pro)
+      inputCostPer1KTokens: 0.00200,      // $2.00 per 1M tokens (<=200k)
+      outputCostPer1KTokens: 0.01200,     // $12.00 per 1M tokens (<=200k, incluye thinking)
       displayName: 'Gemini 3.1 Pro Preview'
     }
   };

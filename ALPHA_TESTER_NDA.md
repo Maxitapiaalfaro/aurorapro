@@ -53,24 +53,31 @@ Fecha: Octubre 2025
 
 ## Precios oficiales de Gemini (fuente: Google AI Developers)
 
-Referencia: “Gemini Developer API Pricing”
+Referencia: “Gemini Developer API Pricing” (verificado 2026-04-15 contra https://ai.google.dev/gemini-api/docs/pricing)
 
-- **Gemini 2.5 Flash (Standard)**:
+- **Gemini 3.1 Pro Preview (chat principal actual)** — `lib/agents/agent-definitions.ts`:
+  - Input (texto/imagen/video/audio): $2.00 / 1M tokens (≤200k); $4.00 / 1M (>200k)
+  - Output (incl. thinking tokens): $12.00 / 1M tokens (≤200k); $18.00 / 1M (>200k)
+  - Context caching: $0.20 / 1M (≤200k), $0.40 / 1M (>200k) + $4.50 / 1M tokens por hora (storage)
+- **Gemini 3.1 Flash-Lite Preview (sub-agentes + extracción de memorias)** — `lib/agents/subagents/types.ts`:
+  - Input (texto/imagen/video): $0.25 / 1M tokens
+  - Input (audio): $0.50 / 1M tokens
+  - Output (incl. thinking tokens): $1.50 / 1M tokens
+  - Context caching: $0.025 / 1M (texto/imagen/video), $0.05 (audio) + $1.00 / 1M tokens por hora (storage)
+- **Gemini 2.5 Flash (referencia histórica)**:
   - Input (texto/imagen/video): $0.30 / 1M tokens
   - Input (audio): $1.00 / 1M tokens
   - Output (incl. thinking tokens): $2.50 / 1M tokens
-  - Context caching: $0.03 / 1M tokens (texto/imagen/video), $0.10 (audio) + $1.00 / 1M tokens por hora (storage)
-  - Live API: Input (texto) $0.50 / 1M, (audio/imagen/video) $3.00 / 1M; Output (texto) $2.00 / 1M, (audio) $12.00 / 1M
-- **Gemini 2.5 Flash-Lite (Standard)**:
+- **Gemini 2.5 Flash-Lite (referencia histórica)**:
   - Input (texto/imagen/video): $0.10 / 1M tokens
   - Input (audio): $0.30 / 1M tokens
   - Output (incl. thinking tokens): $0.40 / 1M tokens
-  - Context caching: $0.025 / 1M tokens (texto/imagen/video), $0.125 (audio) + $1.00 / 1M tokens por hora (storage)
 
 Notas:
 
-- Aurora usa mayoritariamente `gemini-2.5-flash-lite` en enrutamiento, transcripción y features auxiliares. El chat principal de agente puede configurarse a `flash-lite` para eficiencia y escalar a `flash` en tareas críticas (p. ej., análisis longitudinal).
-- El “Grounding con Google Search/Maps” no se utiliza hoy en el código, por lo que su costo es $0.
+- El chat principal real usa `gemini-3.1-pro-preview` (ver `lib/agents/agent-definitions.ts` — sobreescribe `clinicalModelConfig`). Los sub-agentes `explore_patient_context`, `analyze_longitudinal_patterns`, `extract-session-memories` y el resto usan `gemini-3.1-flash-lite-preview`.
+- Las secciones "Costos por turno (estimados)" a continuación están calibradas para flash-lite y subestiman el costo real del chat principal (~10×). Ver `lib/session-metrics-comprehensive-tracker.ts` para los precios vigentes del tracker.
+- El "Grounding con Google Search/Maps" no se utiliza hoy en el código, por lo que su costo es $0.
 
 ---
 

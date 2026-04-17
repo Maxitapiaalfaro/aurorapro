@@ -60,19 +60,27 @@ Tracker centralizado que captura métricas completas de cada interacción.
 - **Comportamiento**: Largo de mensaje, cambios de agente, posición en sesión
 - **Performance**: Tokens/segundo, cost efficiency
 
-**Pricing actualizado**:
+**Pricing actualizado** (verificado 2026-04-15 contra https://ai.google.dev/gemini-api/docs/pricing):
 ```typescript
 'gemini-2.5-pro': {
-  inputCostPer1KTokens: 0.00030,  // $0.30 per 1M tokens
-  outputCostPer1KTokens: 0.00250, // $2.50 per 1M tokens
+  inputCostPer1KTokens: 0.00125,  // $1.25 per 1M tokens (<=200k)
+  outputCostPer1KTokens: 0.01000, // $10.00 per 1M tokens (<=200k)
 }
 'gemini-2.5-flash': {
-  inputCostPer1KTokens: 0.00030,
-  outputCostPer1KTokens: 0.00250,
+  inputCostPer1KTokens: 0.00030,  // $0.30 per 1M tokens
+  outputCostPer1KTokens: 0.00250, // $2.50 per 1M tokens
 }
 'gemini-2.5-flash-lite': {
   inputCostPer1KTokens: 0.00010,  // $0.10 per 1M tokens
   outputCostPer1KTokens: 0.00040, // $0.40 per 1M tokens
+}
+'gemini-3.1-flash-lite-preview': {
+  inputCostPer1KTokens: 0.00025,  // $0.25 per 1M tokens (text/image/video)
+  outputCostPer1KTokens: 0.00150, // $1.50 per 1M tokens
+}
+'gemini-3.1-pro-preview': {
+  inputCostPer1KTokens: 0.00200,  // $2.00 per 1M tokens (<=200k)
+  outputCostPer1KTokens: 0.01200, // $12.00 per 1M tokens (<=200k)
 }
 ```
 

@@ -232,5 +232,8 @@ Asumiendo contexto promedio de **6,500 tokens** (input) + interacción típica:
 
 ---
 
-**Última actualización**: Octubre 2025  
-**Basado en**: Gemini 2.5 Pro pricing ($0.00025/1K input, $0.001/1K output)
+**Última actualización**: Abril 2026  
+**Basado en** (verificado 2026-04-15 vs https://ai.google.dev/gemini-api/docs/pricing):
+- Gemini 2.5 Pro: $0.00125/1K input, $0.01000/1K output (<=200k tokens)
+- Gemini 3.1 Pro Preview (chat principal actual): $0.00200/1K input, $0.01200/1K output (<=200k tokens)
+- Gemini 3.1 Flash-Lite Preview (sub-agentes): $0.00025/1K input, $0.00150/1K output
