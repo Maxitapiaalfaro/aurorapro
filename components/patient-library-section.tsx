@@ -60,6 +60,8 @@ import {
   Brain,
   Stethoscope,
   ClipboardList,
+  Check,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePatientLibrary, type PatientClinicalStats } from "@/hooks/use-patient-library"
@@ -94,12 +96,21 @@ function ClinicalDepthBar({ stats }: { stats: PatientClinicalStats | undefined }
         ? 'bg-clarity-blue-400'
         : 'bg-gradient-to-r from-clarity-blue-500 to-academic-plum-500'
 
-  // Compact summary label
-  const parts: string[] = []
-  if (sessionCount > 0) parts.push(`${sessionCount}s`)
-  if (memoryCount > 0) parts.push(`${memoryCount}m`)
+  // Compact summary label (UX spec §10 — Lucide icons, not mojibake-prone glyphs)
+  const parts: React.ReactNode[] = []
+  if (sessionCount > 0) parts.push(<span key="s">{sessionCount}s</span>)
+  if (memoryCount > 0) parts.push(<span key="m">{memoryCount}m</span>)
   if (fichaCount > 0) {
-    parts.push(stats.latestFichaStatus === 'generando' ? 'ficha â³' : 'ficha âœ“')
+    parts.push(
+      <span key="f" className="inline-flex items-center gap-0.5">
+        ficha{' '}
+        {stats.latestFichaStatus === 'generando' ? (
+          <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Check className="h-2.5 w-2.5" aria-hidden="true" />
+        )}
+      </span>
+    )
   }
 
   return (
@@ -118,8 +129,13 @@ function ClinicalDepthBar({ stats }: { stats: PatientClinicalStats | undefined }
         />
       </div>
       {parts.length > 0 && (
-        <span className="text-[11px] text-muted-foreground/60 whitespace-nowrap flex-shrink-0">
-          {parts.join(' Â· ')}
+        <span className="text-[11px] text-muted-foreground/75 whitespace-nowrap flex-shrink-0 inline-flex items-center gap-1" aria-hidden="true">
+          {parts.map((node, i) => (
+            <span key={i} className="inline-flex items-center">
+              {i > 0 && <span className="mx-1 opacity-60">·</span>}
+              {node}
+            </span>
+          ))}
         </span>
       )}
     </div>
@@ -388,20 +404,44 @@ export function PatientLibrarySection({
   const caseCount = getPatientCount()
   const showSearch = caseCount > 0 || searchQuery.length > 0
 
+  // UX spec §10 — polite rate-limited announcement of search result count.
+  const [searchAnnouncement, setSearchAnnouncement] = useState("")
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchAnnouncement("")
+      return
+    }
+    const handle = window.setTimeout(() => {
+      const n = filteredPatients.length
+      setSearchAnnouncement(
+        n === 0
+          ? `Sin resultados para ${searchQuery}`
+          : `${n} ${n === 1 ? 'caso coincide' : 'casos coinciden'} con ${searchQuery}`
+      )
+    }, 600)
+    return () => window.clearTimeout(handle)
+  }, [searchQuery, filteredPatients.length])
+
   return (
     <div
       className="flex flex-col h-full"
+      role="region"
+      aria-labelledby="cases-heading"
       style={{
         clipPath: isOpen ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
         transition: 'clip-path 400ms cubic-bezier(0.25, 0.1, 0.25, 1)'
       }}
     >
+      {/* UX spec §10 — polite live region, sr-only, rate-limited via useEffect. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {searchAnnouncement}
+      </div>
       {/* â”€â”€ Header â”€â”€ */}
       <div className="px-3 pt-3 pb-2 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-foreground font-sans">
+          <h2 id="cases-heading" className="text-sm font-semibold text-foreground font-sans m-0">
             Casos ClÃ­nicos
-          </span>
+          </h2>
           <div className="flex items-center gap-2">
             {caseCount > 0 && (
               <Badge variant="secondary" className="text-xs font-sans">
@@ -432,20 +472,22 @@ export function PatientLibrarySection({
         {/* Search â€” only when cases exist */}
         {showSearch && (
           <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <Input
               placeholder="Buscar casos..."
               value={searchQuery}
               onChange={(e) => searchPatients(e.target.value)}
               className="pl-9 h-9 text-sm font-sans"
+              type="search"
+              aria-label="Buscar casos clÃ­nicos"
             />
             {searchQuery && (
               <button
                 onClick={() => searchPatients("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 flex items-center justify-center rounded-full hover:bg-secondary"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 flex items-center justify-center rounded-full hover:bg-secondary"
                 aria-label="Limpiar bÃºsqueda"
               >
-                <X className="h-3.5 w-3.5 text-muted-foreground" />
+                <X className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -476,11 +518,14 @@ export function PatientLibrarySection({
                   onChange={(e) => setCreateName(e.target.value)}
                   placeholder="ej. MarÃ­a G., Caso 012"
                   className="h-11 rounded-xl text-sm font-sans"
+                  aria-describedby="create-name-help"
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') handleCancelCreate()
                   }}
                 />
-                <p className="text-[11px] text-muted-foreground mt-1 font-sans">Identificador del caso *</p>
+                <p id="create-name-help" className="text-[11px] text-muted-foreground mt-1 font-sans">
+                  Identificador del caso — usa iniciales o un alias para proteger la privacidad del paciente. *
+                </p>
               </div>
 
               <div>
@@ -537,17 +582,33 @@ export function PatientLibrarySection({
                   <p className="text-sm text-muted-foreground font-sans font-medium">
                     Sin resultados para &ldquo;{searchQuery}&rdquo;
                   </p>
-                  <p className="text-xs text-muted-foreground/70 mt-1 font-sans">
-                    Intenta con otro tÃ©rmino
+                  <p className="text-xs text-muted-foreground/75 mt-1 font-sans">
+                    Intenta con otro término
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => searchPatients("")}
-                    className="mt-3 text-xs font-sans"
-                  >
-                    Limpiar bÃºsqueda
-                  </Button>
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => searchPatients("")}
+                      className="text-xs font-sans"
+                    >
+                      Limpiar búsqueda
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const prefill = searchQuery
+                        searchPatients("")
+                        handleOpenCreator()
+                        setCreateName(prefill)
+                      }}
+                      className="text-xs font-sans gap-1.5"
+                      aria-label={`Crear caso con el nombre ${searchQuery}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Crear caso “{searchQuery}”
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-10 px-4">
@@ -571,11 +632,27 @@ export function PatientLibrarySection({
               )
             ) : (
               /* Case cards */
-              filteredPatients.map((patient) => (
+              filteredPatients.map((patient) => {
+                const stats = patientStats.get(patient.id)
+                const insightsPending = hasPatientInsights(patient.id)
+                // UX spec §10 — consolidated accessible name so SR users hear
+                // the full case identity without having to tab into every
+                // child span. Sub-spans below are marked aria-hidden.
+                const metaParts: string[] = [`última actividad ${formatDistanceToNow(patient.updatedAt, { addSuffix: true, locale: es })}`]
+                if (patient.tags && patient.tags.length > 0) {
+                  metaParts.push(`áreas: ${patient.tags.slice(0, 3).join(', ')}${patient.tags.length > 3 ? ` y ${patient.tags.length - 3} más` : ''}`)
+                }
+                if (stats) {
+                  metaParts.push(`${stats.sessionCount} sesiones, ${stats.memoryCount} memorias, ${stats.fichaCount} fichas`)
+                }
+                if (insightsPending) metaParts.push('análisis longitudinal disponible')
+                const cardAccName = `Caso ${patient.displayName} — ${metaParts.join(' — ')}`
+
+                return (
                 <div key={patient.id} className="relative group">
                   <button
                     onClick={() => handleCaseClick(patient)}
-                    aria-label={`${patient.displayName}, Ãºltima actividad ${formatDistanceToNow(patient.updatedAt, { addSuffix: true, locale: es })}`}
+                    aria-label={cardAccName}
                     className={cn(
                       "w-full p-4 h-auto rounded-2xl border transition-all duration-200 relative overflow-hidden text-left cursor-pointer",
                       selectedPatient?.id === patient.id
@@ -589,8 +666,7 @@ export function PatientLibrarySection({
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-10 bg-clarity-blue-600 rounded-r-full" />
                     )}
 
-                    <div className="pl-2 min-w-0">
-                      {/* Case identifier */}
+                    <div className="pl-2 min-w-0" aria-hidden="true">
                       <div className="font-sans text-sm text-foreground font-medium leading-snug truncate pr-8">
                         {patient.displayName}
                       </div>
@@ -630,8 +706,8 @@ export function PatientLibrarySection({
 
                       {/* Footer: timestamp + insights */}
                       <div className="flex items-center justify-between gap-2 mt-2">
-                        <div className="text-xs text-muted-foreground/60 font-sans flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 opacity-60" />
+                        <div className="text-xs text-muted-foreground/75 font-sans flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 opacity-60" aria-hidden="true" />
                           {formatDistanceToNow(patient.updatedAt, { addSuffix: true, locale: es })}
                         </div>
                         {hasPatientInsights(patient.id) && (
@@ -657,10 +733,10 @@ export function PatientLibrarySection({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-200 opacity-60 group-hover:opacity-100"
-                                aria-label={`Opciones del caso ${patient.displayName}`}
+                                className="h-8 w-8 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px] rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-200 opacity-60 group-hover:opacity-100"
+                                aria-label={`Acciones para caso ${patient.displayName}`}
                               >
-                                <MoreVertical className="h-4 w-4" />
+                                <MoreVertical className="h-4 w-4" aria-hidden="true" />
                               </Button>
                             </DropdownMenuTrigger>
                           </TooltipTrigger>
@@ -734,7 +810,8 @@ export function PatientLibrarySection({
                     </DropdownMenu>
                   </div>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

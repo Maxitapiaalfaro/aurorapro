@@ -952,6 +952,19 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden font-sans bg-background relative" role="main" aria-label="Interfaz de chat con asistente AI">
+      {/* Visually-hidden heading so screen-reader users can land on a real h1. */}
+      <h1 className="sr-only">Conversación clínica</h1>
+
+      {/*
+        Rate-limited live status region (UX spec §8 "aria-live discipline").
+        The message log itself is aria-live="off" — streaming text would
+        otherwise flood screen readers with every token. Only two events are
+        announced here: stream start and stream end, driven by isStreaming.
+      */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {isStreaming ? 'Escribiendo respuesta…' : ''}
+      </div>
+
       <ScrollArea
         ref={scrollAreaRef}
         className={cn("flex-1 pt-0 overscroll-contain")}
@@ -959,7 +972,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
           paddingBottom: '0px' // Remove padding to allow content to extend behind input gradient
         }}
         role="log"
-        aria-live="polite"
+        aria-live="off"
         aria-atomic="false"
         aria-label="Historial de conversación"
       >
@@ -1104,9 +1117,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                         {/* Spacer */}
                         <span className="flex-1" />
 
-                        {/* Timestamp — right-aligned */}
+                        {/* Timestamp — right-aligned. Contrast bumped from /50 to /70 per a11y spec §8 */}
                         <time
-                          className="text-[11px] tabular-nums text-muted-foreground/50 font-sans"
+                          className="text-[11px] tabular-nums text-muted-foreground/70 font-sans"
                           dateTime={message.timestamp?.toISOString?.() || ''}
                         >
                           {formatTime(message.timestamp)}
@@ -1605,7 +1618,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
             <Button
               onClick={scrollToBottom}
               className={cn(
-                "pointer-events-auto rounded-full w-8 h-8 shadow-sm transition-all duration-200 hover:scale-105 active:scale-95",
+                "pointer-events-auto rounded-full shadow-sm transition-all duration-200 hover:scale-105 active:scale-95",
+                // Coarse-pointer (touch) min-size ≥ 44×44 per a11y spec §8.
+                // Desktop pointers keep the original compact 32×32 pill.
+                "w-8 h-8 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:h-11",
                 "bg-card/90 backdrop-blur-md border border-border/30 hover:border-border/50",
                 "text-muted-foreground hover:text-foreground hover:bg-card"
               )}
@@ -1614,7 +1630,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
               title={isStreaming ? "Nuevo contenido - Ir al final" : "Ir al final de la conversación"}
               aria-label={isStreaming ? "Nuevo contenido disponible, ir al final de la conversación" : "Ir al final de la conversación"}
             >
-              <CaretDownIcon className="h-5 w-5" weight="bold" />
+              <CaretDownIcon className="h-5 w-5" weight="bold" aria-hidden="true" />
             </Button>
           </div>
         )}
@@ -1800,7 +1816,7 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                     cancelRecordingRef={voiceCancelRecordingRef}
                     cancelTranscriptionRef={voiceCancelTranscriptionRef}
                     disabled={isProcessing || isStreaming || isUploading || isTranscribing || isRecordingVoice}
-                    className={cn("h-9 w-9 md:h-10 md:w-10", "hover:bg-secondary/60 text-muted-foreground hover:text-foreground")}
+                    className={cn("h-9 w-9 md:h-10 md:w-10 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]", "hover:bg-secondary/60 text-muted-foreground hover:text-foreground")}
                   />
                   <Button
                     onClick={() => handleSendMessage()}
@@ -1816,10 +1832,10 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                       )
                     }
                     size="icon"
-                    className={cn("h-9 w-9 md:h-10 md:w-10 rounded-xl", "bg-foreground/85 hover:bg-foreground/75 text-background")}
+                    className={cn("h-9 w-9 md:h-10 md:w-10 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px] rounded-xl", "bg-foreground/85 hover:bg-foreground/75 text-background")}
                     aria-label="Enviar mensaje"
                   >
-                    <PaperPlaneRightIcon className="h-4 w-4" />
+                    <PaperPlaneRightIcon className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>

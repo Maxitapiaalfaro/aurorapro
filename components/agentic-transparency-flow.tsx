@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
-import { Check, Loader2, AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen } from 'lucide-react'
+import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion'
+import { Check, Loader2, AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import { humanizeStepLabel, humanizeParallelGroup, calculateProgress } from '@/lib/humanized-steps'
@@ -49,8 +49,37 @@ interface AgenticTransparencyFlowProps {
   timeline: ExecutionTimelineType
   className?: string
   /** Collapsed by default for historical messages */
-  defaultCollapsed?: boolean
+  defaultCollapsed?: boolean  /**
+   * Clinical escape hatch. When provided, a Stop button appears in the live
+   * header while any step is active. The caller is responsible for actually
+   * aborting the in-flight agent run (SSE / fetch AbortController).
+   * Gated by a prop so the button never appears without a working backend.
+   */
+  onCancel?: () => void
 }
+
+/** localStorage key for per-agent expand preference (fix #7) */
+const EXPAND_PREF_KEY = 'aurora:transparency:expand'
+
+function readExpandPref(agentType: string): boolean | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(`${EXPAND_PREF_KEY}:${agentType}`)
+    if (raw === 'true') return true
+    if (raw === 'false') return false
+  } catch {
+    /* private mode, quota, etc. — fall back to default */
+  }
+  return null
+}
+
+function writeExpandPref(agentType: string, expanded: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(`${EXPAND_PREF_KEY}:${agentType}`, String(expanded))
+  } catch {
+    /* ignore */
+  }}
 
 /**
  * Agentic Transparency Flow
@@ -70,24 +99,39 @@ export function AgenticTransparencyFlow({
   timeline,
   className,
   defaultCollapsed = true,
+  onCancel,
 }: AgenticTransparencyFlowProps) {
   const agentConfig = getAgentVisualConfig(timeline.agentType)
-  const [isExpanded, setIsExpanded] = useState(!defaultCollapsed)
+  const prefersReducedMotion = useReducedMotion()
+  // Per-agent sticky expand preference (fix #7). Read lazily once.
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const pref = readExpandPref(timeline.agentType)
+    return pref ?? !defaultCollapsed
+  })
+
+  const handleToggleExpand = () => {
+    setIsExpanded(prev => {
+      const next = !prev
+      writeExpandPref(timeline.agentType, next)
+      return next
+    })
+  }
   const stepListRef = useRef<HTMLUListElement>(null)
 
   const stepsLength = timeline.steps?.length ?? 0
   const hasActiveStep = timeline.steps?.some(s => s.status === 'active') ?? false
   const isLive = !defaultCollapsed || hasActiveStep
 
-  // Auto-scroll step list to bottom when new steps arrive in live mode
+  // Auto-scroll step list to bottom when new steps arrive in live mode.
+  // Fix #5: honour prefers-reduced-motion — no smooth scroll for that audience.
   useEffect(() => {
     if (isLive && stepListRef.current) {
       stepListRef.current.scrollTo({
         top: stepListRef.current.scrollHeight,
-        behavior: 'smooth',
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
       })
     }
-  }, [isLive, stepsLength])
+  }, [isLive, stepsLength, prefersReducedMotion])
 
   if (!timeline.steps || timeline.steps.length === 0) return null
 
@@ -117,8 +161,8 @@ export function AgenticTransparencyFlow({
       {defaultCollapsed && !hasActiveStep && (
         <button
           type="button"
-          onClick={() => setIsExpanded(prev => !prev)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary/30 transition-colors"
+          onClick={handleToggleExpand}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary/30 transition-colors pointer-coarse:min-h-[44px] [@media(pointer:coarse)]:min-h-[44px]"
           aria-expanded={isExpanded}
           aria-label={`${timeline.agentDisplayName} - ${completedCount} paso${completedCount !== 1 ? 's' : ''} completados`}
         >
@@ -147,33 +191,56 @@ export function AgenticTransparencyFlow({
           <span className={cn("text-[11px] font-medium", agentConfig.textColor)}>
             {timeline.agentDisplayName}
           </span>
-          <span className="text-[10px] text-muted-foreground/50 ml-auto">
+          <span className="text-[10px] text-muted-foreground/70 ml-auto">
             {summaryParts.join(' · ')}
           </span>
           {isExpanded
-            ? <ChevronDown className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
-            : <ChevronRight className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
+            ? <ChevronDown className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" aria-hidden="true" />
+            : <ChevronRight className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" aria-hidden="true" />
           }
         </button>
       )}
 
-      {/* ── Live mode agent name ───────────────────────────────── */}
+      {/* ── Live mode agent name + stop action ────────────────── */}
       {isLive && (
-        <div className="flex items-center gap-1.5 px-3 py-1" role="status" aria-live="polite" aria-label="Procesamiento de IA en curso">
+        <div
+          className="flex items-center gap-1.5 px-3 py-1"
+          role="status"
+          aria-live="polite"
+          aria-label="Procesamiento de IA en curso"
+        >
           <span className={cn("text-[11px] font-semibold", agentConfig.textColor)}>
             {timeline.agentDisplayName}
           </span>
+          {/* Clinical escape hatch — renders only when a cancel handler is wired */}
+          {onCancel && hasActiveStep && (
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Detener proceso del agente"
+              title="Detener proceso del agente"
+              className="ml-auto inline-flex items-center justify-center rounded-md text-muted-foreground/80 hover:text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors min-h-[28px] min-w-[28px] p-1 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
+            >
+              <Square className="w-3 h-3" aria-hidden="true" />
+            </button>
+          )}
         </div>
       )}
 
-      {/* ── Step list with LayoutGroup for smooth reflow ────────── */}
+      {/* ── Step list with LayoutGroup for smooth reflow ────────
+             Fix #5: gate the height:auto animation on prefers-reduced-motion.
+             Framer respects the media query for layout props, but custom
+             height transitions still run unless we set duration: 0. */}
       <AnimatePresence initial={false}>
         {(isLive || isExpanded) && (
           <motion.div
             initial={defaultCollapsed ? { height: 0, opacity: 0 } : false}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: EASE_OUT_QUAD }}
+            transition={prefersReducedMotion
+              ? { duration: 0 }
+              : { duration: 0.3, ease: EASE_OUT_QUAD }
+            }
             className="overflow-hidden"
           >
             <LayoutGroup id={`timeline-${timeline.agentType}`}>
@@ -202,13 +269,21 @@ function ProgressBar({
   agentType: string
 }) {
   const agentConfig = getAgentVisualConfig(agentType as import('@/types/clinical-types').AgentType)
+  const clamped = Math.max(0, Math.min(100, Math.round(progress)))
 
   return (
-    <div className="h-[2px] w-full bg-border/20 overflow-hidden">
+    <div
+      className="h-[2px] w-full bg-border/20 overflow-hidden"
+      role="progressbar"
+      aria-valuenow={clamped}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Progreso del agente"
+    >
       <motion.div
         className={cn("h-full rounded-full", agentConfig.typingDotColor)}
         initial={{ width: '0%' }}
-        animate={{ width: `${progress}%` }}
+        animate={{ width: `${clamped}%` }}
         transition={{
           ...LAYOUT_SPRING,
           stiffness: 200, // softer for the progress bar
@@ -590,14 +665,14 @@ function TransparencyStepItem({
             isActive
               ? 'text-foreground font-medium'
               : isError
-                ? 'text-red-400/70'
-                : 'text-muted-foreground/50',
+                ? 'text-red-500'
+                : 'text-muted-foreground/70',
           )}
         >
           {humanLabel}
           {/* Short inline detail */}
           {step.detail && isCompleted && step.detail.length <= INLINE_DETAIL_MAX_LENGTH && (
-            <span className="text-[10px] text-muted-foreground/30 ml-1.5">
+            <span className="text-[10px] text-muted-foreground/60 ml-1.5">
               — {step.detail}
             </span>
           )}

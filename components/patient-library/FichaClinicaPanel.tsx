@@ -2,6 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -64,6 +74,14 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
   const [copiedFicha, setCopiedFicha] = useState(false)
   const copyResetTimeoutRef = useRef<number | null>(null)
+  // UX spec §9 — polite status region for generation transitions only.
+  // Avoids re-announcing existing state on sheet open; only speaks on
+  // start→generating and generating→completed/error transitions.
+  const [liveStatus, setLiveStatus] = useState<string>("")
+  const wasGeneratingRef = useRef(false)
+  const liveStatusTimeoutRef = useRef<number | null>(null)
+  // UX spec §4 — confirmation before regenerating an existing completed ficha.
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
   
   // Update tab when initialTab changes and panel opens
   useEffect(() => {
@@ -76,6 +94,9 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
     return () => {
       if (copyResetTimeoutRef.current) {
         window.clearTimeout(copyResetTimeoutRef.current)
+      }
+      if (liveStatusTimeoutRef.current) {
+        window.clearTimeout(liveStatusTimeoutRef.current)
       }
     }
   }, [])
@@ -156,6 +177,48 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
     // Assume latest by ultimaActualizacion
     return [...fichas].sort((a, b) => new Date(b.ultimaActualizacion).getTime() - new Date(a.ultimaActualizacion).getTime())[0]
   }, [fichas])
+
+  // UX spec §9 — Announce only transitions; clear the region after 3 s so it
+  // does not get re-read on unrelated re-renders.
+  useEffect(() => {
+    const announce = (msg: string) => {
+      setLiveStatus(msg)
+      if (liveStatusTimeoutRef.current) {
+        window.clearTimeout(liveStatusTimeoutRef.current)
+      }
+      liveStatusTimeoutRef.current = window.setTimeout(() => {
+        setLiveStatus("")
+        liveStatusTimeoutRef.current = null
+      }, 3000)
+    }
+
+    if (isGenerating && !wasGeneratingRef.current) {
+      wasGeneratingRef.current = true
+      announce("Generando ficha clínica")
+    } else if (!isGenerating && wasGeneratingRef.current) {
+      wasGeneratingRef.current = false
+      if (latest?.estado === 'error') {
+        announce("Error al generar la ficha clínica")
+      } else {
+        announce("Ficha clínica lista")
+      }
+    }
+  }, [isGenerating, latest?.estado])
+
+  // UX spec §4 — Regenerate only asks for confirmation when a completed ficha
+  // already exists. For a first-time generation, go straight through.
+  const handleGenerateClick = () => {
+    if (latest?.estado === 'completado') {
+      setShowRegenerateConfirm(true)
+    } else {
+      void onGenerate()
+    }
+  }
+
+  const confirmRegenerate = () => {
+    setShowRegenerateConfirm(false)
+    void onGenerate()
+  }
 
   // Get pending insights count for this patient
   const [patientPendingCount, setPatientPendingCount] = useState(0)
@@ -365,6 +428,15 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
         side="right" 
         className="sm:max-w-2xl w-full paper-noise flex flex-col p-0 gap-0"
       >
+        {/*
+          UX spec §9 — single polite live region for generation transitions.
+          The message log / markdown content itself stays silent; only state
+          transitions (start → generating, generating → completed/error) are
+          announced once, then cleared after 3 s.
+        */}
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {liveStatus}
+        </div>
         {/* Modern Header with gradient */}
         <div className="shrink-0 border-b border-border/50 bg-gradient-to-b from-secondary/30 to-background/50 backdrop-blur-sm">
           <div className="px-6 py-5">
@@ -437,13 +509,14 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                       <TooltipTrigger asChild>
                         <Button 
                           size="sm"
-                          onClick={onGenerate} 
+                          onClick={handleGenerateClick} 
                           disabled={isGenerating}
-                          className="h-9 px-4 rounded-lg bg-gradient-to-r from-primary via-primary to-primary/90 hover:from-primary/95 hover:via-primary/90 hover:to-primary/85 text-white shadow-sm hover:shadow-md transition-all relative overflow-hidden group"
+                          aria-label={latest?.estado === 'completado' ? "Generar nueva versión de la ficha clínica" : "Generar ficha clínica"}
+                          className="h-9 px-4 rounded-lg bg-gradient-to-r from-primary via-primary to-primary/90 hover:from-primary/95 hover:via-primary/90 hover:to-primary/85 text-white shadow-sm hover:shadow-md transition-all relative overflow-hidden group [@media(pointer:coarse)]:min-h-[44px]"
                           onPointerDown={(e) => e.preventDefault()}
                         >
                           {/* Subtle shine effect overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" aria-hidden="true" />
                           
                           <span className="font-sans font-medium text-white relative z-10">Actualizar Ficha</span>
                         </Button>
@@ -459,9 +532,10 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                       size="sm"
                       variant="destructive" 
                       onClick={onCancelGeneration}
-                      className="h-9 gap-2 rounded-lg shadow-sm hover:shadow-md transition-all"
+                      aria-label="Cancelar generación de la ficha clínica"
+                      className="h-9 gap-2 rounded-lg shadow-sm hover:shadow-md transition-all [@media(pointer:coarse)]:min-h-[44px]"
                     >
-                      <XCircle className="h-4 w-4" />
+                      <XCircle className="h-4 w-4" aria-hidden="true" />
                       <span className="font-sans font-medium">Cancelar</span>
                     </Button>
                   )}
@@ -473,9 +547,10 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                           size="sm"
                           variant="outline" 
                           onClick={onRevert} 
-                          className="h-9 gap-2 rounded-lg text-orange-600 border-orange-300 hover:bg-orange-50 hover:border-orange-400 transition-all"
+                          aria-label="Revertir a la versión anterior de la ficha clínica"
+                          className="h-9 gap-2 rounded-lg text-orange-600 border-orange-300 hover:bg-orange-50 hover:border-orange-400 transition-all [@media(pointer:coarse)]:min-h-[44px]"
                         >
-                          <RotateCcw className="h-4 w-4" />
+                          <RotateCcw className="h-4 w-4" aria-hidden="true" />
                           <span className="font-sans font-medium">Revertir</span>
                         </Button>
                       </TooltipTrigger>
@@ -503,12 +578,12 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                             onClick={() => copyFichaContent(latest.contenido)}
                             aria-label={copiedFicha ? "Contenido copiado" : "Copiar ficha clínica"}
                             title={copiedFicha ? "Contenido copiado" : "Copiar ficha clínica"}
-                            className="h-9 w-9 p-0 rounded-lg hover:bg-secondary/80 transition-all"
+                            className="h-9 w-9 p-0 rounded-lg hover:bg-secondary/80 transition-all [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
                           >
                             {copiedFicha ? (
-                              <Check className="h-4 w-4 text-emerald-600 animate-in fade-in zoom-in-50 duration-150" />
+                              <Check className="h-4 w-4 text-emerald-600 animate-in fade-in zoom-in-50 duration-150" aria-hidden="true" />
                             ) : (
-                              <Copy className="h-4 w-4" />
+                              <Copy className="h-4 w-4" aria-hidden="true" />
                             )}
                           </Button>
                         </TooltipTrigger>
@@ -522,20 +597,25 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                           <Button
                             size="sm"
                             variant="ghost"
+                            aria-label="Descargar ficha clínica en formato markdown"
                             onClick={() => {
+                              // UX spec §8 (PHI handling) — filename uses patient id + ISO date,
+                              // never the patient's display name, to avoid leaking PHI via file
+                              // system / sync / download history extensions.
                               const blob = new Blob([latest.contenido], { type: 'text/markdown;charset=utf-8' })
                               const url = URL.createObjectURL(blob)
                               const a = document.createElement('a')
                               a.href = url
-                              a.download = `${patient.displayName.replace(/\s+/g, '_')}_ficha.md`
+                              const datePart = new Date().toISOString().slice(0, 10)
+                              a.download = `ficha_${patient.id}_${datePart}.md`
                               document.body.appendChild(a)
                               a.click()
                               a.remove()
                               URL.revokeObjectURL(url)
                             }}
-                            className="h-9 w-9 p-0 rounded-lg hover:bg-secondary/80 transition-all"
+                            className="h-9 w-9 p-0 rounded-lg hover:bg-secondary/80 transition-all [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px]"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs" sideOffset={5}>
@@ -613,9 +693,9 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
               )}
 
               {latest && latest.estado === 'error' && (
-                <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div role="alert" className="flex flex-col items-center justify-center py-16 px-4">
                   <div className="h-20 w-20 rounded-2xl bg-destructive/10 flex items-center justify-center mb-6 ring-1 ring-destructive/20">
-                    <AlertCircle className="h-10 w-10 text-destructive" />
+                    <AlertCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
                   </div>
                   <h3 className="font-sans text-lg font-semibold text-foreground mb-2">
                     Error al generar la ficha
@@ -627,9 +707,10 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
                     onClick={onGenerate}
                     disabled={isGenerating}
                     variant="outline"
-                    className="gap-2 rounded-lg"
+                    aria-label="Reintentar generación de la ficha clínica"
+                    className="gap-2 rounded-lg [@media(pointer:coarse)]:min-h-[44px]"
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
                     Intentar de nuevo
                   </Button>
                 </div>
@@ -653,6 +734,26 @@ export function FichaClinicaPanel({ open, onOpenChange, patient, fichas, onRefre
           </Tabs>
         </div>
       </SheetContent>
+
+      {/*
+        UX spec §4 — Confirm regenerate only when an existing completed ficha
+        would be replaced. Destructive-adjacent action: the prior version is
+        preserved in history (revert path), but the visible ficha is replaced.
+      */}
+      <AlertDialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generar nueva versión de la ficha</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto generará una nueva versión de la ficha clínica. La versión actual quedará disponible para revertir. ¿Continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRegenerate}>Generar nueva versión</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   )
 }
