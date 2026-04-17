@@ -11,7 +11,7 @@
 // Tier & Status Enums
 // ---------------------------------------------------------------------------
 
-export type SubscriptionTier = 'free' | 'pro' | 'max'
+export type SubscriptionTier = 'free' | 'starter' | 'pro' | 'max' | 'clinic'
 
 export type SubscriptionStatus =
   | 'trialing'    // 14-day Reverse Trial (full Pro access)

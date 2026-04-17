@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Lock, Sparkles, Crown, ArrowRight } from 'lucide-react'
+import { Lock, Sparkles, Crown, ArrowRight, Zap, Building2 } from 'lucide-react'
 import { TIER_DISPLAY } from '@/lib/subscriptions/tier-config'
 import type { SubscriptionTier } from '@/lib/subscriptions/types'
 import { cn } from '@/lib/utils'
@@ -51,9 +51,11 @@ export function useUpgradeModal() {
 // ---------------------------------------------------------------------------
 
 const tierIcons: Record<SubscriptionTier, typeof Sparkles> = {
-  free: Lock,
-  pro: Sparkles,
-  max: Crown,
+  free:    Lock,
+  starter: Zap,
+  pro:     Sparkles,
+  max:     Crown,
+  clinic:  Building2,
 }
 
 export function UpgradeModalProvider({ children }: { children: ReactNode }) {
@@ -95,8 +97,10 @@ export function UpgradeModalProvider({ children }: { children: ReactNode }) {
                     variant="secondary"
                     className={cn(
                       'ml-1 inline-flex items-center gap-1',
-                      payload.requiredTier === 'max' && 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-                      payload.requiredTier === 'pro' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                      payload.requiredTier === 'clinic'  && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                      payload.requiredTier === 'max'     && 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+                      payload.requiredTier === 'pro'     && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                      payload.requiredTier === 'starter' && 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
                     )}
                   >
                     <RequiredIcon className="h-3 w-3" />

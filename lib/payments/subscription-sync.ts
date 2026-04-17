@@ -53,14 +53,16 @@ function mapStripeStatus(stripeStatus: Stripe.Subscription.Status): Subscription
 function resolveAuroraTier(subscription: Stripe.Subscription): SubscriptionTier {
   // Check metadata first (most reliable)
   const metaTier = subscription.metadata?.tier as SubscriptionTier | undefined
-  if (metaTier && ['free', 'pro', 'max'].includes(metaTier)) {
+  if (metaTier && ['free', 'starter', 'pro', 'max', 'clinic'].includes(metaTier)) {
     return metaTier
   }
 
   // Fallback: infer from price ID naming convention
   const priceId = subscription.items?.data?.[0]?.price?.id || ''
-  if (priceId.includes('max')) return 'max'
-  if (priceId.includes('pro')) return 'pro'
+  if (priceId.includes('clinic'))  return 'clinic'
+  if (priceId.includes('max'))     return 'max'
+  if (priceId.includes('starter')) return 'starter'
+  if (priceId.includes('pro'))     return 'pro'
 
   return 'pro' // Default to pro for paid subscriptions
 }

@@ -86,13 +86,21 @@ interface BasePricing {
 }
 
 const BASE_PRICES: Record<Exclude<SubscriptionTier, 'free'>, BasePricing> = {
+  starter: {
+    monthly: 1200,    // $12/mo
+    yearly: 12000,    // $120/yr (2 months free)
+  },
   pro: {
-    monthly: 2000,   // $20/mo
-    yearly: 20000,    // $200/yr (2 months free)
+    monthly: 2900,    // $29/mo
+    yearly: 29000,    // $290/yr (2 months free)
   },
   max: {
-    monthly: 5000,    // $50/mo
-    yearly: 50000,    // $500/yr (2 months free)
+    monthly: 7900,    // $79/mo
+    yearly: 79000,    // $790/yr (2 months free)
+  },
+  clinic: {
+    monthly: 19900,   // $199/mo (5 seats)
+    yearly: 199000,   // $1,990/yr (2 months free)
   },
 }
 
@@ -113,6 +121,22 @@ interface StripePriceMap {
 }
 
 const STRIPE_PRICE_IDS: StripePriceMap = {
+  // Starter monthly
+  'starter_month_base':       process.env.STRIPE_PRICE_STARTER_MONTH_BASE       || 'price_starter_month_base',
+  'starter_month_eu':         process.env.STRIPE_PRICE_STARTER_MONTH_EU         || 'price_starter_month_eu',
+  'starter_month_latam_high': process.env.STRIPE_PRICE_STARTER_MONTH_LATAM_HIGH || 'price_starter_month_latam_high',
+  'starter_month_latam_mid':  process.env.STRIPE_PRICE_STARTER_MONTH_LATAM_MID  || 'price_starter_month_latam_mid',
+  'starter_month_latam_low':  process.env.STRIPE_PRICE_STARTER_MONTH_LATAM_LOW  || 'price_starter_month_latam_low',
+  'starter_month_asia':       process.env.STRIPE_PRICE_STARTER_MONTH_ASIA       || 'price_starter_month_asia',
+
+  // Starter yearly
+  'starter_year_base':       process.env.STRIPE_PRICE_STARTER_YEAR_BASE       || 'price_starter_year_base',
+  'starter_year_eu':         process.env.STRIPE_PRICE_STARTER_YEAR_EU         || 'price_starter_year_eu',
+  'starter_year_latam_high': process.env.STRIPE_PRICE_STARTER_YEAR_LATAM_HIGH || 'price_starter_year_latam_high',
+  'starter_year_latam_mid':  process.env.STRIPE_PRICE_STARTER_YEAR_LATAM_MID  || 'price_starter_year_latam_mid',
+  'starter_year_latam_low':  process.env.STRIPE_PRICE_STARTER_YEAR_LATAM_LOW  || 'price_starter_year_latam_low',
+  'starter_year_asia':       process.env.STRIPE_PRICE_STARTER_YEAR_ASIA       || 'price_starter_year_asia',
+
   // Pro monthly
   'pro_month_base':       process.env.STRIPE_PRICE_PRO_MONTH_BASE       || 'price_pro_month_base',
   'pro_month_eu':         process.env.STRIPE_PRICE_PRO_MONTH_EU         || 'price_pro_month_eu',
@@ -144,6 +168,22 @@ const STRIPE_PRICE_IDS: StripePriceMap = {
   'max_year_latam_mid':  process.env.STRIPE_PRICE_MAX_YEAR_LATAM_MID  || 'price_max_year_latam_mid',
   'max_year_latam_low':  process.env.STRIPE_PRICE_MAX_YEAR_LATAM_LOW  || 'price_max_year_latam_low',
   'max_year_asia':       process.env.STRIPE_PRICE_MAX_YEAR_ASIA       || 'price_max_year_asia',
+
+  // Clinic monthly (team plan, 5 seats)
+  'clinic_month_base':       process.env.STRIPE_PRICE_CLINIC_MONTH_BASE       || 'price_clinic_month_base',
+  'clinic_month_eu':         process.env.STRIPE_PRICE_CLINIC_MONTH_EU         || 'price_clinic_month_eu',
+  'clinic_month_latam_high': process.env.STRIPE_PRICE_CLINIC_MONTH_LATAM_HIGH || 'price_clinic_month_latam_high',
+  'clinic_month_latam_mid':  process.env.STRIPE_PRICE_CLINIC_MONTH_LATAM_MID  || 'price_clinic_month_latam_mid',
+  'clinic_month_latam_low':  process.env.STRIPE_PRICE_CLINIC_MONTH_LATAM_LOW  || 'price_clinic_month_latam_low',
+  'clinic_month_asia':       process.env.STRIPE_PRICE_CLINIC_MONTH_ASIA       || 'price_clinic_month_asia',
+
+  // Clinic yearly
+  'clinic_year_base':       process.env.STRIPE_PRICE_CLINIC_YEAR_BASE       || 'price_clinic_year_base',
+  'clinic_year_eu':         process.env.STRIPE_PRICE_CLINIC_YEAR_EU         || 'price_clinic_year_eu',
+  'clinic_year_latam_high': process.env.STRIPE_PRICE_CLINIC_YEAR_LATAM_HIGH || 'price_clinic_year_latam_high',
+  'clinic_year_latam_mid':  process.env.STRIPE_PRICE_CLINIC_YEAR_LATAM_MID  || 'price_clinic_year_latam_mid',
+  'clinic_year_latam_low':  process.env.STRIPE_PRICE_CLINIC_YEAR_LATAM_LOW  || 'price_clinic_year_latam_low',
+  'clinic_year_asia':       process.env.STRIPE_PRICE_CLINIC_YEAR_ASIA       || 'price_clinic_year_asia',
 }
 
 // ---------------------------------------------------------------------------
@@ -226,12 +266,18 @@ export function getRegionalPrice(
  * Get all pricing options for a region (for pricing page display).
  */
 export function getAllPricingForRegion(countryCode: string | null | undefined): {
+  starter: { monthly: RegionalPrice; yearly: RegionalPrice }
   pro: { monthly: RegionalPrice; yearly: RegionalPrice }
   max: { monthly: RegionalPrice; yearly: RegionalPrice }
+  clinic: { monthly: RegionalPrice; yearly: RegionalPrice }
   pppTier: PPPTier
   savingsPercent: number
 } {
   return {
+    starter: {
+      monthly: getRegionalPrice('starter', 'month', countryCode),
+      yearly: getRegionalPrice('starter', 'year', countryCode),
+    },
     pro: {
       monthly: getRegionalPrice('pro', 'month', countryCode),
       yearly: getRegionalPrice('pro', 'year', countryCode),
@@ -239,6 +285,10 @@ export function getAllPricingForRegion(countryCode: string | null | undefined): 
     max: {
       monthly: getRegionalPrice('max', 'month', countryCode),
       yearly: getRegionalPrice('max', 'year', countryCode),
+    },
+    clinic: {
+      monthly: getRegionalPrice('clinic', 'month', countryCode),
+      yearly: getRegionalPrice('clinic', 'year', countryCode),
     },
     pppTier: getPPPTier(countryCode),
     savingsPercent: 17, // 2 months free on annual = ~17% savings

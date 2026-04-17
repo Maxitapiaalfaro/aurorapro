@@ -7,7 +7,7 @@ import 'server-only'
  * Requires Firebase authentication.
  *
  * Request body:
- * - tier: 'pro' | 'max' (required)
+ * - tier: 'starter' | 'pro' | 'max' | 'clinic' (required)
  * - interval: 'month' | 'year' (default: 'month')
  * - successUrl: string (optional, defaults to /dashboard?checkout=success)
  * - cancelUrl: string (optional, defaults to /pricing?checkout=canceled)
@@ -47,9 +47,9 @@ export async function POST(request: Request) {
   }
 
   const tier = body.tier as Exclude<SubscriptionTier, 'free'> | undefined
-  if (!tier || !['pro', 'max'].includes(tier)) {
+  if (!tier || !['starter', 'pro', 'max', 'clinic'].includes(tier)) {
     return NextResponse.json(
-      { error: 'Invalid tier. Must be "pro" or "max".' },
+      { error: 'Invalid tier. Must be "starter", "pro", "max" or "clinic".' },
       { status: 400 }
     )
   }

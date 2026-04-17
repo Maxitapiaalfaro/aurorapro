@@ -4,11 +4,18 @@
  * Central source of truth for subscription tiers, permissions, and token budgets.
  * Referenced by subscription-guard.ts for access control decisions.
  *
- * Token Budget Rationale (baseline ~5,500 tokens/message):
- * - Free:  1M tokens → ~180 messages/month → ~6/day
- * - Pro:   5M tokens → ~900 messages/month → ~30/day
- * - Max:  15M tokens → ~2,700 messages/month → ~90/day
- * - Trial: Same as Pro (full experience)
+ * Token Budget Rationale (calibrated against real COGS with Gemini 3.1 Pro / Flash-Lite
+ * as of Apr 2026 — see lib/session-metrics-comprehensive-tracker.ts MODEL_PRICING):
+ *
+ * - Free:     500K  tokens/month (discovery — ~30 msgs, CAC)
+ * - Starter:    2M  tokens/month → ~120 msgs/mo ($12/mo, ~71% gross margin)
+ * - Pro:        7M  tokens/month → ~430 msgs/mo ($29/mo, ~65% gross margin)
+ * - Max:       25M  tokens/month → ~1.5K msgs/mo ($79/mo, ~56% gross margin)
+ * - Clinic:   100M  tokens/month (pooled across 5 seats, $199/mo, ~30% margin + lock-in)
+ * - Trial:     Same as Pro (full experience for conversion)
+ *
+ * The token cap — not the model — is the economic gating mechanism.
+ * Heavy users naturally migrate upward; margin is structurally protected.
  *
  * @module lib/subscriptions/tier-config
  */
@@ -25,9 +32,11 @@ import type {
 // ---------------------------------------------------------------------------
 
 export const TOKEN_BUDGETS: Record<SubscriptionTier, number> = {
-  free: 1_000_000,    // 1M tokens/month
-  pro:  5_000_000,    // 5M tokens/month
-  max: 15_000_000,    // 15M tokens/month
+  free:       500_000,     // 500K  tokens/month — discovery tier
+  starter:  2_000_000,     //   2M  tokens/month — solo practitioners starting out
+  pro:      7_000_000,     //   7M  tokens/month — active clinical practice
+  max:     25_000_000,     //  25M  tokens/month — power users / heavy caseload
+  clinic: 100_000_000,     // 100M  tokens/month — pooled across 5 seats (team plan)
 }
 
 /** Trial users get the same budget as Pro */
@@ -60,10 +69,10 @@ export const TRIAL_CONFIG = {
  * During trial, user has 'pro' tier access.
  */
 export const AGENT_PERMISSIONS: Record<AgentId, SubscriptionTier> = {
-  socratico:    'free',   // Base agent — always available
-  clinico:      'pro',    // Clinical agent — Pro and above
-  academico:    'pro',    // Academic agent — Pro and above
-  experimental: 'max',    // Experimental agents — Max only
+  socratico:    'free',     // Base agent — always available
+  clinico:      'starter',  // Clinical agent — Starter and above
+  academico:    'pro',      // Academic agent — Pro and above
+  experimental: 'max',      // Experimental agents — Max and Clinic
 }
 
 // ---------------------------------------------------------------------------
@@ -81,15 +90,17 @@ export const TOOL_PERMISSIONS: Record<ToolId, SubscriptionTier> = {
   list_patients:           'free',
   get_clinical_memories:   'free',
 
-  // Write tools (Pro tier)
-  save_clinical_memory:    'pro',
+  // Basic write tools (Starter tier) — required for the plan to be useful
+  save_clinical_memory:    'starter',
+  upload_document:         'starter',
+  session_summary:         'starter',
+
+  // Advanced clinical tools (Pro tier)
   search_academic:         'pro',
   generate_ficha:          'pro',
-  upload_document:         'pro',
-  session_summary:         'pro',
   pattern_analysis:        'pro',
 
-  // Experimental tools (Max tier)
+  // Experimental tools (Max / Clinic tier)
   experimental_tools:      'max',
 }
 
@@ -114,12 +125,20 @@ export interface TierLimits {
 
 export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   free: {
-    maxActivePatients: 5,
-    maxDocumentUploads: 10,
-    maxSessionMessages: 50,
+    maxActivePatients: 3,
+    maxDocumentUploads: 5,
+    maxSessionMessages: 30,
     mcpAccess: false,
     canExportData: false,
     voiceTranscription: false,
+  },
+  starter: {
+    maxActivePatients: 15,
+    maxDocumentUploads: 50,
+    maxSessionMessages: null,
+    mcpAccess: false,
+    canExportData: true,
+    voiceTranscription: true,
   },
   pro: {
     maxActivePatients: null,  // unlimited
@@ -137,6 +156,14 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
     canExportData: true,
     voiceTranscription: true,
   },
+  clinic: {
+    maxActivePatients: null,
+    maxDocumentUploads: null,
+    maxSessionMessages: null,
+    mcpAccess: true,
+    canExportData: true,
+    voiceTranscription: true,
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -145,9 +172,11 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
 
 /** Numeric rank for tier comparison: higher = more permissions */
 export const TIER_RANK: Record<SubscriptionTier, number> = {
-  free: 0,
-  pro:  1,
-  max:  2,
+  free:    0,
+  starter: 1,
+  pro:     2,
+  max:     3,
+  clinic:  4,  // Team plan — highest rank (includes all features + multi-seat)
 }
 
 /**
@@ -205,14 +234,22 @@ export function getEffectiveTier(
 export const TIER_DISPLAY: Record<SubscriptionTier, { name: string; description: string }> = {
   free: {
     name: 'Free',
-    description: 'Basic access with limited features',
+    description: 'Para explorar Aurora sin compromiso',
+  },
+  starter: {
+    name: 'Starter',
+    description: 'Para iniciar tu práctica con Aurora',
   },
   pro: {
     name: 'Pro',
-    description: 'Full clinical toolkit for professionals',
+    description: 'Toolkit clínico completo para profesionales activos',
   },
   max: {
     name: 'Max',
-    description: 'Everything in Pro plus experimental features',
+    description: 'Pro + experimental para práctica intensiva',
+  },
+  clinic: {
+    name: 'Clinic',
+    description: 'Plan multi-usuario para clínicas y equipos',
   },
 }

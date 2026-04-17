@@ -55,22 +55,37 @@ export function TokenUsageBar({ compact = false }: { compact?: boolean }) {
             <button
               onClick={() => router.push('/pricing')}
               className={cn(
-                'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors',
+                // Mobile: icon-only pill (avoids competing with title/patient name)
+                // sm+: shows progress bar + remaining-token count
+                'flex items-center gap-1.5 rounded-md text-xs transition-colors',
+                'px-1.5 py-1 sm:px-2',
                 'hover:bg-muted/80',
                 textColor,
               )}
               aria-label={`Uso de tokens: ${usagePercent}%`}
             >
-              <Zap className="h-3 w-3" />
-              <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+              <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+              <div className="hidden sm:block w-16 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className={cn('h-full rounded-full transition-all duration-500', barColor)}
                   style={{ width: `${Math.min(usagePercent, 100)}%` }}
                 />
               </div>
-              <span className="font-mono tabular-nums">
+              <span className="hidden sm:inline font-mono tabular-nums">
                 {formatTokens(tokensRemaining)}
               </span>
+              {/* Mobile-only: show a tiny colored dot when usage is elevated */}
+              {usagePercent >= 70 && (
+                <span
+                  className={cn(
+                    'sm:hidden h-1.5 w-1.5 rounded-full',
+                    usagePercent >= 95 ? 'bg-red-500' :
+                    usagePercent >= 85 ? 'bg-orange-500' :
+                    'bg-amber-500',
+                  )}
+                  aria-hidden="true"
+                />
+              )}
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs">
