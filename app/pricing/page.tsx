@@ -2,6 +2,7 @@
 
 import { useState, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -103,7 +104,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// Per-tier differentiators (progressive disclosure — what unlocks at each tier)
+// Per-tier differentiators
 // ---------------------------------------------------------------------------
 
 interface TierCopy {
@@ -162,17 +163,12 @@ const TIERS: TierCopy[] = [
   },
 ]
 
-// Shared across all paid plans — removed from per-card noise
 const ALWAYS_INCLUDED = [
   { icon: HeartIcon,         label: 'Diálogo socrático con Aurora, en todos los planes' },
   { icon: ShieldCheckIcon,   label: 'Tus datos clínicos permanecen tuyos, siempre' },
   { icon: ArrowRightIcon,    label: 'Exporta o cancela cuando lo necesites, sin fricción' },
   { icon: BrainIcon,         label: '14 días para conocer Aurora, sin compromiso' },
 ]
-
-// ---------------------------------------------------------------------------
-// FAQ — reduce purchase anxiety
-// ---------------------------------------------------------------------------
 
 const FAQS = [
   {
@@ -194,6 +190,24 @@ const FAQS = [
 ]
 
 // ---------------------------------------------------------------------------
+// Motion variants — calm, professional, clinical
+// ---------------------------------------------------------------------------
+
+const EASE = [0.22, 1, 0.36, 1] as const // expo-out, feels intentional
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
+}
+
+const containerStagger = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.08, delayChildren: 0.05 },
+  },
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -205,6 +219,7 @@ export default function PricingPage() {
   const { user } = useAuth()
   const { effectiveTier, status, isLoaded } = useSubscription()
   const router = useRouter()
+  const reduceMotion = useReducedMotion()
 
   const handleSubscribe = async (tier: Exclude<SubscriptionTier, 'free'>) => {
     if (!user) {
@@ -280,54 +295,74 @@ export default function PricingPage() {
   const clinicPrice = formatPrice(clinicCents, isYearly)
   const clinicAnnual = isYearly ? `${formatTotal(PRICES.clinic.yearly)} al año` : null
 
+  // Animated price swap (key-based)
+  const priceKey = isYearly ? 'y' : 'm'
+
   return (
-    <div className="min-h-screen bg-background font-sans text-foreground antialiased">
+    <div className="min-h-screen bg-background font-sans text-foreground antialiased overflow-x-hidden">
       {/* Header — minimal, hairline border */}
-      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto max-w-6xl px-5 sm:px-8 py-3.5 flex items-center gap-4">
+      <header className="sticky top-0 z-20 border-b border-border/40 bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 md:px-8 py-3 sm:py-3.5 flex items-center gap-3 sm:gap-4">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push('/')}
-            className="gap-1.5 text-muted-foreground hover:text-foreground -ml-2"
+            className="gap-1.5 text-muted-foreground hover:text-foreground -ml-2 shrink-0"
           >
             <ArrowLeftIcon className="h-4 w-4" weight="regular" />
             <span className="hidden sm:inline text-sm">Volver</span>
           </Button>
-          <h1 className="font-serif text-lg tracking-tight text-foreground/90">Planes</h1>
+          <h1 className="font-serif text-base sm:text-lg tracking-tight text-foreground/90 truncate">Planes</h1>
           {isLoaded && effectiveTier !== 'free' && (
-            <span className="ml-auto text-xs text-muted-foreground tracking-wide">
-              Plan actual · <span className="text-foreground/80 font-medium">{effectiveTier.charAt(0).toUpperCase() + effectiveTier.slice(1)}</span>
+            <span className="ml-auto text-[11px] sm:text-xs text-muted-foreground tracking-wide truncate">
+              <span className="hidden sm:inline">Plan actual · </span>
+              <span className="text-foreground/80 font-medium">{effectiveTier.charAt(0).toUpperCase() + effectiveTier.slice(1)}</span>
             </span>
           )}
         </div>
       </header>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* HERO — single clear question, generous whitespace */}
+      {/* HERO */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-3xl px-5 sm:px-8 pt-20 sm:pt-28 pb-16 text-center">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-6">
+      <motion.section
+        initial="hidden"
+        animate="visible"
+        variants={containerStagger}
+        className="mx-auto max-w-3xl px-5 sm:px-8 pt-14 sm:pt-20 md:pt-28 pb-12 sm:pb-16 text-center"
+      >
+        <motion.p variants={fadeUp} className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-5 sm:mb-6">
           Planes Aurora
-        </p>
-        <h2 className="font-serif text-[2.5rem] sm:text-5xl md:text-[3.75rem] leading-[1.08] tracking-tight text-foreground font-normal">
+        </motion.p>
+        <motion.h2
+          variants={fadeUp}
+          className="font-serif text-[2rem] sm:text-[2.75rem] md:text-5xl lg:text-[3.75rem] leading-[1.08] tracking-tight text-foreground font-normal"
+        >
           ¿Cuánto espacio
           <br />
           <span className="text-foreground/70 italic">merece tu práctica?</span>
-        </h2>
-        <p className="mt-7 text-[17px] leading-relaxed text-muted-foreground max-w-xl mx-auto">
+        </motion.h2>
+        <motion.p
+          variants={fadeUp}
+          className="mt-6 sm:mt-7 text-[15px] sm:text-[17px] leading-relaxed text-muted-foreground max-w-xl mx-auto px-2"
+        >
           Tres planes pensados para acompañar tu crecimiento profesional.
           Elige el que refleja tu ritmo hoy — cambia cuando quieras.
-        </p>
-      </section>
+        </motion.p>
+      </motion.section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* BILLING TOGGLE — quiet, centered */}
+      {/* BILLING TOGGLE */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-6xl px-5 sm:px-8 pb-12">
-        <div className="flex items-center justify-center gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE, delay: 0.25 }}
+        className="mx-auto max-w-6xl px-5 sm:px-8 pb-10 sm:pb-12"
+      >
+        <div className="flex items-center justify-center gap-3 sm:gap-4 flex-wrap">
           <span className={cn(
-            'text-sm transition-colors',
+            'text-sm transition-colors duration-300',
             !isYearly ? 'text-foreground font-medium' : 'text-muted-foreground'
           )}>
             Mensual
@@ -338,50 +373,70 @@ export default function PricingPage() {
             aria-label="Alternar entre facturación mensual y anual"
           />
           <span className={cn(
-            'text-sm transition-colors inline-flex items-center gap-2',
+            'text-sm transition-colors duration-300 inline-flex items-center gap-2',
             isYearly ? 'text-foreground font-medium' : 'text-muted-foreground'
           )}>
             Anual
-            <span className={cn(
-              'text-[11px] tracking-wide text-primary/80 transition-opacity',
-              isYearly ? 'opacity-100' : 'opacity-0'
-            )}>
-              · 2 meses sin costo
-            </span>
+            <AnimatePresence>
+              {isYearly && (
+                <motion.span
+                  initial={{ opacity: 0, x: -6, width: 0 }}
+                  animate={{ opacity: 1, x: 0, width: 'auto' }}
+                  exit={{ opacity: 0, x: -6, width: 0 }}
+                  transition={{ duration: 0.35, ease: EASE }}
+                  className="text-[11px] tracking-wide text-primary/80 whitespace-nowrap overflow-hidden"
+                >
+                  · 2 meses sin costo
+                </motion.span>
+              )}
+            </AnimatePresence>
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* PRIMARY TIER GRID — 3 choices only (Hick's law) */}
+      {/* PRIMARY TIER GRID */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-5 sm:px-8 pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={containerStagger}
+          className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-4 lg:gap-6"
+        >
           {tiersWithPrice.map((tier) => {
             const isCurrent = isLoaded && effectiveTier === tier.id
             const isActive = isLoaded && (status === 'active' || status === 'trialing')
             const Icon = tier.icon
 
             return (
-              <article
+              <motion.article
                 key={tier.id}
+                variants={fadeUp}
+                whileHover={reduceMotion ? undefined : { y: -3 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                 className={cn(
-                  'relative flex flex-col rounded-2xl border bg-background p-8 sm:p-9 transition-all',
+                  'relative flex flex-col rounded-2xl border bg-background p-6 sm:p-8 lg:p-9 transition-colors duration-300 will-change-transform',
                   tier.featured
-                    ? 'border-foreground/80 shadow-[0_1px_0_0_rgb(0_0_0/0.02),0_12px_32px_-12px_rgb(0_0_0/0.12)] lg:scale-[1.02]'
-                    : 'border-border/60 hover:border-border',
+                    ? 'border-foreground/80 shadow-[0_1px_0_0_rgb(0_0_0/0.02),0_12px_32px_-12px_rgb(0_0_0/0.12)] md:scale-[1.015] lg:scale-[1.02] z-10'
+                    : 'border-border/60 hover:border-foreground/30',
                 )}
               >
                 {tier.featured && (
-                  <span className="absolute -top-2.5 left-8 bg-foreground text-background text-[10px] uppercase tracking-[0.16em] font-medium px-2.5 py-1 rounded-sm">
+                  <motion.span
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4, duration: 0.4, ease: EASE }}
+                    className="absolute -top-2.5 left-6 sm:left-8 bg-foreground text-background text-[10px] uppercase tracking-[0.16em] font-medium px-2.5 py-1 rounded-sm"
+                  >
                     Recomendado
-                  </span>
+                  </motion.span>
                 )}
 
                 {/* Identity */}
-                <div className="mb-8">
-                  <Icon className="h-5 w-5 text-foreground/70 mb-5" weight="light" />
-                  <h3 className="font-serif text-[1.75rem] tracking-tight text-foreground leading-none mb-2">
+                <div className="mb-7 sm:mb-8">
+                  <Icon className="h-5 w-5 text-foreground/70 mb-4 sm:mb-5" weight="light" />
+                  <h3 className="font-serif text-2xl sm:text-[1.75rem] tracking-tight text-foreground leading-none mb-2">
                     {tier.name}
                   </h3>
                   <p className="text-sm text-muted-foreground/90 italic">
@@ -389,25 +444,46 @@ export default function PricingPage() {
                   </p>
                 </div>
 
-                {/* Price anchor */}
+                {/* Price — animated switch */}
                 <div className="mb-3">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-serif text-5xl tracking-tight text-foreground tabular-nums leading-none">
-                      {tier.price}
-                    </span>
+                  <div className="flex items-baseline gap-1.5 relative">
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.span
+                        key={priceKey + tier.id}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.25, ease: EASE }}
+                        className="font-serif text-4xl sm:text-5xl tracking-tight text-foreground tabular-nums leading-none"
+                      >
+                        {tier.price}
+                      </motion.span>
+                    </AnimatePresence>
                     <span className="text-sm text-muted-foreground">/mes</span>
                   </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground/70 h-4">
-                    {tier.annualHint ?? '\u00A0'}
-                  </p>
+                  <div className="mt-1.5 h-4 text-xs text-muted-foreground/70">
+                    <AnimatePresence mode="wait">
+                      {tier.annualHint && (
+                        <motion.p
+                          key="annual"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.25 }}
+                        >
+                          {tier.annualHint}
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 {/* For whom */}
-                <p className="text-[13px] leading-relaxed text-muted-foreground mb-8 pb-8 border-b border-border/40 min-h-[3.75rem]">
+                <p className="text-[13px] leading-relaxed text-muted-foreground mb-7 sm:mb-8 pb-7 sm:pb-8 border-b border-border/40 md:min-h-[3.75rem]">
                   {tier.forWho}
                 </p>
 
-                {/* Capacity — single clinical line */}
+                {/* Capacity */}
                 <div className="mb-6">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-1.5">
                     Alcance clínico
@@ -417,26 +493,33 @@ export default function PricingPage() {
                   </p>
                 </div>
 
-                {/* Differentiators — 3 only, curated per tier */}
-                <div className="mb-8 flex-1">
+                {/* Differentiators */}
+                <div className="mb-7 sm:mb-8 flex-1">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-4">
                     {tier.id === 'starter' ? 'Lo esencial' : tier.id === 'pro' ? 'Todo lo de Starter, y además' : 'Todo lo de Pro, y además'}
                   </p>
                   <ul className="space-y-3">
-                    {tier.highlights.map((h) => (
-                      <li key={h} className="flex items-start gap-2.5 text-[14px] leading-snug text-foreground/85">
+                    {tier.highlights.map((h, idx) => (
+                      <motion.li
+                        key={h}
+                        initial={{ opacity: 0, x: -4 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, margin: '-40px' }}
+                        transition={{ duration: 0.4, delay: idx * 0.06, ease: EASE }}
+                        className="flex items-start gap-2.5 text-[14px] leading-snug text-foreground/85"
+                      >
                         <CheckIcon className="h-3.5 w-3.5 text-foreground/60 mt-[5px] shrink-0" weight="bold" />
                         <span>{h}</span>
-                      </li>
+                      </motion.li>
                     ))}
                   </ul>
                 </div>
 
-                {/* CTA — large, single-purpose (Fitts) */}
+                {/* CTA */}
                 {isCurrent && isActive ? (
                   <Button
                     variant="outline"
-                    className="w-full h-11 border-border/60 bg-transparent"
+                    className="w-full h-11 border-border/60 bg-transparent transition-all"
                     onClick={handleManageBilling}
                     disabled={loadingTier === 'portal'}
                   >
@@ -445,9 +528,9 @@ export default function PricingPage() {
                 ) : (
                   <Button
                     className={cn(
-                      'w-full h-11 text-[14px]',
+                      'w-full h-11 text-[14px] transition-all duration-300',
                       tier.featured
-                        ? 'bg-foreground text-background hover:bg-foreground/90'
+                        ? 'bg-foreground text-background hover:bg-foreground/90 hover:shadow-[0_6px_20px_-8px_rgb(0_0_0/0.25)]'
                         : 'bg-background border border-border/60 text-foreground hover:border-foreground/40 hover:bg-muted/30',
                     )}
                     onClick={() => handleSubscribe(tier.id)}
@@ -461,53 +544,75 @@ export default function PricingPage() {
                     }
                   </Button>
                 )}
-              </article>
+              </motion.article>
             )
           })}
-        </div>
+        </motion.div>
 
-        {/* Free plan — de-emphasized text link (not competing with primary choice) */}
-        <div className="text-center mt-8">
+        {/* Free plan link */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-center mt-8"
+        >
           <p className="text-sm text-muted-foreground">
             ¿Solo quieres explorar?{' '}
             <button
-              onClick={() => user ? router.push('/') : router.push('/')}
+              onClick={() => router.push('/')}
               className="text-foreground/80 hover:text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground/40 transition-colors"
             >
               Comienza gratis con el plan Free
             </button>
           </p>
-        </div>
+        </motion.div>
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* INCLUDED IN ALL — moves shared features out of cards */}
+      {/* INCLUDED IN ALL */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 sm:px-8 pt-24 pb-20">
-        <div className="text-center mb-10">
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        variants={containerStagger}
+        className="mx-auto max-w-6xl px-5 sm:px-8 pt-20 sm:pt-24 pb-16 sm:pb-20"
+      >
+        <motion.div variants={fadeUp} className="text-center mb-10 sm:mb-12">
           <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-4">
             Incluido en todos los planes
           </p>
           <h3 className="font-serif text-2xl sm:text-3xl tracking-tight text-foreground font-normal">
             Lo que nunca cambia
           </h3>
-        </div>
+        </motion.div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {ALWAYS_INCLUDED.map(({ icon: Icon, label }) => (
-            <div key={label} className="flex flex-col items-start gap-3">
+            <motion.div
+              key={label}
+              variants={fadeUp}
+              className="flex flex-col items-start gap-3"
+            >
               <Icon className="h-5 w-5 text-foreground/60" weight="light" />
               <p className="text-sm leading-relaxed text-foreground/80">{label}</p>
-            </div>
+            </motion.div>
           ))}
         </div>
-      </section>
+      </motion.section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* CLINIC — secondary decision, separated spatially */}
+      {/* CLINIC */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 sm:px-8 pb-24">
-        <div className="rounded-2xl border border-border/60 bg-muted/20 p-8 sm:p-12">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-10 lg:gap-16">
+      <section className="mx-auto max-w-6xl px-5 sm:px-8 pb-20 sm:pb-24">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={{ duration: 0.7, ease: EASE }}
+          className="rounded-2xl border border-border/60 bg-muted/20 p-6 sm:p-10 lg:p-12"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center gap-8 sm:gap-10 lg:gap-16">
             <div className="flex-1 min-w-0 max-w-xl">
               <div className="flex items-center gap-3 mb-5">
                 <UsersThreeIcon className="h-5 w-5 text-foreground/70" weight="light" />
@@ -515,43 +620,64 @@ export default function PricingPage() {
                   Equipos clínicos
                 </span>
               </div>
-              <h3 className="font-serif text-3xl sm:text-[2.5rem] leading-tight tracking-tight text-foreground mb-4 font-normal">
+              <h3 className="font-serif text-[1.75rem] sm:text-3xl lg:text-[2.5rem] leading-tight tracking-tight text-foreground mb-4 font-normal">
                 Clinic
               </h3>
-              <p className="text-[15px] text-muted-foreground leading-relaxed mb-8">
+              <p className="text-[14px] sm:text-[15px] text-muted-foreground leading-relaxed mb-7 sm:mb-8">
                 Para clínicas y equipos multidisciplinarios. Cinco profesionales comparten la capacidad
                 clínica, acceden a todas las herramientas Pro y Max, y cuentan con un equipo de soporte dedicado.
               </p>
-              <div className="grid grid-cols-3 gap-x-6 text-sm">
+              <div className="grid grid-cols-3 gap-x-4 sm:gap-x-6 text-sm">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Profesionales</div>
-                  <div className="text-foreground/90">5 incluidos</div>
+                  <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Profesionales</div>
+                  <div className="text-foreground/90 text-[13px] sm:text-sm">5 incluidos</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Herramientas</div>
-                  <div className="text-foreground/90">Sin límite</div>
+                  <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Herramientas</div>
+                  <div className="text-foreground/90 text-[13px] sm:text-sm">Sin límite</div>
                 </div>
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Soporte</div>
-                  <div className="text-foreground/90">Dedicado</div>
+                  <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70 mb-1">Soporte</div>
+                  <div className="text-foreground/90 text-[13px] sm:text-sm">Dedicado</div>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col items-start lg:items-end gap-4 shrink-0 lg:border-l lg:border-border/40 lg:pl-16 lg:min-w-[220px]">
+            <div className="flex flex-col items-start lg:items-end gap-4 shrink-0 w-full lg:w-auto lg:border-l lg:border-border/40 lg:pl-16 lg:min-w-[220px] pt-6 lg:pt-0 border-t border-border/40 lg:border-t-0">
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-serif text-5xl tracking-tight tabular-nums text-foreground leading-none">
-                    {clinicPrice}
-                  </span>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={priceKey + 'clinic'}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.25, ease: EASE }}
+                      className="font-serif text-4xl sm:text-5xl tracking-tight tabular-nums text-foreground leading-none"
+                    >
+                      {clinicPrice}
+                    </motion.span>
+                  </AnimatePresence>
                   <span className="text-sm text-muted-foreground">/mes</span>
                 </div>
-                <p className="mt-1.5 text-xs text-muted-foreground/70 h-4">
-                  {clinicAnnual ?? '\u00A0'}
-                </p>
+                <div className="mt-1.5 h-4 text-xs text-muted-foreground/70">
+                  <AnimatePresence mode="wait">
+                    {clinicAnnual && (
+                      <motion.p
+                        key="clinic-annual"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                      >
+                        {clinicAnnual}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
               <Button
-                className="bg-foreground text-background hover:bg-foreground/90 w-full lg:w-auto px-7 h-11"
+                className="bg-foreground text-background hover:bg-foreground/90 hover:shadow-[0_6px_20px_-8px_rgb(0_0_0/0.25)] transition-all duration-300 w-full lg:w-auto px-7 h-11"
                 onClick={() => handleSubscribe('clinic')}
                 disabled={loadingTier === 'clinic'}
               >
@@ -559,13 +685,13 @@ export default function PricingPage() {
               </Button>
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* COMPARISON — progressive disclosure, grouped by intent */}
+      {/* COMPARISON */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 sm:px-8 pb-24">
+      <section className="mx-auto max-w-6xl px-5 sm:px-8 pb-20 sm:pb-24">
         <div className="flex justify-center">
           <button
             onClick={() => setShowComparison(!showComparison)}
@@ -573,125 +699,157 @@ export default function PricingPage() {
             aria-expanded={showComparison}
           >
             <span>{showComparison ? 'Ocultar' : 'Ver'} comparación detallada</span>
-            <CaretDownIcon className={cn('h-3.5 w-3.5 transition-transform', showComparison && 'rotate-180')} weight="bold" />
+            <CaretDownIcon className={cn('h-3.5 w-3.5 transition-transform duration-300', showComparison && 'rotate-180')} weight="bold" />
           </button>
         </div>
 
-        {showComparison && (
-          <div className="mt-10 overflow-x-auto rounded-xl border border-border/50">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="border-b border-border/50 bg-muted/20">
-                <tr>
-                  <th className="text-left font-medium text-muted-foreground px-5 py-4 text-[11px] uppercase tracking-[0.12em] w-[40%]">
-                    Herramienta clínica
-                  </th>
-                  {(['Starter','Pro','Max','Clinic'] as const).map((label) => (
-                    <th
-                      key={label}
-                      className={cn(
-                        'text-center font-medium px-3 py-4 text-[11px] uppercase tracking-[0.12em]',
-                        label === 'Pro' ? 'text-foreground' : 'text-muted-foreground'
-                      )}
-                    >
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {FEATURE_GROUPS.map((group, gi) => (
-                  <Fragment key={group.title}>
-                    <tr className="bg-muted/10">
-                      <td
-                        colSpan={5}
-                        className="px-5 py-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80 font-medium border-t border-border/40"
-                      >
-                        {group.title}
-                      </td>
-                    </tr>
-                    {group.rows.map((row) => (
-                      <tr key={row.label} className="border-t border-border/20 hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 text-foreground/85 text-[13px]">{row.label}</td>
-                        {(['starter','pro','max','clinic'] as const).map((t) => {
-                          const v = row[t]
-                          return (
-                            <td
-                              key={t}
-                              className={cn(
-                                'text-center px-3 py-3',
-                                t === 'pro' && 'bg-foreground/[0.015]'
-                              )}
-                            >
-                              {typeof v === 'boolean' ? (
-                                v ? (
-                                  <CheckIcon className="h-3.5 w-3.5 text-foreground/70 inline-block" weight="bold" />
-                                ) : (
-                                  <MinusIcon className="h-3.5 w-3.5 text-muted-foreground/25 inline-block" weight="bold" />
-                                )
-                              ) : (
-                                <span className="text-[13px] text-foreground/75">{v}</span>
-                              )}
-                            </td>
-                          )
-                        })}
+        <AnimatePresence initial={false}>
+          {showComparison && (
+            <motion.div
+              key="comparison"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.45, ease: EASE }}
+              className="overflow-hidden"
+            >
+              <div className="mt-10">
+                {/* Scroll hint on mobile */}
+                <p className="md:hidden text-[11px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-3 text-center">
+                  ← Desliza para ver todos los planes →
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-border/50 -mx-5 sm:mx-0">
+                  <table className="w-full text-sm min-w-[640px]">
+                    <thead className="border-b border-border/50 bg-muted/20">
+                      <tr>
+                        <th className="text-left font-medium text-muted-foreground px-4 sm:px-5 py-4 text-[11px] uppercase tracking-[0.12em] w-[40%]">
+                          Herramienta clínica
+                        </th>
+                        {(['Starter','Pro','Max','Clinic'] as const).map((label) => (
+                          <th
+                            key={label}
+                            className={cn(
+                              'text-center font-medium px-3 py-4 text-[11px] uppercase tracking-[0.12em]',
+                              label === 'Pro' ? 'text-foreground' : 'text-muted-foreground'
+                            )}
+                          >
+                            {label}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    </thead>
+                    <tbody>
+                      {FEATURE_GROUPS.map((group) => (
+                        <Fragment key={group.title}>
+                          <tr className="bg-muted/10">
+                            <td
+                              colSpan={5}
+                              className="px-4 sm:px-5 py-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80 font-medium border-t border-border/40"
+                            >
+                              {group.title}
+                            </td>
+                          </tr>
+                          {group.rows.map((row) => (
+                            <tr key={row.label} className="border-t border-border/20 hover:bg-muted/20 transition-colors">
+                              <td className="px-4 sm:px-5 py-3 text-foreground/85 text-[13px]">{row.label}</td>
+                              {(['starter','pro','max','clinic'] as const).map((t) => {
+                                const v = row[t]
+                                return (
+                                  <td
+                                    key={t}
+                                    className={cn(
+                                      'text-center px-3 py-3',
+                                      t === 'pro' && 'bg-foreground/[0.015]'
+                                    )}
+                                  >
+                                    {typeof v === 'boolean' ? (
+                                      v ? (
+                                        <CheckIcon className="h-3.5 w-3.5 text-foreground/70 inline-block" weight="bold" />
+                                      ) : (
+                                        <MinusIcon className="h-3.5 w-3.5 text-muted-foreground/25 inline-block" weight="bold" />
+                                      )
+                                    ) : (
+                                      <span className="text-[13px] text-foreground/75">{v}</span>
+                                    )}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* FAQ — reduce purchase anxiety */}
+      {/* FAQ */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-2xl px-5 sm:px-8 pb-24">
-        <div className="text-center mb-12">
+      <motion.section
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-60px' }}
+        variants={containerStagger}
+        className="mx-auto max-w-2xl px-5 sm:px-8 pb-20 sm:pb-24"
+      >
+        <motion.div variants={fadeUp} className="text-center mb-10 sm:mb-12">
           <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/70 mb-4">
             Preguntas frecuentes
           </p>
           <h3 className="font-serif text-2xl sm:text-3xl tracking-tight text-foreground font-normal">
             Lo que suele preguntarse antes de comenzar
           </h3>
-        </div>
-        <div className="divide-y divide-border/50 border-y border-border/50">
+        </motion.div>
+        <motion.div variants={fadeUp} className="divide-y divide-border/50 border-y border-border/50">
           {FAQS.map((faq, i) => {
             const isOpen = openFaq === i
             return (
               <div key={faq.q}>
                 <button
                   onClick={() => setOpenFaq(isOpen ? null : i)}
-                  className="w-full flex items-start justify-between gap-6 py-5 text-left group"
+                  className="w-full flex items-start justify-between gap-4 sm:gap-6 py-5 text-left group"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-[15px] text-foreground/90 group-hover:text-foreground transition-colors leading-snug">
+                  <span className="text-[14px] sm:text-[15px] text-foreground/90 group-hover:text-foreground transition-colors leading-snug">
                     {faq.q}
                   </span>
                   <CaretDownIcon
                     className={cn(
-                      'h-4 w-4 text-muted-foreground shrink-0 mt-1 transition-transform',
+                      'h-4 w-4 text-muted-foreground shrink-0 mt-1 transition-transform duration-300',
                       isOpen && 'rotate-180'
                     )}
                     weight="regular"
                   />
                 </button>
-                {isOpen && (
-                  <p className="pb-5 text-[14px] text-muted-foreground leading-relaxed max-w-[90%]">
-                    {faq.a}
-                  </p>
-                )}
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      key="content"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.35, ease: EASE }}
+                      className="overflow-hidden"
+                    >
+                      <p className="pb-5 text-[13px] sm:text-[14px] text-muted-foreground leading-relaxed max-w-[95%] sm:max-w-[90%]">
+                        {faq.a}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )
           })}
-        </div>
-      </section>
+        </motion.div>
+      </motion.section>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* CLOSING — gentle restatement */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-xl px-5 sm:px-8 pb-24 text-center">
+      {/* CLOSING */}
+      <section className="mx-auto max-w-xl px-5 sm:px-8 pb-20 sm:pb-24 text-center">
         <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-4">
           Precios en USD · ajustados automáticamente según tu región
         </p>
