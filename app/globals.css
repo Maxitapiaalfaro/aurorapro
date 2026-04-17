@@ -553,10 +553,14 @@
     color: hsl(var(--foreground)) !important;
   }
 
-  /* 🔥 CONTAINER QUERIES: Establecer contexto de contención en burbujas de mensaje */
-  .chat-message-bubble,
-  .markdown-content,
-  .prose {
+  /* 🔥 CONTAINER QUERIES: Establecer contexto de contención en burbujas de mensaje
+   * PERF: Scoped to .chat-message-bubble ONLY. Previously this selector also
+   * included .markdown-content and .prose, which applied `contain: layout
+   * inline-size style` to 2–3 additional nested elements per message. On long
+   * conversations this multiplied layout work during animations/resizes and
+   * was a dominant source of desktop jank. .chat-message-bubble still wraps
+   * every message, so @container message-bubble queries continue to match. */
+  .chat-message-bubble {
     container-type: inline-size;
     container-name: message-bubble;
   }

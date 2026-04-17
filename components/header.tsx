@@ -112,7 +112,7 @@ export function Header({ onHistoryToggle, sessionMeta, onClearPatientContext, ha
   }, [patientId, psychologistId])
 
   return (
-    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-border/30 backdrop-blur-xl bg-background/90 shadow-warm-sm" role="banner">
+    <header className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between z-50 border-b border-border/30 backdrop-blur-xl bg-background/90 shadow-warm-sm transform-gpu will-change-transform [contain:paint]" role="banner">
       <div className="relative flex items-center gap-3 md:gap-4 flex-1 min-w-0">
         <Button
           variant="ghost"

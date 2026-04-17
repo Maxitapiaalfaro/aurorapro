@@ -145,7 +145,7 @@ function FichaClinicaDisabledButton({
           onMouseEnter={() => !isTouchDevice && setShowTooltip(true)}
         >
           {/* Popover Card - Light Academia Palette con acento amarillo */}
-          <div className="relative bg-card/95 backdrop-blur-2xl border-2 border-border/80 rounded-2xl shadow-[0_20px_70px_-10px_rgba(0,0,0,0.12)] w-[290px] sm:w-[310px] animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-300 paper-noise">
+          <div className="relative bg-card/95 backdrop-blur-md border-2 border-border/80 rounded-2xl shadow-[0_20px_70px_-10px_rgba(0,0,0,0.12)] w-[290px] sm:w-[310px] animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-300 paper-noise transform-gpu will-change-transform">
             {/* Subtle warm overlay complementando el amarillo */}
             <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.02] via-transparent to-amber-600/[0.03] rounded-2xl pointer-events-none" />
             
@@ -437,25 +437,44 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
       return
     }
 
-    const handleScrollEvent = () => {
+    // PERF: rAF-throttle + bail-on-no-change. The previous handler called
+    // setAutoScroll() on every scroll tick, causing a React render on every
+    // wheel event. Combined with sticky `backdrop-blur` headers, this made
+    // scrolling on desktop feel stepped. We now coalesce scroll events into
+    // one rAF callback per frame and only update state when the value flips.
+    let rafId: number | null = null
+    let lastIsAtBottom: boolean | null = null
+
+    const computeAndDispatch = () => {
+      rafId = null
       const { scrollTop, scrollHeight, clientHeight } = viewport
       const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50
       const isAtTop = scrollTop < 100
 
-      setAutoScroll(isAtBottom)
-      
-      // Cargar más mensajes cuando se llega al top
+      if (isAtBottom !== lastIsAtBottom) {
+        lastIsAtBottom = isAtBottom
+        setAutoScroll(isAtBottom)
+      }
+
       if (isAtTop && currentSession?.history && visibleMessageCount < currentSession.history.length) {
         setVisibleMessageCount(prev => Math.min(prev + 10, currentSession.history?.length || 0))
       }
     }
 
-    viewport.addEventListener('scroll', handleScrollEvent)
-    
-    // Initial check
-    handleScrollEvent()
-    
-    return () => viewport.removeEventListener('scroll', handleScrollEvent)
+    const handleScrollEvent = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(computeAndDispatch)
+    }
+
+    viewport.addEventListener('scroll', handleScrollEvent, { passive: true })
+
+    // Initial check (run synchronously)
+    computeAndDispatch()
+
+    return () => {
+      viewport.removeEventListener('scroll', handleScrollEvent)
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
   }, [currentSession?.history, visibleMessageCount])
 
 

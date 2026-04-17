@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils"
 /** Header skeleton — matches components/header.tsx dimensions */
 function HeaderSkeleton() {
   return (
-    <div className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between border-b border-border/30 bg-background/90 backdrop-blur-xl shadow-warm-sm">
+    <div className="sticky top-0 left-0 right-0 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between border-b border-border/30 bg-background/90 backdrop-blur-xl shadow-warm-sm transform-gpu will-change-transform [contain:paint]">
       <div className="flex items-center gap-3 md:gap-4">
         {/* Mobile hamburger placeholder */}
         <Skeleton className="md:hidden h-9 w-9 rounded-lg" />
