@@ -31,7 +31,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useUIPreferences } from "@/hooks/use-ui-preferences"
 import { DevMetricsIndicator } from "@/components/dev-metrics-indicator"
 import { DevMessageMetrics } from "@/components/dev-message-metrics"
-import { AgenticTransparencyFlow } from "@/components/agentic-transparency-flow"
+import { AgentExecutionSurface } from "@/components/agent-execution-surface"
 import { snapshotExecutionTimeline, buildLiveTimeline } from "@/lib/dynamic-status"
 import { DesignTransitionNotice } from "@/components/design-transition-notice"
 
@@ -1130,9 +1130,9 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                   {/* Persistent execution timeline for historical messages */}
                   {message.role === 'model' && message.executionTimeline && (
                     <div className="px-3 md:px-4 pb-1 pt-1">
-                      <AgenticTransparencyFlow
+                      <AgentExecutionSurface
                         timeline={message.executionTimeline}
-                        defaultCollapsed={true}
+                        mode="historical"
                       />
                     </div>
                   )}
@@ -1344,13 +1344,13 @@ export function ChatInterface({ activeAgent, isProcessing, isUploading = false, 
                 {/* Stays visible during the entire streaming lifecycle; historical messages take over after */}
                 {processingStatus && processingStatus.phase !== 'idle' && (
                   <div className="px-4 py-2">
-                    <AgenticTransparencyFlow
+                    <AgentExecutionSurface
                       timeline={buildLiveTimeline(
                         processingStatus,
                         activeAgent,
                         routingInfo?.targetAgent
                       )}
-                      defaultCollapsed={false}
+                      mode="live"
                     />
                   </div>
                 )}

@@ -1,4 +1,7 @@
 {
+    "chat.hookFilesLocations": {
+        ".github/hooks": true
+    },
     "chat.tools.terminal.autoApprove": {
         "npx tsc": true
     }

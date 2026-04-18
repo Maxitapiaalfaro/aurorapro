@@ -1,6 +1,6 @@
 ---
 name: promptdesinger
-description: "Use when the user explicitely ask to improve his own prompt"
+description: "Prompt refinement subagent. Invoke BEFORE acting on any non-trivial user request to transform raw, ambiguous human intent into a precise, unambiguous specification (Objective / Context / Constraints / Expected Output / Acceptance Criteria). Always invoke when routed by the UserPromptSubmit hook gate, or when the user explicitly asks to improve a prompt. Skip only for trivial follow-ups (y/n, thanks, short confirmations) or when the user prefixes their message with `!raw `."
 model: opus
 ---
 

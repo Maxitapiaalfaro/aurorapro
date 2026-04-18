@@ -7,6 +7,13 @@
  */
 
 import type { ExecutionStep } from '@/types/clinical-types'
+import {
+  AGENT_EVENT_KINDS,
+  NON_FATAL_WARNING_CODES,
+  type AgentEventKind,
+  type NonFatalWarningCode,
+} from '@/types/agent-events'
+import { RoutingReason } from '@/types/operational-metadata'
 
 interface HumanizedLabel {
   active: string
@@ -265,4 +272,91 @@ export function calculateProgress(steps: ExecutionStep[]): number {
   }
 
   return totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0
+}
+
+// ─── Agent-event vocabulary v2 — humanized registry ─────────────────────────
+// Every new SSE event kind MUST appear here. Every `RoutingReason` enum value
+// MUST have a label. Every `NonFatalWarningCode` MUST have a label. The unit
+// test `tests/agent-event-vocabulary.test.ts` enforces this invariant.
+
+/**
+ * Humanized label per v2 event kind. Used in the fallback path when a richer
+ * per-event string (e.g. a tool's own `displayName`) is unavailable.
+ */
+export const AGENT_EVENT_LABELS: Record<AgentEventKind, string> = {
+  turn_started: 'Iniciando turno',
+  plan: 'Planificando pasos',
+  turn_completed: 'Turno completado',
+  routing_decision: 'Seleccionando especialista',
+  thinking_started: 'Razonando',
+  thinking_delta: 'Razonando…',
+  thinking_completed: 'Razonamiento completado',
+  tool_lifecycle: 'Ejecutando herramienta',
+  source_validated: 'Validando fuente',
+  citation_span: 'Vinculando cita',
+  checkpoint_requested: 'Confirmación requerida',
+  checkpoint_resolved: 'Confirmación resuelta',
+  non_fatal_warning: 'Aviso no crítico',
+}
+
+/**
+ * Humanized label per `RoutingReason`. Surfaced inside the `RoutingChip` so
+ * the clinician sees *why* a specific agent was chosen, in plain language.
+ */
+export const ROUTING_REASON_LABELS: Record<RoutingReason, string> = {
+  [RoutingReason.CRITICAL_RISK_OVERRIDE]: 'Derivación por riesgo crítico detectado',
+  [RoutingReason.HIGH_RISK_OVERRIDE]: 'Derivación por riesgo alto detectado',
+  [RoutingReason.STRESS_OVERRIDE]: 'Ajuste por señales de estrés en el caso',
+  [RoutingReason.SENSITIVE_CONTENT_OVERRIDE]: 'Ajuste por contenido sensible',
+  [RoutingReason.NORMAL_CLASSIFICATION]: 'Clasificación estándar',
+  [RoutingReason.HIGH_CONFIDENCE_CLASSIFICATION]: 'Clasificación con alta confianza',
+  [RoutingReason.FALLBACK_LOW_CONFIDENCE]: 'Opción por defecto (confianza baja)',
+  [RoutingReason.FALLBACK_AMBIGUOUS_QUERY]: 'Consulta ambigua — se usó opción por defecto',
+  [RoutingReason.FALLBACK_ERROR]: 'Opción por defecto tras un error interno',
+  [RoutingReason.STABILITY_OVERRIDE]: 'Manteniendo continuidad del especialista',
+  [RoutingReason.CONTINUITY_MAINTAINED]: 'Continuidad del especialista anterior',
+  [RoutingReason.CLOSURE_PHASE_SUGGESTED]: 'Fase de cierre — documentación sugerida',
+  [RoutingReason.ASSESSMENT_PHASE_SUGGESTED]: 'Fase de evaluación — exploración sugerida',
+  [RoutingReason.EXPLICIT_USER_REQUEST]: 'Solicitud explícita del usuario',
+}
+
+/**
+ * Humanized label per non-fatal warning code. Drives the amber state row
+ * text in the timeline (P4, D7).
+ */
+export const NON_FATAL_WARNING_LABELS: Record<NonFatalWarningCode, string> = {
+  tool_retry: 'Reintentando la herramienta',
+  tool_fallback: 'Usando una alternativa tras un error transitorio',
+  tool_partial_result: 'Resultado parcial — algunos datos no estuvieron disponibles',
+  tool_timeout: 'La herramienta superó el tiempo permitido',
+  tool_rejected_by_policy: 'Herramienta rechazada por política de seguridad',
+  source_rejected_irrelevant: 'Fuente descartada por baja relevancia',
+  source_rejected_low_quality: 'Fuente descartada por baja calidad académica',
+  thinking_budget_exceeded: 'Se alcanzó el límite de razonamiento',
+  checkpoint_expired: 'La confirmación pendiente expiró',
+}
+
+/** Typed accessors — preferred over direct record access so misses surface. */
+export function humanizeAgentEvent(kind: AgentEventKind): string {
+  return AGENT_EVENT_LABELS[kind]
+}
+
+export function humanizeRoutingReason(reason: RoutingReason): string {
+  return ROUTING_REASON_LABELS[reason]
+}
+
+export function humanizeNonFatalWarning(code: NonFatalWarningCode): string {
+  return NON_FATAL_WARNING_LABELS[code]
+}
+
+// Compile-time exhaustiveness guard: TS errors if a new `AgentEventKind` /
+// `NonFatalWarningCode` is added without updating the label tables above.
+// (The `Record<K, V>` type in the declarations already enforces this, but
+// re-checking via the runtime arrays catches the case of silent drift when
+// someone widens the union but keeps the record typed to the old keys.)
+{
+  const _kindCheck: Record<(typeof AGENT_EVENT_KINDS)[number], string> = AGENT_EVENT_LABELS
+  const _warnCheck: Record<(typeof NON_FATAL_WARNING_CODES)[number], string> = NON_FATAL_WARNING_LABELS
+  void _kindCheck
+  void _warnCheck
 }

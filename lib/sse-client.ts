@@ -8,6 +8,22 @@
  */
 
 import type { AgentType, ReasoningBullet, ToolExecutionEvent, DocumentPreviewEvent, DocumentReadyEvent, ProcessingStepEvent } from '@/types/clinical-types'
+import type {
+  AgentEventV2,
+  TurnStartedEvent,
+  PlanEvent,
+  TurnCompletedEvent,
+  RoutingDecisionEvent,
+  ThinkingStartedEvent,
+  ThinkingDeltaEvent,
+  ThinkingCompletedEvent,
+  ToolLifecycleEvent,
+  SourceValidatedEvent,
+  CitationSpanEvent,
+  CheckpointRequestedEvent,
+  CheckpointResolvedEvent,
+  NonFatalWarningEvent,
+} from '@/types/agent-events'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 
@@ -28,6 +44,8 @@ export type SSEEvent =
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
+  // ─── v2 agent-event vocabulary (additive; see types/agent-events.ts) ──
+  | AgentEventV2
 
 /**
  * Callbacks para eventos SSE
@@ -43,6 +61,20 @@ export interface SSECallbacks {
   onResponse?: (result: any) => void
   onError?: (error: string, details?: string) => void
   onComplete?: () => void
+  // ─── v2 agent-event callbacks (all optional; unhandled events are ignored) ──
+  onTurnStarted?: (event: TurnStartedEvent) => void
+  onPlan?: (event: PlanEvent) => void
+  onTurnCompleted?: (event: TurnCompletedEvent) => void
+  onRoutingDecision?: (event: RoutingDecisionEvent) => void
+  onThinkingStarted?: (event: ThinkingStartedEvent) => void
+  onThinkingDelta?: (event: ThinkingDeltaEvent) => void
+  onThinkingCompleted?: (event: ThinkingCompletedEvent) => void
+  onToolLifecycle?: (event: ToolLifecycleEvent) => void
+  onSourceValidated?: (event: SourceValidatedEvent) => void
+  onCitationSpan?: (event: CitationSpanEvent) => void
+  onCheckpointRequested?: (event: CheckpointRequestedEvent) => void
+  onCheckpointResolved?: (event: CheckpointResolvedEvent) => void
+  onNonFatalWarning?: (event: NonFatalWarningEvent) => void
 }
 
 /**

@@ -5,6 +5,7 @@ import { sentryMetricsTracker } from '@/lib/sentry-metrics-tracker'
 import { verifyFirebaseAuth } from '@/lib/security/firebase-auth-verify'
 import * as Sentry from '@sentry/nextjs'
 import type { AgentType, ReasoningBullet, ToolExecutionEvent, DocumentPreviewEvent, DocumentReadyEvent, ProcessingStepEvent } from '@/types/clinical-types'
+import type { AgentEventV2 } from '@/types/agent-events'
 import { startQueryProfile, queryCheckpoint, finishQueryProfile } from '@/lib/utils/query-profiler'
 // 🔥 PREWARM: Importar módulo de pre-warming para inicializar el sistema automáticamente
 import '@/lib/server-prewarm'
@@ -30,6 +31,8 @@ type SSEEvent =
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
+  // v2 agent-event vocabulary (additive; see types/agent-events.ts)
+  | AgentEventV2
 
 /**
  * Helper para formatear eventos SSE
@@ -91,23 +94,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear stream SSE con auto-flush
+    let controllerClosed = false
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
 
-        // Helper para enviar y hacer flush inmediato
+        // Helper para enviar y hacer flush inmediato.
+        // Hardened against post-close enqueues: client disconnects (or
+        // follow-up function-call rounds that outlive the reader) would
+        // otherwise throw `ERR_INVALID_STATE: Controller is already closed`
+        // and corrupt the response. Swallowing here is correct — the consumer
+        // is gone, there is nothing useful to deliver.
         const sendSSE = (event: SSEEvent) => {
-          const data = formatSSE(event)
-          const encoded = encoder.encode(data)
-          controller.enqueue(encoded)
-
-          // 🔥 CRÍTICO: Forzar flush inmediato enviando un comentario SSE vacío
-          // Esto previene buffering en proxies y navegadores
-          controller.enqueue(encoder.encode(':\n\n'))
+          if (controllerClosed) return
+          try {
+            const data = formatSSE(event)
+            const encoded = encoder.encode(data)
+            controller.enqueue(encoded)
+            // 🔥 CRÍTICO: Forzar flush inmediato enviando un comentario SSE vacío
+            // Esto previene buffering en proxies y navegadores
+            controller.enqueue(encoder.encode(':\n\n'))
+          } catch (err) {
+            controllerClosed = true
+            logger.warn('[SSE] enqueue after close (stream cancelled by client)', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
         }
-
-        // 🛡️ Guard flag for fire-and-forget bullets arriving after controller closes
-        let controllerClosed = false
 
         try {
           // 🔥 CRÍTICO: Enviar evento inicial inmediatamente para establecer conexión SSE
@@ -402,9 +415,21 @@ export async function POST(request: NextRequest) {
             }
           })
         } finally {
-          controllerClosed = true
-          controller.close()
+          if (!controllerClosed) {
+            controllerClosed = true
+            try {
+              controller.close()
+            } catch {
+              /* already closed by cancel() or runtime */
+            }
+          }
         }
+      },
+      // The reader was cancelled (client disconnected, nav away, abort). Flip
+      // the guard so in-flight `sendSSE` calls from follow-up tool rounds
+      // short-circuit cleanly instead of throwing ERR_INVALID_STATE.
+      cancel() {
+        controllerClosed = true
       }
     })
 

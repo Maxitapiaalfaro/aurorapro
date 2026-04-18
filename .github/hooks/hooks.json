@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "bash .github/hooks/prompt-designer-gate.sh",
+        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File .github/hooks/prompt-designer-gate.ps1",
+        "timeout": 20
+      }
+    ]
+  }
+}

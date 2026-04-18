@@ -1,12 +1,18 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useContext, createContext } from 'react'
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion'
 import { Check, Loader2, AlertCircle, ChevronDown, ChevronRight, ExternalLink, BookOpen, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 import { humanizeStepLabel, humanizeParallelGroup, calculateProgress } from '@/lib/humanized-steps'
-import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, AcademicSourceReference } from '@/types/clinical-types'
+import type { ExecutionTimeline as ExecutionTimelineType, ExecutionStep, AcademicSourceReference, AgentType } from '@/types/clinical-types'
+
+// ─── Agent identity context ──────────────────────────────────────
+// Lets nested step / lane components consume the active agent's facet color
+// (Perspectiva / Memoria / Evidencia) without prop-drilling.
+const AgentContext = createContext<AgentType>('orquestador' as AgentType)
+const useAgentConfig = () => getAgentVisualConfig(useContext(AgentContext))
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -31,14 +37,24 @@ function formatDuration(ms: number): string {
 }
 
 // ─── Elapsed Timer ─────────────────────────────────────────────────────────
-function ElapsedTimer() {
-  const [elapsed, setElapsed] = useState(0)
+/**
+ * Honest elapsed-time counter.
+ *
+ * - When `startedAt` is provided (epoch ms), the counter reflects the *real*
+ *   elapsed time since the step started, even if the component remounts mid-stream.
+ * - When `startedAt` is absent, falls back to a lazily-initialised timestamp so
+ *   we never render a misleading “0s” for a step that has been running for a while.
+ */
+function ElapsedTimer({ startedAt }: { startedAt?: number }) {
+  const [origin] = useState<number>(() => startedAt ?? Date.now())
+  const [now, setNow] = useState<number>(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setElapsed(prev => prev + 1), 1000)
+    const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
+  const elapsed = Math.max(0, Math.floor((now - origin) / 1000))
   return (
-    <span className="text-[10px] text-muted-foreground/50 tabular-nums flex-shrink-0">
+    <span className="text-[10px] text-muted-foreground/60 tabular-nums flex-shrink-0">
       {elapsed}s
     </span>
   )
@@ -153,7 +169,8 @@ export function AgenticTransparencyFlow({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-md", className)}>
+    <AgentContext.Provider value={timeline.agentType}>
+      <div className={cn("overflow-hidden rounded-md", className)}>
       {/* ── Progress bar ────────────────────────────────────────── */}
       <ProgressBar progress={progress} agentType={timeline.agentType} />
 
@@ -174,15 +191,15 @@ export function AgenticTransparencyFlow({
                 className={cn(
                   "w-[5px] h-[5px] rounded-full transition-colors",
                   step.status === 'completed'
-                    ? 'bg-serene-teal-500/60'
+                    ? cn(agentConfig.typingDotColor, 'opacity-70')
                     : step.status === 'error'
-                      ? 'bg-red-400/60'
-                      : 'bg-muted-foreground/20',
+                      ? 'bg-red-400/70'
+                      : 'bg-muted-foreground/30',
                 )}
               />
             ))}
             {timeline.steps.length > 8 && (
-              <span className="text-[8px] text-muted-foreground/40 ml-0.5">
+              <span className="text-[10px] text-muted-foreground/70 ml-0.5">
                 +{timeline.steps.length - 8}
               </span>
             )}
@@ -255,7 +272,8 @@ export function AgenticTransparencyFlow({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </AgentContext.Provider>
   )
 }
 
@@ -359,6 +377,7 @@ function ParallelToolLanes({
   startIndex: number
 }) {
   const [isBatchExpanded, setIsBatchExpanded] = useState(false)
+  const agentConfig = useAgentConfig()
   const shouldBatch = steps.length > PARALLEL_BATCH_THRESHOLD
   const activeCount = steps.filter(s => s.status === 'active').length
   const completedCount = steps.filter(s => s.status === 'completed').length
@@ -386,9 +405,9 @@ function ParallelToolLanes({
         >
           <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
             {activeCount > 0 ? (
-              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+              <Loader2 className={cn('w-3 h-3 animate-spin flex-shrink-0', agentConfig.textColor)} />
             ) : (
-              <Check className="w-3 h-3 text-serene-teal-500/50 flex-shrink-0" />
+              <Check className={cn('w-3 h-3 flex-shrink-0', agentConfig.textColor)} />
             )}
           </div>
           <span className="flex-1 min-w-0 truncate text-foreground/80 font-medium">
@@ -401,14 +420,14 @@ function ParallelToolLanes({
                 key={s.id}
                 className={cn(
                   "w-[4px] h-[4px] rounded-full transition-colors duration-300",
-                  s.status === 'active' ? 'bg-clarity-blue-500/60 animate-pulse' :
-                  s.status === 'completed' ? 'bg-serene-teal-500/50' :
-                  'bg-red-400/50'
+                  s.status === 'active' ? cn(agentConfig.typingDotColor, 'animate-pulse') :
+                  s.status === 'completed' ? cn(agentConfig.typingDotColor, 'opacity-60') :
+                  'bg-red-400/60'
                 )}
               />
             ))}
           </div>
-          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0" />
+          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/60 flex-shrink-0" />
         </button>
       </motion.li>
     )
@@ -428,12 +447,12 @@ function ParallelToolLanes({
       >
         <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center">
           {activeCount > 0 ? (
-            <Loader2 className="w-2.5 h-2.5 animate-spin text-muted-foreground/50 flex-shrink-0" />
+            <Loader2 className={cn('w-2.5 h-2.5 animate-spin flex-shrink-0', agentConfig.textColor)} />
           ) : (
-            <Check className="w-2.5 h-2.5 text-serene-teal-500/50 flex-shrink-0" />
+            <Check className={cn('w-2.5 h-2.5 flex-shrink-0', agentConfig.textColor)} />
           )}
         </div>
-        <span className="text-[10px] text-muted-foreground/45 font-medium">
+        <span className="text-[10px] text-muted-foreground/70 font-medium">
           {groupLabel}
         </span>
       </motion.div>
@@ -470,6 +489,7 @@ function ParallelLane({
   isLive: boolean
 }) {
   const humanLabel = humanizeStepLabel(step)
+  const agentConfig = useAgentConfig()
   const isActive = step.status === 'active'
   const isCompleted = step.status === 'completed'
   const isError = step.status === 'error'
@@ -480,7 +500,7 @@ function ParallelLane({
       layoutId={`lane-${step.id}`}
       initial={{ opacity: 0, x: -8 }}
       animate={{
-        opacity: isCompleted ? 0.45 : 1,
+        opacity: isCompleted ? 0.6 : 1,
         x: 0,
       }}
       exit={{ opacity: 0, x: -8 }}
@@ -503,7 +523,7 @@ function ParallelLane({
                 exit={{ scale: 0.5, opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/60 flex-shrink-0" />
+                <Loader2 className={cn('w-3 h-3 animate-spin flex-shrink-0', agentConfig.textColor)} />
               </motion.div>
             ) : isError ? (
               <motion.div
@@ -522,7 +542,7 @@ function ParallelLane({
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               >
-                <Check className="w-3 h-3 text-serene-teal-500/50 flex-shrink-0" />
+                <Check className={cn('w-3 h-3 flex-shrink-0', agentConfig.textColor)} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -531,14 +551,15 @@ function ParallelLane({
         {/* Label */}
         <span className={cn(
           'flex-1 min-w-0 truncate transition-colors duration-300',
-          isActive ? 'text-foreground/80' : 'text-muted-foreground/40',
+          isActive ? 'text-foreground/90 font-medium' : 'text-muted-foreground/70',
         )}>
           {humanLabel}
         </span>
 
+        {isActive && <ElapsedTimer startedAt={step.startedAt} />}
         {/* Duration badge */}
         {isCompleted && step.durationMs != null && step.durationMs > 0 && (
-          <span className="text-[10px] text-muted-foreground/25 tabular-nums flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground/60 tabular-nums flex-shrink-0">
             {formatDuration(step.durationMs)}
           </span>
         )}
@@ -552,9 +573,9 @@ function ParallelLane({
             animate={{ opacity: 1, scaleY: 1 }}
             exit={{ opacity: 0, scaleY: 0 }}
             transition={{ duration: 0.2, ease: EASE_OUT_QUAD }}
-            className="mx-2 ml-7 h-[2px] bg-muted-foreground/10 rounded-full overflow-hidden origin-top"
+            className="mx-2 ml-7 h-[2px] bg-muted-foreground/15 rounded-full overflow-hidden origin-top"
           >
-            <div className="h-full w-[25%] bg-muted-foreground/30 rounded-full animate-slide-right" />
+            <div className={cn('h-full w-[25%] rounded-full animate-slide-right', agentConfig.typingDotColor)} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -574,19 +595,15 @@ function TransparencyStepItem({
   isLive: boolean
 }) {
   const humanLabel = humanizeStepLabel(step)
+  const agentConfig = useAgentConfig()
   const hasSources = step.sources && step.sources.length > 0
   const hasProgressSteps = step.progressSteps && step.progressSteps.length > 0
   const hasExpandableContent = hasSources || hasProgressSteps || (step.detail && step.detail.length > INLINE_DETAIL_MAX_LENGTH)
   const [isOpen, setIsOpen] = useState(false)
 
-  // Auto-collapse when a step transitions active → completed
-  const prevStatusRef = useRef(step.status)
-  useEffect(() => {
-    if (prevStatusRef.current === 'active' && step.status !== 'active') {
-      setIsOpen(false)
-    }
-    prevStatusRef.current = step.status
-  }, [step.status])
+  // Note: do NOT auto-collapse on active → completed transition.
+  // The clinician may be reading the detail to decide whether to trust
+  // the result; yanking it closed mid-read erodes confidence.
 
   const isActive = step.status === 'active'
   const isCompleted = step.status === 'completed'
@@ -598,7 +615,7 @@ function TransparencyStepItem({
       layoutId={`step-${step.id}`}
       initial={{ opacity: 0, y: 6 }}
       animate={{
-        opacity: isCompleted ? 0.6 : 1,
+        opacity: 1,
         y: 0,
       }}
       transition={{
@@ -611,13 +628,20 @@ function TransparencyStepItem({
       {/* ── Main row ──────────────────────────────────────────── */}
       <div
         className={cn(
-          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-all duration-300",
-          isActive && 'bg-clarity-blue-500/[0.08]',
+          "flex items-center gap-2 rounded-md px-2 py-[3px] text-[11px] leading-relaxed transition-all duration-300 [@media(pointer:coarse)]:min-h-[44px]",
+          isActive && agentConfig.bgColor,
           isCompleted && 'bg-transparent',
-          hasExpandableContent && 'cursor-pointer hover:bg-secondary/30',
+          hasExpandableContent && 'cursor-pointer hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         )}
         onClick={hasExpandableContent ? () => setIsOpen(prev => !prev) : undefined}
         role={hasExpandableContent ? 'button' : undefined}
+        tabIndex={hasExpandableContent ? 0 : undefined}
+        onKeyDown={hasExpandableContent ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsOpen(prev => !prev)
+          }
+        } : undefined}
         aria-expanded={hasExpandableContent ? isOpen : undefined}
         aria-label={hasExpandableContent ? `${humanLabel} - ${isOpen ? 'Expandido' : 'Contraído'}` : humanLabel}
       >
@@ -633,8 +657,7 @@ function TransparencyStepItem({
                 transition={{ duration: 0.15 }}
                 className="relative flex items-center justify-center"
               >
-                <div className="absolute inset-0 bg-clarity-blue-500/20 rounded-full blur-[3px]" />
-                <Loader2 className="relative w-3 h-3 animate-spin text-clarity-blue-500 flex-shrink-0" />
+                <Loader2 className={cn('relative w-3 h-3 animate-spin flex-shrink-0', agentConfig.textColor)} />
               </motion.div>
             ) : isError ? (
               <motion.div
@@ -653,7 +676,7 @@ function TransparencyStepItem({
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               >
-                <Check className="w-3 h-3 text-serene-teal-500/70 flex-shrink-0" />
+                <Check className={cn('w-3 h-3 flex-shrink-0', agentConfig.textColor)} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -666,29 +689,29 @@ function TransparencyStepItem({
               ? 'text-foreground font-medium'
               : isError
                 ? 'text-red-500'
-                : 'text-muted-foreground/70',
+                : 'text-muted-foreground/80',
           )}
         >
           {humanLabel}
           {/* Short inline detail */}
           {step.detail && isCompleted && step.detail.length <= INLINE_DETAIL_MAX_LENGTH && (
-            <span className="text-[10px] text-muted-foreground/60 ml-1.5">
+            <span className="text-[10px] text-muted-foreground/70 ml-1.5">
               — {step.detail}
             </span>
           )}
         </span>
 
-        {isActive && <ElapsedTimer />}
+        {isActive && <ElapsedTimer startedAt={step.startedAt} />}
         {isCompleted && step.durationMs != null && step.durationMs > 0 && (
-          <span className="text-[10px] text-muted-foreground/25 tabular-nums flex-shrink-0">
+          <span className="text-[10px] text-muted-foreground/60 tabular-nums flex-shrink-0">
             {formatDuration(step.durationMs)}
           </span>
         )}
 
         {hasExpandableContent && (
           isOpen
-            ? <ChevronDown className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0" />
-            : <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            ? <ChevronDown className="w-2.5 h-2.5 text-muted-foreground/60 flex-shrink-0" />
+            : <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/60 flex-shrink-0" />
         )}
       </div>
 
@@ -734,6 +757,7 @@ function TransparencyStepItem({
  */
 function CurrentSubStepLine({ steps }: { steps: string[] }) {
   const current = steps[steps.length - 1] || ''
+  const agentConfig = useAgentConfig()
 
   return (
     <div className="px-2 pl-7 min-h-5 flex items-center overflow-hidden">
@@ -746,8 +770,8 @@ function CurrentSubStepLine({ steps }: { steps: string[] }) {
           transition={{ duration: 0.2, ease: 'easeInOut' }}
           className="flex items-center gap-1.5"
         >
-          <Loader2 className="w-2 h-2 animate-spin text-clarity-blue-500/60 flex-shrink-0" />
-          <span className="text-[9px] text-muted-foreground/60 truncate leading-relaxed">
+          <Loader2 className={cn('w-2.5 h-2.5 animate-spin flex-shrink-0', agentConfig.textColor)} />
+          <span className="text-[10px] text-muted-foreground/70 truncate leading-relaxed">
             {current}
           </span>
         </motion.div>
@@ -765,6 +789,7 @@ function ProgressSubSteps({
   steps: string[]
   allCompleted?: boolean
 }) {
+  const agentConfig = useAgentConfig()
   return (
     <div className="px-2 pb-1 pl-7 space-y-px">
       {steps.map((msg, idx) => {
@@ -779,14 +804,14 @@ function ProgressSubSteps({
             className="flex items-center gap-1.5"
           >
             {isActive ? (
-              <Loader2 className="w-2 h-2 animate-spin text-clarity-blue-500/60 flex-shrink-0" />
+              <Loader2 className={cn('w-2.5 h-2.5 animate-spin flex-shrink-0', agentConfig.textColor)} />
             ) : (
-              <Check className="w-2 h-2 text-serene-teal-500/40 flex-shrink-0" />
+              <Check className={cn('w-2.5 h-2.5 flex-shrink-0', agentConfig.textColor)} />
             )}
             <span
               className={cn(
-                'text-[9px] leading-relaxed',
-                isActive ? 'text-muted-foreground/70' : 'text-muted-foreground/40',
+                'text-[10px] leading-relaxed',
+                isActive ? 'text-muted-foreground/80' : 'text-muted-foreground/60',
               )}
             >
               {msg}
@@ -801,28 +826,29 @@ function ProgressSubSteps({
 // ─── Academic Sources ──────────────────────────────────────────────────────
 
 function SourcesList({ sources }: { sources: AcademicSourceReference[] }) {
+  const agentConfig = useAgentConfig()
   return (
     <div className="mt-1 space-y-1">
-      <div className="flex items-center gap-1 text-[9px] font-medium text-muted-foreground/50">
-        <BookOpen className="w-2.5 h-2.5" />
+      <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground/70">
+        <BookOpen className="w-3 h-3" />
         <span>Fuentes académicas ({sources.length})</span>
       </div>
       <ul className="space-y-0.5">
         {sources.map((source, idx) => (
-          <li key={idx} className="flex items-start gap-1 text-[9px] text-muted-foreground/50">
-            <span className="text-muted-foreground/30 flex-shrink-0 mt-px">{idx + 1}.</span>
+          <li key={idx} className="flex items-start gap-1 text-[10px] text-muted-foreground/70">
+            <span className="text-muted-foreground/60 flex-shrink-0 mt-px">{idx + 1}.</span>
             <div className="min-w-0 flex-1">
               <a
                 href={source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-clarity-blue-500/80 hover:underline inline-flex items-center gap-0.5 leading-tight"
+                className={cn('hover:underline inline-flex items-center gap-0.5 leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded', agentConfig.textColor)}
               >
-                <span className="line-clamp-1">{source.title}</span>
-                <ExternalLink className="w-2 h-2 flex-shrink-0" />
+                <span className="line-clamp-2">{source.title}</span>
+                <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
               </a>
               {(source.authors || source.year || source.journal) && (
-                <div className="text-[8px] text-muted-foreground/40 mt-0.5">
+                <div className="text-[10px] text-muted-foreground/60 mt-0.5">
                   {[
                     source.authors,
                     source.year ? `(${source.year})` : null,

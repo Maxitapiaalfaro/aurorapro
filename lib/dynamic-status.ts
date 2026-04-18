@@ -12,6 +12,39 @@
 import type { MessageProcessingStatus, ToolExecutionEvent, AgentType, ExecutionTimeline, ExecutionStep } from '@/types/clinical-types'
 import { getAgentVisualConfig } from '@/config/agent-visual-config'
 
+/**
+ * Coerce a timestamp that may arrive as a `Date`, an ISO string, or an epoch
+ * number (Firestore serialisation round-trips often strip the `Date` wrapper)
+ * into epoch milliseconds. Returns `undefined` for unparseable inputs so the
+ * UI can fall back to its mount-time origin.
+ */
+function toEpochMs(value: unknown): number | undefined {
+  if (value == null) return undefined
+  if (value instanceof Date) {
+    const ms = value.getTime()
+    return Number.isFinite(ms) ? ms : undefined
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string') {
+    const ms = Date.parse(value)
+    return Number.isFinite(ms) ? ms : undefined
+  }
+  // Firestore Timestamp-like shape: { seconds, nanoseconds }
+  if (typeof value === 'object' && value !== null) {
+    const v = value as { seconds?: number; nanoseconds?: number; toDate?: () => Date }
+    if (typeof v.toDate === 'function') {
+      try {
+        const ms = v.toDate().getTime()
+        return Number.isFinite(ms) ? ms : undefined
+      } catch { /* fall through */ }
+    }
+    if (typeof v.seconds === 'number') {
+      return v.seconds * 1000 + Math.floor((v.nanoseconds ?? 0) / 1e6)
+    }
+  }
+  return undefined
+}
+
 // ---------------------------------------------------------------------------
 // Area 2 – Dynamic, context-aware status string generation
 // ---------------------------------------------------------------------------
@@ -320,7 +353,7 @@ export function buildLiveTimeline(
       steps.push({
         id: 'analyzing_intent',
         label: `Analizando consulta…`,
-        status: isActive ? 'active' : 'completed'
+        status: isActive ? 'active' : 'completed',
       })
     }
   }
@@ -333,13 +366,13 @@ export function buildLiveTimeline(
       id: 'routing',
       label: truncate(fullReasoning, 120),
       status: isActive ? 'active' : 'completed',
-      detail: fullReasoning.length > 120 ? fullReasoning : undefined  // 🔧 FIX: Store full text for expandable accordion
+      detail: fullReasoning.length > 120 ? fullReasoning : undefined,  // 🔧 FIX: Store full text for expandable accordion
     })
   } else if (processingStatus.phase === 'routing_agent') {
     steps.push({
       id: 'routing',
       label: `Seleccionando especialista…`,
-      status: 'active'
+      status: 'active',
     })
   }
 
@@ -368,6 +401,7 @@ export function buildLiveTimeline(
       sources: tool.academicSources,
       progressSteps: tool.progressSteps,
       parallelGroup: isParallel && isToolActive ? true : undefined,
+      startedAt: isToolActive ? toEpochMs(tool.timestamp) : undefined,
     })
   }
 
@@ -381,7 +415,7 @@ export function buildLiveTimeline(
       label: totalSources > 0
         ? `${agentConfig.name} sintetizando ${totalSources} fuente${totalSources !== 1 ? 's' : ''}…`
         : `${agentConfig.name} sintetizando resultados del análisis…`,
-      status: isActive ? 'active' : 'completed'
+      status: isActive ? 'active' : 'completed',
     })
   }
 
@@ -391,7 +425,7 @@ export function buildLiveTimeline(
     steps.push({
       id: 'streaming',
       label: `${agentConfig.name} generando respuesta…`,
-      status: isActive ? 'active' : 'completed'
+      status: isActive ? 'active' : 'completed',
     })
   }
 

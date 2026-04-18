@@ -46,6 +46,12 @@ export interface ExecutionStep {
   query?: string
   /** Optional expandable detail text shown when the step accordion is opened */
   detail?: string
+  /**
+   * Epoch ms when the step transitioned to `active`. Used by the live UI to
+   * render an honest elapsed-time counter that survives component remounts.
+   * Set by the timeline builder, not by the backend.
+   */
+  startedAt?: number
   /** Milliseconds the step took (shown as a badge on completed steps) */
   durationMs?: number
   result?: {
