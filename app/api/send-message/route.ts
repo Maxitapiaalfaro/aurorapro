@@ -31,6 +31,7 @@ type SSEEvent =
   | { type: 'response', result: any }
   | { type: 'error', error: string, details?: string }
   | { type: 'complete' }
+  | { type: 'file_warning', message: string }
   // v2 agent-event vocabulary (additive; see types/agent-events.ts)
   | AgentEventV2
 
@@ -154,20 +155,20 @@ export async function POST(request: NextRequest) {
           const onBulletUpdate = (bullet: ReasoningBullet) => {
             if (controllerClosed) return // Guard: bullets may arrive after stream closes
             try {
-              logger.info('🎯 [API /send-message] Bullet emitido:', bullet.content.substring(0, 50) + '...')
+              logger.info('🎯 [API /send-message] Bullet emitido', { preview: bullet.content.substring(0, 50) + '...' })
               sendSSE({
                 type: 'bullet',
                 bullet
               })
             } catch (err) {
-              logger.warn('[SSE] Failed to send bullet (controller likely closed):', err)
+              logger.warn('[SSE] Failed to send bullet (controller likely closed)', { error: err instanceof Error ? err.message : String(err) })
               controllerClosed = true // Mark as closed to avoid further attempts
             }
           }
 
           // Callback para selección de agente
           const onAgentSelected = (info: { targetAgent: string; confidence: number; reasoning: string }) => {
-            logger.info('🎯 [API /send-message] Agente seleccionado:', info.targetAgent)
+            logger.info('🎯 [API /send-message] Agente seleccionado', { targetAgent: info.targetAgent })
             sendSSE({
               type: 'agent_selected',
               info
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
             try {
               sendSSE({ type: 'processing_step', step })
             } catch (err) {
-              logger.warn('[SSE] Failed to send processing_step (controller likely closed):', err)
+              logger.warn('[SSE] Failed to send processing_step (controller likely closed)', { error: err instanceof Error ? err.message : String(err) })
               controllerClosed = true
             }
           }
